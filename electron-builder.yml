@@ -7,6 +7,9 @@ files:
   - electron/**/*
   - package.json
 asar: true
+extraResources:
+  - from: browser-extension
+    to: browser-extension
 win:
   target:
     - target: nsis
@@ -15,6 +18,11 @@ nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
 mac:
+  entitlements: packaging/entitlements.mac.plist
+  entitlementsInherit: packaging/entitlements.mac.plist
+  extendInfo:
+    NSAppleEventsUsageDescription: 读取已同意分享的前台窗口标题。
+    NSMicrophoneUsageDescription: 录制你主动开始并选择分享的语音。
   category: public.app-category.productivity
   target:
     - target: dmg

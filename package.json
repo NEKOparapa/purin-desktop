@@ -13,6 +13,7 @@
     "pack": "npm run build && electron-builder --dir",
     "dist:win": "npm run build && electron-builder --win",
     "dist:mac": "npm run build && electron-builder --mac",
+    "test:agent": "node --test tests/*.test.cjs",
     "test:e2e": "playwright test"
   },
   "dependencies": {
@@ -42,6 +43,6 @@
     "wait-on": "^9.5.1"
   },
   "main": "electron/main.cjs",
-  "description": "Wintermute personal AI companion desktop demo",
+  "description": "Wintermute desktop Agent terminal",
   "author": "Wintermute"
 }
