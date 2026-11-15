@@ -1,6 +1,7 @@
 const {
   app,
   BrowserWindow,
+  Notification,
   Menu,
   session,
   ipcMain,
@@ -62,7 +63,45 @@ function createWindow() {
   }
 }
 
+function presentNotifications(items, profile) {
+  const win = appWindow
+  if (!win || win.isDestroyed() || win.webContents.isLoadingMainFrame()) return false
+  const latest = items[0]
+  const title = items.length === 1 ? latest.title : items.length + ' 条新通知'
+  const detail = items.length === 1 ? latest.body : latest.title
+  const alert = { id: latest.id, title, body: detail, terminal: profile.terminal, url: profile.url }
+  const send = open => {
+    if (agent.profile === profile && !win.isDestroyed())
+      win.webContents.send('agent:notice', {...alert, open})
+  }
+  if (win.isFocused() || !Notification.isSupported()) send(false)
+  else {
+    try {
+      const notice = new Notification({ title, body: detail.slice(0, 200) })
+      notice.on('click', () => {
+        if (agent.profile !== profile || win.isDestroyed()) return
+        if (win.isMinimized()) win.restore()
+        win.show()
+        win.focus()
+        send(true)
+      })
+      notice.on('failed', () => send(false))
+      notice.show()
+    } catch { send(false) }
+  }
+  return true
+}
+
+async function chooseAttachmentPath(name) {
+  const result = await dialog.showSaveDialog(appWindow, {
+    title: '保存附件',
+    defaultPath: path.join(app.getPath('downloads'), name),
+  })
+  return result.canceled ? null : result.filePath
+}
+
 function start() {
+  if (process.platform === 'win32') app.setAppUserModelId('dev.wintermute.desktop')
   agent = new DesktopAgent(
     app.getPath('userData'),
     safeStorage,
@@ -74,6 +113,7 @@ function start() {
         appWindow.webContents.send('agent:changed', state)
     },
     captureForegroundWindow,
+    presentNotifications,
   )
   nativeTheme.themeSource = agent.appearance
   nativeTheme.on('updated', () => {
@@ -83,14 +123,8 @@ function start() {
       appWindow.setTitleBarOverlay(windowControls())
   })
   const actions = {
-    downloadHistoryFile: (file) =>
-      agent.downloadHistoryFile(file, async (name) => {
-        const result = await dialog.showSaveDialog(appWindow, {
-          title: '保存附件',
-          defaultPath: path.join(app.getPath('downloads'), name),
-        })
-        return result.canceled ? null : result.filePath
-      }),
+    downloadHistoryFile: file => agent.downloadHistoryFile(file, chooseAttachmentPath),
+    downloadNotificationFile: file => agent.downloadNotificationFile(file, chooseAttachmentPath),
     async screenshots(options) {
       if (options?.enabled && !agent.state().screenshotsEnabled) {
         const profile = agent.profile
@@ -111,7 +145,10 @@ function start() {
   }
   for (const [channel, method] of Object.entries({
     state: 'state',
+    loadEarlier: 'loadEarlier',
     schedule: 'schedule',
+    notificationPage: 'notificationPage',
+    readNotification: 'readNotification',
     history: 'history',
     compression: 'compression',
     configure: 'configure',

@@ -39,12 +39,18 @@ async function fixture() {
         text: '会议将在周五举行。',
       }
       outputs.set(output.output_id, output)
-      return json(202, { job_id: job })
+      return json(202, {event_id: 'event-'+job, job_id: job })
     }
     if (route === '/v1/outputs')
       return json(200, { outputs: [...outputs.values()] })
     if (route === '/v1/history') {
       const view = new URL(req.url, 'http://localhost').searchParams.get('view')
+      if(view === 'dialogue') return json(200, {
+        items:[...messages].reverse().flatMap(([id,text]) => [
+          {id:'out-'+id, role:'assistant', text:'会议将在周五举行。', occurred_at:null},
+          {id:'event-'+id, role:'user', text, message_id:id, terminal_id:'http-desktop', occurred_at:'2026-11-14T02:00:00Z'},
+        ]), next_cursor:null,
+      })
       const items =
         view === 'chat'
           ? [...messages].map(([id, text]) => ({

@@ -40,7 +40,7 @@ export function useHistoryPages(view: HistoryView) {
   )
   const pending = useRef(new Map<string | null, symbol>())
   const fetchPage = useCallback(
-    (groupId: string | null, cursor: string | null) => {
+    (groupId: string | null, cursor: string | null, background = false) => {
       if (pending.current.has(groupId)) return
       const token = Symbol()
       pending.current.set(groupId, token)
@@ -64,6 +64,24 @@ export function useHistoryPages(view: HistoryView) {
               for (const row of previous.get(groupId)?.items ?? [])
                 rows.set(row.id, row)
             for (const row of items) rows.set(row.id, row)
+            if (background && page.next_cursor && items.length) {
+              const prior = previous.get(groupId)
+              const last = items.at(-1)!
+              const overlap = prior?.items.findIndex(
+                (row) =>
+                  row.id === last.id &&
+                  row.text === last.text &&
+                  row.source === last.source &&
+                  row.occurred_at === last.occurred_at,
+              )
+              if (prior && overlap !== undefined && overlap >= 0)
+                return next.set(groupId, {
+                  ...prior,
+                  items: [...items, ...prior.items.slice(overlap + 1)],
+                  error: '',
+                  loading: false,
+                })
+            }
             return next.set(groupId, {
               items: [...rows.values()],
               next: page.next_cursor,
@@ -97,8 +115,21 @@ export function useHistoryPages(view: HistoryView) {
   useEffect(() => {
     void fetchPage(null, null)
     const requests = pending.current
-    return () => requests.clear()
-  }, [fetchPage])
+    function refreshVisible() {
+      if (document.visibilityState === 'visible')
+        void fetchPage(null, null, true)
+    }
+    if (view !== 'chat') return () => requests.clear()
+    const timer = window.setInterval(refreshVisible, 5000)
+    window.addEventListener('focus', refreshVisible)
+    document.addEventListener('visibilitychange', refreshVisible)
+    return () => {
+      requests.clear()
+      window.clearInterval(timer)
+      window.removeEventListener('focus', refreshVisible)
+      document.removeEventListener('visibilitychange', refreshVisible)
+    }
+  }, [fetchPage, view])
   const read = useCallback(
     (groupId: string | null, cursor: string | null) => {
       if (pending.current.has(groupId)) return

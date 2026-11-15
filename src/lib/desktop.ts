@@ -22,6 +22,12 @@ export function setBrowserAppearance(mode: Appearance) {
 export type HistoryView =
   'conversation' | 'notification' | 'perception' | 'slice' | 'chat' | 'timeline'
 
+export interface DeviceFile { id: string; name: string; size_bytes: number; content_type: string }
+export interface DeviceNotice {
+  id: string; title: string; body: string; created_at: string; expires_at: string | null;
+  received_at: string | null; read_at: string | null; expired: boolean; attachments: DeviceFile[]
+}
+export interface NoticeAlert { id: string; title: string; body: string; open: boolean; terminal: string; url: string }
 export interface HistoryFile {
   id: string
   name: string
@@ -118,9 +124,10 @@ export interface ScheduleRange {
 
 export interface ChatMessage {
   id: string
-  role: 'user' | 'assistant' | 'notification'
+  role: 'user' | 'assistant'
+  notificationReply?: boolean
   text: string
-  at: string
+  at: string | null
   status?:
     | 'queued'
     | 'waiting'
@@ -156,6 +163,7 @@ export interface AgentState {
     foreground_app: string
     window_title?: string
   } | null
+  hasEarlier: boolean
   messages: ChatMessage[]
 }
 export interface Connection {
@@ -191,7 +199,12 @@ declare global {
         activity?: boolean
         cursor?: string
       }): Promise<OriginalDetail>
+      notificationPage(cursor?: string): Promise<ResultsPage<DeviceNotice>>
+      readNotification(id: string): Promise<unknown>
+      downloadNotificationFile(file: {notificationId: string; file: DeviceFile}): Promise<{saved: boolean}>
+      onNotice(callback: (alert: NoticeAlert) => void): () => void
       downloadHistoryFile(file: HistoryFile): Promise<{ saved: boolean }>
+      loadEarlier(): Promise<void>
       send(text: string): Promise<void>
       retry(id: string): Promise<void>
       setCollection(enabled: boolean): Promise<void>
@@ -230,6 +243,7 @@ const initial: AgentState = {
   lastMaterial: null,
   issue: '',
   sampleIssue: '',
+  hasEarlier: false,
   messages: [],
   lastSpan: null,
 }

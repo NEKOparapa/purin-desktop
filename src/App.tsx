@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   ArrowDown,
   ArrowUp,
@@ -13,11 +13,14 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   SlidersHorizontal,
+  X,
 } from 'lucide-react'
 import { Dialog } from '@/components/ui/dialog'
 import { AgentSettings } from '@/components/agent-settings'
 import { SharePanel } from '@/components/share-panel'
 import { ScheduleCalendar } from '@/components/schedule-calendar'
+import { NotificationInbox } from '@/components/notification-inbox'
+import type { NoticeAlert } from '@/lib/desktop'
 import { MemoryBrowser } from '@/components/memory-browser'
 import { useAgent, type AgentState, type ChatMessage } from '@/lib/desktop'
 import './App.css'
@@ -26,6 +29,7 @@ const pages = [
   { id: 'chat', label: '对话', icon: MessageCircle },
   { id: 'memory', label: '记忆', icon: BookOpen },
   { id: 'calendar', label: '日历', icon: CalendarDays },
+  { id: 'notices', label: '通知', icon: Bell },
 ] as const
 type Page = (typeof pages)[number]['id']
 const sidebarPreference = 'wintermute.sidebarCollapsed'
@@ -90,15 +94,19 @@ function Message({
   retry: (id: string) => void
 }) {
   const user = message.role === 'user'
-  const notice = message.role === 'notification'
+  const notice = message.notificationReply
   return (
-    <article className={'message ' + message.role}>
+    <article className={'message ' + (notice ? 'notification' : message.role)}>
       <header>
         {notice ? <Bell size={14} /> : !user && <Mark />}
-        <strong>{user ? '你' : notice ? '后台通知' : 'Wintermute'}</strong>
-        <time dateTime={message.at}>
-          {timeFormat.format(new Date(message.at))}
-        </time>
+        <strong>
+          {user ? '你' : notice ? 'Wintermute · 通知回复' : 'Wintermute'}
+        </strong>
+        {message.at && (
+          <time dateTime={message.at}>
+            {timeFormat.format(new Date(message.at))}
+          </time>
+        )}
       </header>
       <p>{message.text}</p>
       {message.status && statuses[message.status] && (
@@ -129,15 +137,40 @@ function Chat({
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const [issue, setIssue] = useState('')
+  const [loadingEarlier, setLoadingEarlier] = useState(false)
   const [atBottom, setAtBottom] = useState(true)
   const follow = useRef(true)
   const log = useRef<HTMLDivElement>(null)
   const input = useRef<HTMLTextAreaElement>(null)
-  const hasMessages = agent.messages.length > 0
+  const lastMessageId = agent.messages.at(-1)?.id
+  const hasMessages = agent.messages.length > 0 || agent.hasEarlier
+  const olderAnchor = useRef<{ height: number; position: number } | null>(null)
+  async function earlier() {
+    if (loadingEarlier || !log.current || !window.wintermute) return
+    olderAnchor.current = {
+      height: log.current.scrollHeight,
+      position: log.current.scrollTop,
+    }
+    follow.current = false
+    setLoadingEarlier(true)
+    setIssue('')
+    try {
+      await window.wintermute.loadEarlier()
+    } catch {
+      setIssue('无法读取更早消息，请重试。')
+    } finally {
+      setLoadingEarlier(false)
+    }
+  }
   useLayoutEffect(() => {
-    if (visible && follow.current && log.current)
+    if (!loadingEarlier && olderAnchor.current && log.current) {
+      const anchor = olderAnchor.current
+      log.current.scrollTop =
+        anchor.position + log.current.scrollHeight - anchor.height
+      olderAnchor.current = null
+    } else if (visible && follow.current && log.current)
       log.current.scrollTop = log.current.scrollHeight
-  }, [agent.messages.length, visible])
+  }, [agent.messages.length, lastMessageId, visible, loadingEarlier])
   useLayoutEffect(() => {
     if (visible && input.current) {
       input.current.style.height = 'auto'
@@ -191,15 +224,25 @@ function Chat({
             }}
           >
             <div className="thread">
+              {agent.hasEarlier && (
+                <button
+                  className="earlier-messages"
+                  disabled={loadingEarlier}
+                  onClick={earlier}
+                >
+                  {loadingEarlier ? '正在读取…' : '加载更早消息'}
+                </button>
+              )}
               {agent.messages.map((message, i) => {
-                const day = new Date(message.at)
+                const day = message.at ? new Date(message.at) : null
+                const previous = agent.messages[i - 1]?.at
                 const newDate =
-                  i === 0 ||
-                  day.toDateString() !==
-                    new Date(agent.messages[i - 1].at).toDateString()
+                  day &&
+                  (!previous ||
+                    day.toDateString() !== new Date(previous).toDateString())
                 return (
                   <div key={message.id}>
-                    {newDate && (
+                    {day && newDate && (
                       <p className="day-divider">
                         <span>{dateFormat.format(day)}</span>
                       </p>
@@ -311,6 +354,28 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [connectionVersion, setConnectionVersion] = useState(0)
   const agent = useAgent()
+  const [lastAlert,setNotice]=useState<(NoticeAlert & {version:number})|null>(null)
+  const notice=lastAlert?.url===agent.url && lastAlert.terminal===agent.terminal && lastAlert.version===connectionVersion ? lastAlert : null
+  const [focusNotice,setFocusNotice]=useState<string|null>(null)
+  function openNotice(id:string) {
+    setFocusNotice(id)
+    setPage('notices')
+    setSettingsOpen(false)
+    setNotice(null)
+  }
+  useEffect(()=>{
+    let timer:ReturnType<typeof setTimeout>|undefined
+    const stop=window.wintermute?.onNotice?.(alert=>{
+      if (alert.url!==agent.url || alert.terminal!==agent.terminal) return
+      clearTimeout(timer)
+      if (alert.open) openNotice(alert.id)
+      else {
+        setNotice({...alert,version:connectionVersion})
+        timer=setTimeout(()=>setNotice(null),10000)
+      }
+    })
+    return ()=>{clearTimeout(timer);stop?.()}
+  },[agent.url,agent.terminal,connectionVersion])
   const showSettings = () => setSettingsOpen(true)
   const toggleLabel = collapsed ? '展开导航栏' : '收起导航栏'
   function toggleSidebar() {
@@ -348,7 +413,7 @@ export default function App() {
               aria-label={p.label}
               aria-current={page === p.id ? 'page' : undefined}
               title={p.label}
-              onClick={() => setPage(p.id)}
+              onClick={() => { setPage(p.id);setFocusNotice(null) }}
             >
               <p.icon size={18} aria-hidden="true" />
               {!collapsed && <span>{p.label}</span>}
@@ -375,11 +440,17 @@ export default function App() {
         </div>
         {page === 'calendar' && (
           <ScheduleCalendar
-            key={JSON.stringify([agent.url, agent.terminal, connectionVersion, agent.configured])}
+            key={JSON.stringify([
+              agent.url,
+              agent.terminal,
+              connectionVersion,
+              agent.configured,
+            ])}
             connected={agent.configured}
             settings={showSettings}
           />
         )}
+        {page === 'notices' && <NotificationInbox key={JSON.stringify([agent.url,agent.terminal,connectionVersion,agent.configured,focusNotice])} connected={agent.configured} settings={showSettings} focusId={focusNotice}/>}
         {page === 'memory' && (
           <MemoryBrowser
             key={JSON.stringify([agent.url, agent.terminal, connectionVersion])}
@@ -388,6 +459,10 @@ export default function App() {
           />
         )}
       </main>
+      {notice && <aside className="notice-banner" aria-label="新通知" role="status">
+        <button onClick={()=>openNotice(notice.id)}><strong>{notice.title}</strong><span>{notice.body}</span></button>
+        <button aria-label="关闭提醒" onClick={()=>setNotice(null)}><X size={15}/></button>
+      </aside>}
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
         {settingsOpen && (
           <AgentSettings

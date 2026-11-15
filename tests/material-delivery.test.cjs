@@ -27,6 +27,7 @@ async function setup(t, handle) {
       res.end(JSON.stringify({ outputs: [] }))
       return
     }
+    if (req.url.startsWith('/v1/history?')) return res.end(JSON.stringify({ items: [], next_cursor: null }))
     const bytes = Buffer.concat(chunks)
     const item = {
       route: req.url,

@@ -410,3 +410,16 @@ test('compares the same batch with its persisted summaries and opens scoped orig
     page.getByRole('button', { name: '时间线历史', exact: true }),
   ).toHaveAttribute('aria-pressed', 'true')
 })
+
+test('the open chat journal refreshes on return and reflects a database reset', async ({page}) => {
+  let rows = [item('old','旧记录')]
+  await openMemory(page, () => ({items:rows, next_cursor:null}))
+  await expect(page.getByText('旧记录')).toBeVisible()
+  rows = [item('new','提醒回复'), ...rows]
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+  await expect(page.getByText('提醒回复')).toBeVisible()
+  rows = []
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+  await expect(page.getByText('暂无记录')).toBeVisible()
+  await expect(page.getByText('旧记录')).toHaveCount(0)
+})

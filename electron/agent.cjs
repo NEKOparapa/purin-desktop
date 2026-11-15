@@ -14,6 +14,8 @@ const {
 } = require('./window-spans.cjs')
 const { BrowserBridge } = require('./browser-bridge.cjs')
 const { saveHistoryFile } = require('./history.cjs')
+const { ChatHistory } = require('./chat-history.cjs')
+const { notificationPath, pageRoute, validatePage, deliverPending } = require('./notifications.cjs')
 const captureVersion = 4
 
 function read(file, fallback) {
@@ -162,10 +164,11 @@ async function request(profile, route, body, signal, binaryHeaders) {
 }
 
 class DesktopAgent {
-  constructor(dir, secure, sample, notify, screenshot) {
+  constructor(dir, secure, sample, notify, screenshot, presentNotifications) {
     this.dir = dir
     this.secure = secure
     this.sample = sample
+    this.presentNotifications = presentNotifications
     this.screenshot = screenshot
     this.notify = notify
     fs.mkdirSync(dir, { recursive: true })
@@ -188,6 +191,7 @@ class DesktopAgent {
     }
     this.open(settings, token)
     this.pollTimer = setInterval(() => this.sync(), 2200)
+    if (presentNotifications) this.notificationTimer = setInterval(() => this.pollNotifications(), 5000)
     this.captureTimer = setInterval(() => this.capture(), 15000)
     this.sync()
     this.capture()
@@ -211,9 +215,19 @@ class DesktopAgent {
       captureController: new AbortController(),
       issue: '',
       sampleIssue: '',
-      history: read(file, { messages: [] }),
+      history: read(file, {}),
+      chat: new ChatHistory(),
     }
     const p = this.profile
+    // Old clients persisted a complete local transcript. Keep outstanding sends
+    // so they can still be retried; committed history is loaded from the server.
+    if (Array.isArray(p.history.messages)) {
+      p.history.outbox = p.history.messages.filter(m => m.role === 'user' &&
+        ['queued', 'unsent', 'waiting'].includes(m.status))
+      delete p.history.messages
+      save(file, p.history)
+    }
+    p.history.outbox ??= []
     p.history.materials ??= []
     p.screenshotsEnabled = !!(p.collecting && p.screenshotsEnabled)
     p.screenshotMinutes = [1, 5, 15].includes(p.screenshotMinutes)
@@ -285,8 +299,30 @@ class DesktopAgent {
       issue: p.issue,
       sampleIssue: p.sampleIssue,
       lastSpan: p.history.lastSpan ?? null,
-      messages: p.history.messages,
+      messages: this.chatMessages(p),
+      hasEarlier: p.chat.hasEarlier,
     }
+  }
+
+  chatMessages(p) {
+    const pending = new Map(p.history.outbox.map(row => [row.id, row]))
+    const byEvent = new Map(p.history.outbox.filter(m => m.eventId).map(m => [m.eventId, m]))
+    const messages = p.chat.messages.map(row => {
+      if (row.role !== 'user') return row
+      const local = byEvent.get(row.id) || (row.terminal === p.terminal && pending.get(row.messageId))
+      if (!local) return row
+      pending.delete(local.id)
+      return { ...row, id: local.id, status: local.status, error: local.error }
+    })
+    return messages.concat([...pending.values()].filter(m => ['queued', 'unsent'].includes(m.status)))
+  }
+
+  async loadEarlier() {
+    const p = this.profile
+    if (!p.token) return
+    const get = route => request(p, route, undefined, p.controller.signal)
+    await p.chat.read(get, true)
+    if (p === this.profile && !p.controller.signal.aborted) this.publish()
   }
 
   publish() {
@@ -317,11 +353,69 @@ class DesktopAgent {
       appearance: this.appearance,
     }
     save(this.configFile, settings)
-    if (same) Object.assign(old, settings, { token: credential })
-    else this.open(settings, credential)
+    if (same && old.token === credential) Object.assign(old, settings)
+    else {
+      if (same && old.token) {
+        old.history.outbox = []
+        save(old.file, old.history)
+      }
+      this.open(settings, credential)
+    }
     this.publish()
     this.sync()
     this.capture()
+  }
+
+  async notificationPage(cursor) {
+    const p = this.profile
+    if (!p.token) throw new Error('请先连接终端')
+    try {
+      const page = await request(p, pageRoute(cursor), undefined, p.controller.signal)
+      if (p !== this.profile) throw new Error('连接已更改')
+      return validatePage(page)
+    } catch (error) {
+      if (error.status === 404) throw new Error('当前后端尚未提供设备通知。')
+      throw error
+    }
+  }
+
+  readNotification(id) {
+    const p = this.profile
+    if (!p.token) throw new Error('请先连接终端')
+    return request(p, notificationPath(id) + '/read', {}, p.controller.signal)
+  }
+
+  downloadNotificationFile({notificationId, file}, choosePath) {
+    const p = this.profile
+    if (!p.token) throw new Error('请先连接终端')
+    const route = notificationPath(notificationId) + '/files/'
+    return saveHistoryFile(file, choosePath, id => {
+      if (p !== this.profile || p.controller.signal.aborted) throw new Error('连接已更改')
+      return fetchResponse(p, route + encodeURIComponent(id), {
+        signal: AbortSignal.any([p.controller.signal, AbortSignal.timeout(300000)]),
+      })
+    })
+  }
+
+  async pollNotifications() {
+    const p = this.profile
+    if (!p.token || !this.presentNotifications || p.pollingNotifications ||
+        Date.now() < (p.nextNotificationsPoll ?? 0) || p.controller.signal.aborted) return
+    p.pollingNotifications = true
+    try {
+      await deliverPending({
+        request: (route, body) => request(p, route, body, p.controller.signal),
+        inFlight: p.history.notificationReceipts ??= [],
+        save: () => this.persist(p),
+        present: items => this.presentNotifications(items, p),
+        active: () => p === this.profile && !p.controller.signal.aborted,
+      })
+    } catch (error) {
+      // A legacy server or a temporary failure in this inbox must not block chat.
+      p.nextNotificationsPoll = Date.now() + (error.status === 404 ? 60000 : 10000)
+    } finally {
+      p.pollingNotifications = false
+    }
   }
 
   async schedule({ start, end, cursor }) {
@@ -847,7 +941,7 @@ class DesktopAgent {
     if (!p.token) throw new Error('请先连接终端')
     if (typeof text !== 'string' || !text.trim())
       throw new Error('消息不能为空')
-    p.history.messages.push({
+    p.history.outbox.push({
       id: randomUUID(),
       role: 'user',
       text: text.trim(),
@@ -860,7 +954,7 @@ class DesktopAgent {
 
   retry(id) {
     const p = this.profile
-    const m = p.history.messages.find(
+    const m = p.history.outbox.find(
       (row) => row.id === id && row.role === 'user',
     )
     if (!m || !p.token) return
@@ -879,28 +973,8 @@ class DesktopAgent {
     void this.flushMaterials(p)
     p.syncing = true
     const api = (route, body) => request(p, route, body, p.controller.signal)
-    const receive = async (output) => {
-      const known = p.history.messages.some(
-        (row) => row.role !== 'user' && row.id === output.output_id,
-      )
-      if (!known) {
-        p.history.messages.push({
-          id: output.output_id,
-          role: output.layer === 'notification' ? 'notification' : 'assistant',
-          text: output.text,
-          at: output.created_at || new Date().toISOString(),
-        })
-      }
-      // A pending receipt can be redelivered when the app exits after writing the reply.
-      if (!known || output.status !== 'delivered') this.persist(p)
-      if (output.status !== 'delivered')
-        await api(
-          '/v1/outputs/' + encodeURIComponent(output.output_id) + '/ack',
-          {},
-        )
-    }
     try {
-      for (const m of p.history.messages.filter(
+      for (const m of p.history.outbox.filter(
         (row) => row.status === 'queued',
       )) {
         try {
@@ -910,6 +984,7 @@ class DesktopAgent {
           })
           if (typeof receipt.job_id !== 'string')
             throw new Error('服务端返回的任务 ID 无效')
+          m.eventId = receipt.event_id
           m.job = receipt.job_id
           m.status = 'waiting'
         } catch (error) {
@@ -920,26 +995,23 @@ class DesktopAgent {
         this.persist(p)
       }
 
-      const inbox = await api('/v1/outputs?limit=100')
-      for (const output of inbox.outputs) await receive(output)
-      for (const m of p.history.messages.filter(
-        (row) => row.status === 'waiting',
-      )) {
-        let job
-        try {
-          job = await api('/v1/jobs/' + encodeURIComponent(m.job))
-        } catch (error) {
-          if (error.status !== 404) throw error
-          m.status = 'missing'
-          this.persist(p)
-          continue
-        }
-        for (const output of job.outputs || []) await receive(output)
-        if (['completed', 'failed', 'interrupted'].includes(job.status)) {
-          m.status = job.status
-          this.persist(p)
-        }
-      }
+      // Inbox acknowledgements and job tracking must not prevent an independent
+      // notification reply or a server reset from becoming visible in chat.
+      const results = await Promise.allSettled([
+        this.syncDelivery(p, api),
+        p.chat.read(api).then(changed => {
+          if (p.controller.signal.aborted) return
+          // The POST may have reached the server even if its receipt was lost.
+          const accepted = new Set(p.chat.messages.filter(row => row.terminal === p.terminal && row.messageId).map(row => row.messageId))
+          const keep = p.history.outbox.filter(m => m.status !== 'unsent' || !accepted.has(m.id))
+          if (keep.length !== p.history.outbox.length) {
+            p.history.outbox = keep
+            this.persist(p)
+          } else if (changed) this.publish()
+        }),
+      ])
+      for (const result of results)
+        if (result.status === 'rejected') throw result.reason
       if (p.issue) {
         p.issue = ''
         this.publish()
@@ -951,6 +1023,30 @@ class DesktopAgent {
       }
     } finally {
       p.syncing = false
+    }
+  }
+
+  async syncDelivery(p, api) {
+    const inbox = await api('/v1/outputs?limit=100')
+    for (const output of inbox.outputs)
+      if (output.status !== 'delivered')
+        await api('/v1/outputs/' + encodeURIComponent(output.output_id) + '/ack', {})
+    for (const m of p.history.outbox.filter(row => row.status === 'waiting')) {
+      let job
+      try {
+        job = await api('/v1/jobs/' + encodeURIComponent(m.job))
+      } catch (error) {
+        if (error.status !== 404) throw error
+      }
+      if (p.controller.signal.aborted) return
+      if (!job || job.status === 'completed') {
+        p.history.outbox = p.history.outbox.filter(row => row !== m)
+        this.persist(p)
+      } else if (job.status === 'failed' || job.status === 'interrupted') {
+        m.status = job.status
+        m.eventId ||= job.event_id
+        this.persist(p)
+      }
     }
   }
 
@@ -1080,6 +1176,7 @@ class DesktopAgent {
     void this.profile.bridge.stop()
     clearInterval(this.pollTimer)
     clearInterval(this.captureTimer)
+    clearInterval(this.notificationTimer)
     this.profile.controller.abort()
     this.profile.captureController.abort()
   }

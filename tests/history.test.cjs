@@ -21,6 +21,7 @@ test('history uses the bound terminal and fetches an attachment only after Save'
       return res.end()
     }
     if (url.pathname === '/v1/outputs') return res.end('{"outputs":[]}')
+    if (url.searchParams.get('view') === 'dialogue') return res.end(JSON.stringify({ items: [], next_cursor: null }))
     requests.push(url)
     if (
       url.pathname === '/v1/schedule' &&

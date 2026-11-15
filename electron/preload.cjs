@@ -6,7 +6,16 @@ contextBridge.exposeInMainWorld('wintermute', {
       .find((arg) => arg.startsWith('--wintermute-appearance='))
       ?.split('=')[1] || 'system',
   state: () => ipcRenderer.invoke('agent:state'),
+  loadEarlier: () => ipcRenderer.invoke('agent:loadEarlier'),
   schedule: (options) => ipcRenderer.invoke('agent:schedule', options),
+  notificationPage: (cursor) => ipcRenderer.invoke('agent:notificationPage', cursor),
+  readNotification: (id) => ipcRenderer.invoke('agent:readNotification', id),
+  downloadNotificationFile: (file) => ipcRenderer.invoke('agent:downloadNotificationFile', file),
+  onNotice: (callback) => {
+    const listener = (_event, notice) => callback(notice)
+    ipcRenderer.on('agent:notice', listener)
+    return () => ipcRenderer.removeListener('agent:notice', listener)
+  },
   history: (options) => ipcRenderer.invoke('agent:history', options),
   compression: (options) => ipcRenderer.invoke('agent:compression', options),
   downloadHistoryFile: (file) =>

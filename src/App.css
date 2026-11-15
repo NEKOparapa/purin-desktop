@@ -594,3 +594,11 @@
     transition-duration: 0s !important;
   }
 }
+
+.earlier-messages {
+  align-self: center;
+  margin: 0 auto 1rem;
+  color: var(--muted-foreground);
+  font-size: .85rem;
+  cursor: pointer;
+}

@@ -25,7 +25,7 @@ test('uncertain submission, stale jobs, delivered recovery, and durable capture 
   let ackAttempts = 0,
     jobQueries = 0,
     gatherCalls = 0
-  let inbox = []
+  let inbox = [], dialogue = []
   const server = http.createServer(async (req, res) => {
     let raw = ''
     for await (const chunk of req) raw += chunk
@@ -35,6 +35,7 @@ test('uncertain submission, stale jobs, delivered recovery, and durable capture 
       res.writeHead(status)
       res.end(JSON.stringify(data))
     }
+    if (url.startsWith('/v1/history?view=dialogue')) return json(200, {items: dialogue, next_cursor: null})
     if (url.startsWith('/v1/outputs?')) return json(200, { outputs: inbox })
     if (url === '/v1/slices') {
       slices.push(body)
@@ -49,7 +50,11 @@ test('uncertain submission, stale jobs, delivered recovery, and durable capture 
     if (url === '/v1/messages') {
       submissions.push(body)
       if (submissions.length === 1) return json(502, {})
-      return json(202, { job_id: body.text === '会议' ? 'gone' : 'second' })
+      if (body.text !== '会议') dialogue = [
+        {id:'old', role:'assistant', text:'周五', occurred_at:null},
+        {id:'second-event', role:'user', text:body.text, message_id:body.message_id, terminal_id:'http-desktop', occurred_at:new Date().toISOString()}
+      ]
+      return json(202, {event_id:body.text === '会议' ? 'gone-event' : 'second-event', job_id: body.text === '会议' ? 'gone' : 'second' })
     }
     if (url === '/v1/jobs/gone') return json(404, {})
     if (url === '/v1/jobs/second') {
@@ -75,7 +80,7 @@ test('uncertain submission, stale jobs, delivered recovery, and durable capture 
           ),
         ),
       )
-      assert.equal(ledger.messages.filter((m) => m.id === 'note').length, 1)
+      assert.equal(ledger.messages, undefined)
       if (++ackAttempts === 1) return json(503, {})
       inbox = []
       return json(200, {})
@@ -122,7 +127,7 @@ test('uncertain submission, stale jobs, delivered recovery, and durable capture 
   await until(() => !client.profile.syncing)
   await client.sync()
   assert.equal(submissions[0].message_id, submissions[1].message_id)
-  assert.equal(client.state().messages[0].status, 'missing')
+  assert.equal(client.state().messages.some(m => m.text === '会议'), false)
   assert.equal(jobQueries, 1)
   assert.equal(client.state().messages.find((m) => m.id === 'old').text, '周五')
 
@@ -134,7 +139,12 @@ test('uncertain submission, stale jobs, delivered recovery, and durable capture 
       status: 'pending',
     },
   ]
+  // The server can also produce an answer with no output for this terminal.
+  dialogue.unshift({id:'note', role:'assistant', text:'会议已确认', occurred_at:null})
+  dialogue.unshift({id:'scheduled', role:'assistant', layer:'notification', text:'十分钟到了', occurred_at:null})
   await client.sync()
+  assert.deepEqual(client.state().messages.map(m => m.text), ['补充','周五','会议已确认','十分钟到了'])
+  assert.equal(client.state().messages.at(-1).notificationReply, true)
   assert.equal(ackAttempts, 1)
   client.setCollection(true)
   await until(() => !client.profile.capturing)
@@ -145,6 +155,13 @@ test('uncertain submission, stale jobs, delivered recovery, and durable capture 
   assert.equal(ackAttempts, 2)
   assert.equal(client.state().messages.filter((m) => m.id === 'note').length, 1)
   assert.equal(events.length, 0)
+  dialogue = []
+  await client.sync()
+  assert.deepEqual(client.state().messages, [])
+  client.close()
+  client = launch()
+  assert.deepEqual(client.state().messages, [])
+  await until(() => !client.profile.capturing && !client.profile.syncing)
   observation = {
     activity: 'active',
     foreground_app: 'Code',
