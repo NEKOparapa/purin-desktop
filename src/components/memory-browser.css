@@ -402,6 +402,33 @@
   font-size: 23px;
   line-height: 1.4;
 }
+.profile-status,
+.profile-usage {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.profile-status {
+  margin: 4px 0 0;
+}
+.profile-placeholder {
+  color: var(--quiet);
+}
+.profile-template {
+  max-width: 68ch;
+  margin-top: 24px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 14px;
+}
+.profile-template summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--muted);
+}
+.profile-template .profile-document {
+  margin-top: 12px;
+}
 .profile-document {
   max-width: 68ch;
   min-width: 0;

@@ -6,6 +6,7 @@ import {
   type Appearance,
 } from '@/lib/desktop'
 import { Button } from '@/components/ui/button'
+import { ApiKeySettings } from '@/components/api-key-settings'
 import {
   DialogContent,
   DialogHeader,
@@ -14,6 +15,7 @@ import {
 
 const tabs = [
   { id: 'connection', label: '连接' },
+  { id: 'keys', label: '接口密钥' },
   { id: 'appearance', label: '外观' },
   { id: 'capture', label: '信息采集' },
 ] as const
@@ -123,6 +125,13 @@ export function AgentSettings({
           </button>
         ))}
       </nav>
+      {tab === 'keys' && (
+        <ApiKeySettings
+          key={JSON.stringify([state.url, state.terminal, state.connectionRevision, state.configured])}
+          configured={state.configured}
+          revision={state.connectionRevision}
+        />
+      )}
       {tab === 'appearance' && (
         <fieldset className="appearance-settings">
           <legend>主题</legend>
@@ -311,15 +320,15 @@ export function AgentSettings({
                   )
                 }}
               />
-              定时截取前台窗口
+              采集前台窗口代表帧
             </label>
             <p>
-              使用其他应用时，前台窗口截图上传到切片层，可在「记忆 →
-              切片层」查看原件。
+              窗口停留期间按画面变化选图，最多保留 4 张。离开后随本次停留上传，
+              识别结果显示在「记忆 → 感知层」。
             </p>
             {state.screenshotsEnabled && (
               <label>
-                截图间隔{' '}
+                代表帧预算{' '}
                 <select
                   value={state.screenshotMinutes}
                   disabled={busy}
@@ -332,7 +341,7 @@ export function AgentSettings({
                 >
                   {[1, 5, 15].map((minutes) => (
                     <option key={minutes} value={minutes}>
-                      {minutes} 分钟
+                      平均每 {minutes} 分钟 1 张
                     </option>
                   ))}
                 </select>

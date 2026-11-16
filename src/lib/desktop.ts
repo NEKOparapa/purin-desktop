@@ -25,6 +25,7 @@ export type HistoryView =
 export interface UserProfileDocument {
   status: 'ready' | 'empty' | 'unconfigured'
   markdown: string
+  effective: boolean | null
 }
 
 export interface DeviceFile { id: string; name: string; size_bytes: number; content_type: string }
@@ -177,12 +178,25 @@ export interface Connection {
   terminal: string
   token: string
 }
+export interface ApiKeySetting {
+  id: string
+  usages: string[]
+  configured: boolean
+  masked: string | null
+}
+export interface ApiKeyUpdate {
+  id: string
+  apiKey: string
+  connectionRevision: number
+}
 declare global {
   interface Window {
     wintermute?: {
       initialAppearance: Appearance
       state(): Promise<AgentState>
       configure(settings: Connection): Promise<void>
+      apiKeys(): Promise<ApiKeySetting[]>
+      updateApiKey(update: ApiKeyUpdate): Promise<ApiKeySetting[]>
       schedule(range: ScheduleRange): Promise<ResultsPage<ScheduleEntry>>
       userProfile(): Promise<UserProfileDocument>
       history(options: {

@@ -250,10 +250,10 @@ async function main() {
       await sample('Wintermute', '记忆')
     }
     if (api) {
-      const screenshots = win.getByLabel('定时截取前台窗口')
+      const screenshots = win.getByLabel('采集前台窗口代表帧')
       await screenshots.click()
       await expect(screenshots).toBeChecked()
-      await win.getByLabel('截图间隔').selectOption('1')
+      await win.getByLabel('代表帧预算').selectOption('1')
       await expect
         .poll(() =>
           win.evaluate(() =>
@@ -276,7 +276,7 @@ async function main() {
     }
     await collecting.click()
     await expect(collecting).not.toBeChecked()
-    await expect(win.getByLabel('定时截取前台窗口')).not.toBeChecked()
+    await expect(win.getByLabel('采集前台窗口代表帧')).not.toBeChecked()
     await win.getByRole('button', { name: '关闭', exact: true }).click()
 
     await win

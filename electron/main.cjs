@@ -148,6 +148,8 @@ function start() {
     loadEarlier: 'loadEarlier',
     schedule: 'schedule',
     userProfile: 'userProfile',
+    apiKeys: 'apiKeys',
+    updateApiKey: 'updateApiKey',
     notificationPage: 'notificationPage',
     readNotification: 'readNotification',
     history: 'history',

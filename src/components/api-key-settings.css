@@ -1,0 +1,45 @@
+.api-key-settings {
+  min-width: 0;
+}
+.api-key-settings > header,
+.api-key-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.api-key-settings > header {
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+.api-key-row {
+  border-top: 1px solid var(--line);
+  padding: 12px 0;
+}
+.api-key-summary h3 {
+  font-size: 14px;
+  font-weight: 550;
+  overflow-wrap: anywhere;
+}
+.api-key-summary p {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 3px;
+}
+.api-key-summary code {
+  margin-left: 0.4em;
+}
+.api-key-row .connection-form {
+  margin-top: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 4px;
+  align-items: end;
+}
+.api-key-row .connection-actions,
+.api-key-validation {
+  grid-column: 1 / -1;
+}
+.api-key-row .api-key-visibility {
+  align-self: end;
+  margin-bottom: 3px;
+}

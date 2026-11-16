@@ -29,7 +29,7 @@ async function setup(t, onProfile) {
 
 test('profile reads the current document on demand with the bound terminal credentials', async (t) => {
   const requests = []
-  let response = { status: 'ready', markdown: '# 用户档案\n\n偏好简洁的回答。', private: '不传到界面' }
+  let response = { status: 'ready', markdown: '# 用户档案\n\n偏好简洁的回答。', effective: true, private: '不传到界面' }
   let statusCode = 200
   const { agent, configure } = await setup(t, (req, res) => {
     requests.push([req.method, req.headers.authorization, req.headers['x-terminal-id']])
@@ -39,12 +39,24 @@ test('profile reads the current document on demand with the bound terminal crede
   await assert.rejects(agent.userProfile(), /请先连接终端/)
   await configure('first')
   assert.deepEqual(requests, [])
-  assert.deepEqual(await agent.userProfile(), { status: 'ready', markdown: response.markdown })
+  assert.deepEqual(await agent.userProfile(), { status: 'ready', markdown: response.markdown, effective: true })
   assert.deepEqual(requests, [['GET', 'Bearer first', 'desktop']])
-  for (const status of ['empty', 'unconfigured']) {
-    response = { status, markdown: '' }
-    assert.deepEqual(await agent.userProfile(), response)
-  }
+  response = { status: 'ready', markdown: '## 常用时间段\n- 工作日：上午', effective: false }
+  assert.deepEqual(await agent.userProfile(), response)
+  response = { status: 'empty', markdown: '## 基本信息\n- 昵称：', effective: false }
+  assert.deepEqual(await agent.userProfile(), response)
+  response = { status: 'empty', markdown: '' }
+  const initial = await agent.userProfile()
+  assert.equal(initial.status, 'empty')
+  assert.equal(initial.effective, false)
+  assert.deepEqual(initial.markdown.match(/^## .+$/gm),
+    ['## 基本信息', '## 长期偏好', '## 日常习惯', '## 近期状态', '## 常用时间段'])
+  assert.match(initial.markdown, /- 称呼：/)
+  assert.match(initial.markdown, /- 周末常见活跃时段：/)
+  response = { status: 'unconfigured', markdown: '' }
+  assert.deepEqual(await agent.userProfile(), { ...response, effective: false })
+  response = { status: 'ready', markdown: '内容', effective: 'false' }
+  await assert.rejects(agent.userProfile(), /格式无效/)
   response = { status: 'ready', markdown: {} }
   await assert.rejects(agent.userProfile(), /格式无效/)
   statusCode = 404
@@ -70,5 +82,5 @@ test('changing credentials invalidates an in-flight profile even at the same URL
   await configure('second')
   await stale
   assert.ok(agent.state().connectionRevision > revision)
-  assert.deepEqual(await agent.userProfile(), { status: 'ready', markdown: '# 第二份档案' })
+  assert.deepEqual(await agent.userProfile(), { status: 'ready', markdown: '# 第二份档案', effective: null })
 })

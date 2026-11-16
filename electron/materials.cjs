@@ -9,6 +9,21 @@ const routes = {
   audio: '/v1/audio/slices',
 }
 
+const desktopWindowRoute = '/v1/perceptions/desktop-window'
+const frameIdPattern = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i
+
+function framePath(profile, id) {
+  if (typeof id !== 'string' || !frameIdPattern.test(id))
+    throw new Error('无效的代表帧文件名')
+  return path.join(profile.mediaDirectory, 'periodic', id)
+}
+
+function removeMaterialFiles(p, item) {
+  for (const frame of item.frames ?? [])
+    fs.rmSync(framePath(p, frame.id), { force: true })
+  if (!item.body) fs.rmSync(mediaPath(p, item), { force: true })
+}
+
 function recordedTime(value) {
   if (typeof value !== 'string' || !Number.isFinite(Date.parse(value)))
     throw new Error('材料缺少有效的采集时间')
@@ -80,6 +95,24 @@ function mediaPath(p, item) {
 
 async function submitMaterial(p, item, request, uploadSignal) {
   const signal = AbortSignal.any([p.controller.signal, uploadSignal])
+  if (item.source === 'screenshot')
+    throw new Error('旧版自动截图缺少对应的前台停留，无法投递')
+  if (item.kind === 'perception' && item.body.state_key === 'desktop.window_span' && item.frames?.length) {
+    const frames = []
+    for (const frame of item.frames) {
+      const bytes = await fs.promises.readFile(framePath(p, frame.id), { signal })
+      frames.push({
+        occurred_at: frame.occurred_at,
+        ...(frame.window_title && { window_title: frame.window_title }),
+        jpeg_base64: bytes.toString('base64'),
+      })
+    }
+    signal.throwIfAborted()
+    const receipt = await request(p, desktopWindowRoute, { ...item.body, frames }, signal)
+    if (typeof receipt?.event_id !== 'string' || !receipt.event_id)
+      throw new Error('服务端未确认前台停留记录')
+    return receipt
+  }
   const route = routes[item.kind]
   if (item.body) return request(p, route, item.body, signal)
   const data = await fs.promises.readFile(mediaPath(p, item))
@@ -89,11 +122,6 @@ async function submitMaterial(p, item, request, uploadSignal) {
           'Content-Type': 'image/jpeg',
           'X-Event-ID': item.id,
           'X-Occurred-At': item.at,
-          ...(item.context && {
-            'X-Capture-Context': Buffer.from(
-              JSON.stringify(item.context),
-            ).toString('base64url'),
-          }),
         }
       : {
           'Content-Type': 'audio/ogg',
@@ -112,4 +140,4 @@ async function submitMaterial(p, item, request, uploadSignal) {
   return request(p, route, data, signal, headers)
 }
 
-module.exports = { prepareShare, sliceBody, submitMaterial, mediaPath }
+module.exports = { prepareShare, sliceBody, submitMaterial, mediaPath, framePath, removeMaterialFiles, desktopWindowRoute }

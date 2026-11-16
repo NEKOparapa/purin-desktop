@@ -99,6 +99,45 @@ test('returning after short switches preserves the original ID and subtracts tim
   assert.equal(next.finished.value.ended_at, at(35_000).toISOString())
 })
 
+test('stable work objects are ordered inside one visit; brief titles and badge churn disappear', () => {
+  const step = recording()
+  const tab = (title) => ({ ...browser, window_title: title })
+  step(0, tab('(2) 发布议程'))
+  const id = step(5000, tab('发布议程')).active.id
+  step(8000, tab('临时弹窗'))
+  step(10_000, tab('发布议程'))
+  step(12_000, tab('发布看板'))
+  step(18_000, tab('发布看板'))
+  step(20_000, tab('发布议程'))
+  step(25_000, tab('● 发布议程'))
+  step(28_000, tab('未确认标题'))
+  assert.equal(step(30_000, chat).finished, null)
+  const { finished } = step(35_000, chat)
+  assert.equal(finished.event_id, id)
+  assert.equal(finished.value.duration_seconds, 30)
+  assert.equal(finished.value.window_title, '发布议程')
+  assert.deepEqual(finished.value.work_objects, [
+    { occurred_at: at(0).toISOString(), window_title: '发布议程' },
+    { occurred_at: at(12_000).toISOString(), window_title: '发布看板' },
+    { occurred_at: at(20_000).toISOString(), window_title: '发布议程' },
+  ])
+})
+
+test('long visits retain their first and recent objects with an explicit omitted count', () => {
+  const step = recording()
+  for (let i = 0; i < 20; i++) {
+    const doc = { ...browser, window_title: '文档 ' + i }
+    step(i * 10_000, doc)
+    step(i * 10_000 + minDwellMs, doc)
+  }
+  const { value } = step(200_000, { activity: 'locked' }).finished
+  assert.equal(value.work_objects_omitted, 4)
+  assert.deepEqual(
+    value.work_objects.map((row) => row.window_title),
+    ['文档 0', ...Array.from({ length: 15 }, (_, i) => '文档 ' + (i + 5))],
+  )
+})
+
 test('idle, lock, unavailable window and shutdown close the last confirmed span immediately', () => {
   for (const stop of [
     { activity: 'idle' },

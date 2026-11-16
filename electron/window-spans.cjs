@@ -3,6 +3,7 @@ const { randomUUID } = require('node:crypto')
 // A longer gap can be caused by sleep or a stopped client.
 const maxSampleGap = 45_000
 const minDwellMs = 5_000
+const maxWorkObjects = 16
 const stateKey = 'desktop.window_span'
 
 function spanValue(app, title, start, end, seconds) {
@@ -62,14 +63,46 @@ function finishSpan(span, observedEnd) {
     event_id: span.id,
     occurred_at: end,
     state_key: stateKey,
-    value: spanValue(
-      span.app,
-      span.title,
-      span.start,
-      end,
-      Math.round(elapsed / 1000),
-    ),
+    value: {
+      ...spanValue(
+        span.app,
+        span.workObjects?.at(-1)?.window_title || span.title,
+        span.start,
+        end,
+        Math.round(elapsed / 1000),
+      ),
+      ...(span.workObjects?.length > 1 && { work_objects: span.workObjects }),
+      ...(span.omittedObjects && { work_objects_omitted: span.omittedObjects }),
+    },
   }
+}
+
+// A title can change for a notification badge or the editor's dirty indicator.
+// Only distinct objects observed twice past the dwell threshold enter the visit.
+function observeObject(span, title, observed) {
+  const clean = title
+    .replace(/^(?:\(\d{1,3}\+?\)|\[\d{1,3}\+?\])\s+/u, '')
+    .replace(/^[●*]\s+|\s+[●*]$/gu, '')
+    .trim()
+  if (!clean || clean === span.workObjects?.at(-1)?.window_title) {
+    delete span.pendingObject
+    return span
+  }
+  if (span.pendingObject?.window_title !== clean) {
+    span.pendingObject = { occurred_at: observed, window_title: clean }
+  } else if (
+    Date.parse(observed) - Date.parse(span.pendingObject.occurred_at) >=
+    minDwellMs
+  ) {
+    const objects = [...(span.workObjects || []), span.pendingObject]
+    if (objects.length > maxWorkObjects) {
+      objects.splice(1, 1)
+      span.omittedObjects = (span.omittedObjects || 0) + 1
+    }
+    span.workObjects = objects
+    delete span.pendingObject
+  }
+  return span
 }
 
 function advanceWindowSpan(previous, candidate, sample, at = new Date()) {
@@ -84,7 +117,11 @@ function advanceWindowSpan(previous, candidate, sample, at = new Date()) {
     return {
       active: null,
       candidate: app
-        ? { app, title, start: observed, lastSeen: observed }
+        ? observeObject(
+            { app, title, start: observed, lastSeen: observed },
+            title,
+            observed,
+          )
         : null,
       finished: finishSpan(
         previous,
@@ -104,13 +141,18 @@ function advanceWindowSpan(previous, candidate, sample, at = new Date()) {
         (active.awayMs || 0) + at.getTime() - Date.parse(active.awaySince)
       delete active.awaySince
     }
-    return { active, candidate: null, finished: null }
+    return {
+      active: observeObject(active, title, observed),
+      candidate: null,
+      finished: null,
+    }
   }
 
   let active = previous ?? null
   let finished = null
   if (active && !active.awaySince) {
     active = { ...active, awaySince: observed }
+    delete active.pendingObject
   } else if (
     active &&
     at.getTime() - Date.parse(active.awaySince) >= minDwellMs
@@ -123,6 +165,7 @@ function advanceWindowSpan(previous, candidate, sample, at = new Date()) {
     candidate?.app === app
       ? { ...candidate, title: title || candidate.title, lastSeen: observed }
       : { app, title, start: observed, lastSeen: observed }
+  observeObject(next, title, observed)
   if (at.getTime() - Date.parse(next.start) < minDwellMs)
     return { active, candidate: next, finished }
   return {

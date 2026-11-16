@@ -178,10 +178,14 @@ test('uncertain submission, stale jobs, delivered recovery, and durable capture 
   await client.flushMaterials()
   assert.equal(events.length, 0)
   observation = { ...observation, window_title: 'notes.md' }
+  const switchedAt = new Date().toISOString()
   await client.capture()
   await client.flushMaterials()
   assert.equal(events.length, 0)
-  t.mock.timers.tick(10000)
+  t.mock.timers.tick(5000)
+  await client.capture()
+  assert.equal(events.length, 0)
+  t.mock.timers.tick(5000)
   observation = { activity: 'idle' }
   await client.capture()
   await client.flushMaterials()
@@ -194,6 +198,10 @@ test('uncertain submission, stale jobs, delivered recovery, and durable capture 
     started_at: firstSeen,
     ended_at: new Date().toISOString(),
     duration_seconds: 15,
+    work_objects: [
+      { occurred_at: firstSeen, window_title: 'meeting.md' },
+      { occurred_at: switchedAt, window_title: 'notes.md' },
+    ],
   })
   assert.equal(events.length, 1)
   assert.equal(client.state().lastSpan, null)

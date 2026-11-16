@@ -6,6 +6,9 @@ const {
   sliceBody,
   submitMaterial,
   mediaPath,
+  framePath,
+  removeMaterialFiles,
+  desktopWindowRoute,
 } = require('./materials.cjs')
 const {
   advanceWindowSpan,
@@ -13,10 +16,12 @@ const {
   minDwellMs,
 } = require('./window-spans.cjs')
 const { BrowserBridge } = require('./browser-bridge.cjs')
+const { canSample, observeFrame, finishFrames } = require('./representative-frames.cjs')
 const { saveHistoryFile } = require('./history.cjs')
 const { ChatHistory } = require('./chat-history.cjs')
 const { notificationPath, pageRoute, validatePage, deliverPending } = require('./notifications.cjs')
-const captureVersion = 4
+const initialProfileMarkdown = require('./profile-template.json')
+const captureVersion = 5
 
 function read(file, fallback) {
   try {
@@ -41,18 +46,48 @@ function recordWindow(profile, sample, at) {
     sample,
     at,
   )
-  history.windowSpan = active
-  profile.windowCandidate = candidate
   if (finished) {
+    const frames = finishFrames(profile, previous, finished.occurred_at,
+      () => save(profile.file, history))
     history.materials.push({
       id: finished.event_id,
       kind: 'perception',
       body: finished,
       source: 'window',
       label: '前台停留',
+      ...(frames.length && { frames }),
     })
   }
+  history.windowSpan = active
+  profile.windowCandidate = candidate
   return finished
+}
+
+// A pre-upgrade screenshot can be recovered only if its original dwell is still queued.
+function attachQueuedScreenshots(history, images, mediaDirectory) {
+  const owners = new Map(history.materials
+    .filter(item => item.source === 'window' && item.body?.state_key === 'desktop.window_span')
+    .map(item => [item.id, item]))
+  if (history.windowSpan) owners.set(history.windowSpan.id, history.windowSpan)
+  const unused = []
+  for (const image of images) {
+    const owner = owners.get(image.context?.activity_id)
+    const file = framePath({ mediaDirectory }, image.id)
+    const span = owner?.body?.value ?? owner
+    const start = Date.parse(span?.started_at ?? span?.start)
+    const end = Date.parse(span?.ended_at ?? span?.awaySince ?? span?.lastSeen)
+    const at = Date.parse(image.at)
+    const bytes = fs.statSync(file, { throwIfNoEntry: false })?.size
+    const frames = owner?.frames ?? []
+    // Old JPEGs can be 4 MiB each. Keep the combined JSON within the existing proxy limit.
+    const totalBytes = frames.reduce((sum, frame) => sum + frame.bytes, 0)
+    if (owner && start <= at && at <= end && bytes > 0 && frames.length < 4 &&
+        totalBytes + bytes <= 5 * 1024 * 1024) {
+      frames.push({ id: image.id, occurred_at: image.at, window_title: image.context.title, bytes })
+      owner.frames = frames.sort((a, b) => Date.parse(a.occurred_at) - Date.parse(b.occurred_at))
+    } else unused.push(file)
+  }
+  return unused
 }
 
 function migrateCaptureSettings(dir, configFile, settings) {
@@ -97,7 +132,14 @@ function migrateCaptureSettings(dir, configFile, settings) {
         return migrateWindowSlice(item)
       })
     }
-    if (changed) save(file, history)
+    const oldImages = history.materials?.filter(item => item.source === 'screenshot') ?? []
+    if (oldImages.length) {
+      const mediaDirectory = path.join(dir, 'media-' + path.parse(name.name).name.slice('terminal-'.length))
+      const unused = attachQueuedScreenshots(history, oldImages, mediaDirectory)
+      history.materials = history.materials.filter(item => item.source !== 'screenshot')
+      save(file, history)
+      for (const file of unused) fs.rmSync(file, { force: true })
+    } else if (changed) save(file, history)
   }
   delete settings.calendarFile
   delete settings.calendarSecret
@@ -151,7 +193,8 @@ async function fetchResponse(profile, route, options) {
 }
 
 async function request(profile, route, body, signal, binaryHeaders) {
-  const timeout = AbortSignal.timeout(binaryHeaders ? 60000 : 8000)
+  // The compound receipt is issued after the vision model processes up to four frames.
+  const timeout = AbortSignal.timeout(route === desktopWindowRoute ? 600000 : binaryHeaders ? 60000 : 8000)
   const response = await fetchResponse(profile, route, {
     method: body === undefined ? 'GET' : 'POST',
     headers:
@@ -235,22 +278,20 @@ class DesktopAgent {
       ? p.screenshotMinutes
       : 5
     p.screenshotEpoch = 0
-    p.nextScreenshot = Date.now() + p.screenshotMinutes * 60000
-    if (
-      !p.screenshotsEnabled &&
-      p.history.materials.some((item) => item.source === 'screenshot')
-    ) {
+    p.nextScreenshot = 0
+    if (!p.screenshotsEnabled && (p.history.windowSpan?.frames?.length ||
+        p.history.materials.some(item => item.source === 'screenshot' || item.frames?.length))) {
       this.dropAutomatic(p, 'screenshot')
       save(p.file, p.history)
     }
     // A crash between saving the JPEG and committing its queue entry can leave an orphan.
     const directory = path.join(p.mediaDirectory, 'periodic')
     if (fs.existsSync(directory)) {
-      const queued = new Set(
-        p.history.materials
-          .filter((item) => item.source === 'screenshot')
-          .map((item) => item.id),
-      )
+      const queued = new Set((p.history.windowSpan?.frames || []).map(frame => frame.id))
+      for (const item of p.history.materials) {
+        if (item.source === 'screenshot') queued.add(item.id)
+        for (const frame of item.frames || []) queued.add(frame.id)
+      }
       for (const id of fs.readdirSync(directory))
         if (/^[0-9a-f-]{36}$/.test(id) && !queued.has(id))
           fs.rmSync(path.join(directory, id), { force: true })
@@ -376,15 +417,79 @@ class DesktopAgent {
       if (p !== this.profile || p.controller.signal.aborted) throw new Error('连接已更改')
       if (!['ready', 'empty', 'unconfigured'].includes(doc?.status) ||
           typeof doc.markdown !== 'string' ||
+          (doc.effective !== undefined && typeof doc.effective !== 'boolean') ||
+          (doc.effective === true && doc.status !== 'ready') ||
           (doc.status === 'ready' && !doc.markdown.trim()))
         throw new Error('后端返回的用户档案格式无效')
-      return { status: doc.status, markdown: doc.status === 'ready' ? doc.markdown : '' }
+      if (doc.status === 'unconfigured')
+        return { status: 'unconfigured', markdown: '', effective: false }
+      if (doc.status === 'empty') {
+        const markdown = doc.markdown.trim() ? doc.markdown : initialProfileMarkdown
+        return { status: 'empty', markdown, effective: false }
+      }
+      return { status: 'ready', markdown: doc.markdown, effective: doc.effective ?? null }
     } catch (error) {
       if (p !== this.profile || p.controller.signal.aborted) throw new Error('连接已更改')
       if (error.status === 404) throw new Error('当前后端不支持用户档案，请更新后端。')
       if (error instanceof SyntaxError) throw new Error('后端返回的用户档案格式无效')
       throw error
     }
+  }
+
+  apiKeys() {
+    return this.requestApiKeys()
+  }
+
+  async updateApiKey(options) {
+    if (this.profile.revision !== options?.connectionRevision)
+      throw new Error('连接已更改，请重新打开接口密钥')
+    if (typeof options.id !== 'string' || !options.id ||
+        typeof options.apiKey !== 'string' || !/^[!-~]{1,4096}$/.test(options.apiKey) ||
+        /\s/.test(options.apiKey))
+      throw new Error('请输入有效的接口密钥')
+    return this.requestApiKeys({ id: options.id, api_key: options.apiKey })
+  }
+
+  async requestApiKeys(body) {
+    const p = this.profile
+    if (!p.token) throw new Error('请先连接终端')
+    const { protocol, hostname } = new URL(p.url)
+    const local = hostname === 'localhost' || hostname === '[::1]' ||
+      /^127(?:\.\d{1,3}){3}$/.test(hostname)
+    if (protocol !== 'https:' && !(protocol === 'http:' && local))
+      throw new Error('管理接口密钥需要 HTTPS 或本机连接')
+
+    let page
+    try {
+      page = await request(p, '/v1/settings/api-keys', body, p.controller.signal)
+    } catch (error) {
+      if (p !== this.profile || p.controller.signal.aborted)
+        throw new Error('连接已更改，请重新打开接口密钥')
+      if (error.code === 'secure_transport_required')
+        throw new Error('管理接口密钥需要 HTTPS 或本机连接')
+      if (error.status === 401) throw new Error('终端令牌无效，请重新连接')
+      if (error.status === 403) throw new Error('此终端没有管理接口密钥的权限')
+      if (error.status === 404 && error.code === 'unknown_key_id')
+        throw new Error('密钥配置项已变更，请刷新')
+      if ([404, 405].includes(error.status))
+        throw new Error('当前后端不支持接口密钥管理，请更新后端')
+      if (error.status === 400) throw new Error('请输入有效的接口密钥')
+      if (error.status === 503) throw new Error('后端暂时无法读写接口密钥')
+      if (error instanceof SyntaxError) throw new Error('后端返回的密钥设置格式无效')
+      if (!error.status) throw new Error('无法连接后端，请检查连接后重试')
+      throw new Error('管理接口密钥失败，请刷新后重试')
+    }
+    if (p !== this.profile || p.controller.signal.aborted)
+      throw new Error('连接已更改，请重新打开接口密钥')
+    if (!Array.isArray(page?.items) || !page.items.every(item =>
+      typeof item?.id === 'string' && item.id &&
+      Array.isArray(item.usages) && item.usages.every(label => typeof label === 'string') &&
+      typeof item.configured === 'boolean' &&
+      (item.configured
+        ? typeof item.masked === 'string' && /^••••(?:[!-~]{4})?$/u.test(item.masked)
+        : item.masked === null)))
+      throw new Error('后端返回的密钥设置格式无效')
+    return page.items.map(({ id, usages, configured, masked }) => ({ id, usages, configured, masked }))
   }
 
   async notificationPage(cursor) {
@@ -666,7 +771,7 @@ class DesktopAgent {
     })
     p.screenshotsEnabled = enabled
     p.screenshotMinutes = minutes
-    p.nextScreenshot = Date.now() + minutes * 60000
+    p.nextScreenshot = 0
     p.screenshotEpoch++
     p.screenshotIssue = ''
     if (!enabled) this.dropAutomatic(p, 'screenshot')
@@ -691,7 +796,25 @@ class DesktopAgent {
   // Remove queued observations when their source is disconnected. Explicit shares survive.
   dropAutomatic(p, source) {
     if (p.uploading?.source === source) p.uploadController?.abort()
+    const removed = []
+    if (source === 'screenshot') {
+      p.frameProbe = null
+      if (p.history.windowSpan?.frames) {
+        removed.push(...p.history.windowSpan.frames)
+        delete p.history.windowSpan.frames
+      }
+    }
     for (const item of p.history.materials) {
+      if (item.frames && (source === 'screenshot' || item.source === source)) {
+        if (p.uploading === item) p.uploadController?.abort()
+        removed.push(...item.frames)
+        delete item.frames
+        // A revoked attachment or old endpoint error must not block the dwell.
+        item.attempts = 0
+        item.rejected = false
+        item.retryAt = 0
+        item.error = ''
+      }
       if (item.source === source && !item.body)
         fs.rmSync(mediaPath(p, item), { force: true })
     }
@@ -700,6 +823,10 @@ class DesktopAgent {
     )
     p.materialIssue =
       p.history.materials.find((item) => item.error)?.error || ''
+    if (removed.length) {
+      save(p.file, p.history)
+      for (const frame of removed) fs.rmSync(framePath(p, frame.id), { force: true })
+    }
   }
 
   addMaterial(p, item) {
@@ -750,13 +877,14 @@ class DesktopAgent {
             })
         } catch (uploadError) {
           if (p.controller.signal.aborted) return
-          if (!p.history.materials.includes(item)) continue
+          if (p.uploadController.signal.aborted || !p.history.materials.includes(item)) continue
           let error = uploadError
           // An older server can reject the new shape after accepting this
           // exact v2 slice. Only an explicit duplicate receipt confirms that.
           let oldReceipt = false
           if (
             item.legacyWindowText &&
+            !item.frames?.length &&
             error.status === 409 &&
             error.code === 'event_id_conflict'
           ) {
@@ -780,7 +908,9 @@ class DesktopAgent {
           }
           if (!oldReceipt) {
             if (key) waitingKeys.add(key)
-            item.error = error.message
+            item.error = item.frames?.length && error.status === 404
+              ? '当前后端尚未支持带图感知。已暂存，升级后将重试。'
+              : error.message
             item.rejected =
               [400, 409, 413, 415, 422].includes(error.status) ||
               error.code === 'ENOENT'
@@ -810,7 +940,7 @@ class DesktopAgent {
         p.materialIssue =
           p.history.materials.find((entry) => entry.error)?.error || ''
         this.persist(p)
-        if (!item.body) fs.rmSync(mediaPath(p, item), { force: true })
+        removeMaterialFiles(p, item)
       }
       await this.checkProcessing(p)
     } catch (error) {
@@ -876,11 +1006,11 @@ class DesktopAgent {
       p.history.materials = p.history.materials.filter(
         (entry) => entry !== item,
       )
-      if (!item.body) fs.rmSync(mediaPath(p, item), { force: true })
     } else throw new Error('操作无效')
     p.materialIssue =
       p.history.materials.find((entry) => entry.error)?.error || ''
     this.persist(p)
+    if (retry === false) removeMaterialFiles(p, item)
     void this.flushMaterials(p)
   }
 
@@ -1072,32 +1202,27 @@ class DesktopAgent {
   }
 
   async captureScreenshot(p, target, value, signal) {
+    const span = p.history.windowSpan
     if (
       !p.screenshotsEnabled ||
       !target ||
       target.pid === process.pid ||
-      !p.history.windowSpan ||
+      !span ||
+      span.pendingObject ||
       p.windowCandidate ||
       value.activity !== 'active' ||
-      Date.now() < p.nextScreenshot
+      !canSample(p, span)
     )
       return
     const epoch = p.screenshotEpoch
     const valid = () =>
-      !signal.aborted && p === this.profile && epoch === p.screenshotEpoch
-    p.nextScreenshot = Date.now() + p.screenshotMinutes * 60000
+      !signal.aborted && p === this.profile && epoch === p.screenshotEpoch &&
+      p.history.windowSpan?.id === span.id
+    // Probe at most once per regular poll. Budget is spent only on selected pictures.
+    p.nextScreenshot = Date.now() + 15000
     try {
-      const queued = p.history.materials.filter(
-        (item) => item.source === 'screenshot',
-      )
-      if (
-        queued.reduce((total, item) => total + item.bytes, 0) >=
-        128 * 1024 * 1024
-      )
-        throw new Error('离线截图已暂存 128 MiB，上传队列腾出空间后继续')
-      const span = p.history.windowSpan
-      const occurredAt = new Date().toISOString()
-      const jpegBase64 = await this.screenshot(target)
+      const occurredAt = span.lastSeen
+      const { jpegBase64, signature } = await this.screenshot(target)
       if (!valid()) return
       const after = await this.sample(true)
       if (
@@ -1109,25 +1234,13 @@ class DesktopAgent {
         after.window_title !== value.window_title
       )
         return
-      const item = prepareShare(
-        { kind: 'image', occurredAt, jpegBase64 },
-        path.join(p.mediaDirectory, 'periodic'),
-      )
-      Object.assign(item, {
-        source: 'screenshot',
-        label: '定时窗口截图',
-        bytes: Buffer.byteLength(jpegBase64, 'base64'),
-        context: {
-          platform: target.platform,
-          app: value.foreground_app,
-          ...(value.window_title && { title: value.window_title }),
-          activity_id: span.id,
-        },
-      })
-      this.addMaterial(p, item)
-      p.screenshotIssue = ''
-      this.persist(p)
-      void this.flushMaterials(p)
+      const title = span.workObjects?.at(-1)?.window_title || value.window_title
+      observeFrame(p, span, { jpegBase64, signature, at: occurredAt, title },
+        () => save(p.file, p.history))
+      if (p.screenshotIssue) {
+        p.screenshotIssue = ''
+        this.publish()
+      }
     } catch (error) {
       if (valid() && p.screenshotIssue !== error.message) {
         p.screenshotIssue = error.message
@@ -1143,7 +1256,8 @@ class DesktopAgent {
     p.capturing = true
     let observed = false
     try {
-      const due = p.screenshotsEnabled && Date.now() >= p.nextScreenshot
+      const due = p.screenshotsEnabled &&
+        (Date.now() >= p.nextScreenshot || !!p.windowCandidate || !!p.history.windowSpan?.pendingObject)
       const { target, ...value } = due
         ? await this.sample(true)
         : await this.sample()
@@ -1169,13 +1283,15 @@ class DesktopAgent {
       // Keep the normal 15 s poll inexpensive. Recheck a newly observed window
       // at its dwell threshold instead of waiting for the next normal poll.
       clearTimeout(p.dwellTimer)
+      const since = p.windowCandidate
+        ? p.history.windowSpan?.awaySince ?? p.windowCandidate.start
+        : p.history.windowSpan?.pendingObject?.occurred_at
       if (
         observed &&
-        p.windowCandidate &&
+        since &&
         !signal.aborted &&
         p === this.profile
       ) {
-        const since = p.history.windowSpan?.awaySince ?? p.windowCandidate.start
         const dueAt = Date.parse(since) + minDwellMs
         p.dwellTimer = setTimeout(
           () => this.capture(),

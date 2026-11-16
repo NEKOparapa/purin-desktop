@@ -85,159 +85,117 @@ async function setup(t, handle) {
   return { launch, dir, url }
 }
 
-test('timed screenshots follow the active window span, survive retries and stop independently', async (t) => {
+test('closed window and selected frames travel as one perception and retry together after restart', async (t) => {
   t.mock.timers.enable({ apis: ['Date'], now: Date.UTC(2026, 10, 14, 1) })
-  const requests = []
+  const uploads = []
   let online = false
   const { launch, url } = await setup(t, (item) => {
-    requests.push(item)
-    return !online && item.route === '/v1/image/slices' ? 503 : 202
+    uploads.push(item)
+    return item.route === '/v1/perceptions/desktop-window' && !online ? 404 : 202
   })
-  const active = {
-    activity: 'active',
-    foreground_app: '会议应用',
-    window_title: '项目周会',
+  const window = {
+    activity: 'active', foreground_app: '编辑器', window_title: '周会议程',
     target: { platform: 'windows', id: '251', pid: 123456 },
   }
-  let sample = active
-  let changed = false,
-    calls = 0
+  let sample = window
   const jpeg = Buffer.from([255, 216, 255, 217]).toString('base64')
-  const read = () => sample
-  const take = () => {
-    calls++
-    if (changed) sample = { ...active, target: { ...active.target, id: '252' } }
-    return jpeg
-  }
-  let client = launch(read, take)
-  await client.configure({ url, terminal: 'screenshot-test', token: 'fixture' })
+  const screenshot = () => ({ jpegBase64: jpeg, signature: Buffer.alloc(64 * 48, 90) })
+  let client = launch(() => sample, screenshot)
+  await client.configure({ url, terminal: 'desktop-A', token: 'fixture' })
   client.setCollection(true)
   await until(() => !client.profile.capturing)
   client.setScreenshots({ enabled: true, minutes: 1 })
   await client.capture()
-  assert.equal(calls, 0)
-  async function due(observation) {
-    sample = observation
-    client.profile.nextScreenshot = Date.now() - 1
-    await client.capture()
-  }
-  await due({ activity: 'locked' })
-  await due({ activity: 'idle' })
-  const own = {
-    ...active,
-    foreground_app: 'Wintermute',
-    window_title: '桌面设置',
-    target: { ...active.target, pid: process.pid },
-  }
-  await due(own)
   t.mock.timers.tick(5000)
-  await due(own)
-  const start = new Date().toISOString()
-  await due(active)
-  assert.equal(calls, 0)
-  t.mock.timers.tick(5000)
-  changed = true
-  await due(active)
-  assert.equal(calls, 1)
-  assert.ok(
-    !client.profile.history.materials.some((item) => item.kind === 'image'),
-  )
-  changed = false
-  await due(active)
-  await until(() => !client.profile.flushing && !!client.state().failedMaterial)
-  const image = client.profile.history.materials.find(
-    (item) => item.kind === 'image',
-  )
-  const file = path.join(client.profile.mediaDirectory, 'periodic', image.id)
-  assert.ok(fs.existsSync(file))
-  assert.equal(image.context.app, '会议应用')
-  assert.equal(image.context.title, '项目周会')
-  // A screenshot falling due while another window flashes must not capture it.
-  const callsBeforeSwitch = calls
-  const wrong = {
-    ...active,
-    foreground_app: '邮件',
-    window_title: '误切窗口',
-    target: { ...active.target, id: '253' },
-  }
-  t.mock.timers.tick(1000)
-  await due(wrong)
-  t.mock.timers.tick(2999)
-  await due(wrong)
-  assert.equal(calls, callsBeforeSwitch)
-  t.mock.timers.tick(1)
-  sample = active
-  client.profile.nextScreenshot = Date.now() + 60000
   await client.capture()
-  t.mock.timers.tick(6000)
-  await due({ activity: 'idle' })
+  t.mock.timers.tick(15000)
+  await client.capture()
+  const span = client.profile.history.windowSpan
+  assert.equal(span.frames.length, 1)
+  const file = path.join(client.profile.mediaDirectory, 'periodic', span.frames[0].id)
+  assert.ok(fs.existsSync(file))
+  assert.equal(uploads.length, 0)
+
+  sample = { activity: 'locked' }
+  await client.capture()
   await client.flushMaterials()
-  const delivered = requests.find(
-    (item) => item.body?.event_id === image.context.activity_id,
-  )
-  assert.equal(delivered.route, '/v1/perceptions')
-  assert.equal(delivered.body.state_key, 'desktop.window_span')
-  assert.equal(delivered.body.occurred_at, delivered.body.value.ended_at)
-  assert.deepEqual(delivered.body.value, {
-    foreground_app: '会议应用',
-    window_title: '项目周会',
-    started_at: start,
-    ended_at: new Date(Date.parse(start) + 15000).toISOString(),
-    duration_seconds: 12,
-  })
-  const foreground = requests.filter(
-    (item) => item.body?.state_key === 'desktop.activity',
-  )
-  assert.equal(foreground.length, 0)
-  assert.ok(
-    !requests.some((item) => item.body?.value?.window_title === '误切窗口'),
-  )
-  assert.ok(!requests.some((item) => item.route === '/v1/slices'))
-  const uploaded = () =>
-    requests.filter((item) => item.route === '/v1/image/slices')
-  const headers = uploaded()[0].headers
-  assert.deepEqual(
-    JSON.parse(Buffer.from(headers['x-capture-context'], 'base64url')),
-    image.context,
-  )
-  assert.equal(headers['x-event-id'], image.id)
-  assert.equal(headers['x-occurred-at'], image.at)
-  assert.ok(
-    requests
-      .filter((item) => item.route === '/v1/perceptions')
-      .every((item) => !('target' in item.body.value)),
-  )
-  client.close()
-  client = launch(read, take)
-  await until(() => !client.profile.capturing && !client.profile.flushing)
-  assert.equal(client.state().screenshotMinutes, 1)
-  online = true
-  client.manageFailed({ id: image.id, retry: true })
-  await until(() => !fs.existsSync(file))
-  assert.equal(
-    uploaded().at(-1).headers['x-capture-context'],
-    headers['x-capture-context'],
-  )
-  online = false
-  await due(active)
-  t.mock.timers.tick(5000)
-  await due(active)
   await until(() => !client.profile.flushing && !!client.state().failedMaterial)
-  client.shareMaterial({
-    kind: 'image',
-    jpegBase64: jpeg,
-    occurredAt: new Date().toISOString(),
-  })
-  await until(() => !client.profile.flushing)
-  client.setCollection(false)
-  assert.equal(client.state().screenshotsEnabled, false)
-  assert.equal(fs.readdirSync(path.dirname(file)).length, 0)
-  assert.equal(
-    client.profile.history.materials.filter((item) => item.kind === 'image')
-      .length,
-    1,
-  )
-  assert.equal(client.profile.history.materials[0].label, '主动分享的截图')
+  assert.match(client.state().materialIssue, /升级/)
+  assert.ok(fs.existsSync(file))
+  const [request] = uploads
+  assert.equal(request.route, '/v1/perceptions/desktop-window')
+  assert.equal(request.body.event_id, span.id)
+  assert.equal(request.body.state_key, 'desktop.window_span')
+  assert.equal(request.body.value.foreground_app, '编辑器')
+  assert.equal(request.body.value.duration_seconds, 20)
+  assert.deepEqual(request.body.frames, [{
+    occurred_at: span.frames[0].occurred_at, window_title: '周会议程', jpeg_base64: jpeg,
+  }])
+  client.close()
+  client = launch(() => sample, screenshot)
+  await until(() => !client.profile.capturing && !client.profile.flushing)
+  online = true
+  client.manageFailed({ id: span.id, retry: true })
+  await until(() => !fs.existsSync(file) && !client.state().pendingMaterials)
+  assert.equal(uploads.length, 2)
+  assert.deepEqual(uploads[1].body, request.body)
+  assert.deepEqual(uploads.map((item) => item.route), Array(2).fill('/v1/perceptions/desktop-window'))
+})
+
+test('screenshot opt-out strips queued frames while retaining the dwell and explicit shares', async (t) => {
+  const { launch, url } = await setup(t, () => 503)
+  const client = launch()
+  await client.configure({ url, terminal: 'desktop', token: 'fixture' })
+  client.setCollection(true)
+  const p = client.profile
+  const end = new Date().toISOString()
+  const item = { id: randomUUID(), kind: 'perception', source: 'window', label: '前台停留',
+    body: { state_key: 'desktop.window_span', occurred_at: end, value: { foreground_app: 'app' } },
+    frames: [{ id: randomUUID(), occurred_at: end, bytes: 4 }], retryAt: Date.now() + 60000 }
+  item.body.event_id = item.id
+  const directory = path.join(p.mediaDirectory, 'periodic')
+  fs.mkdirSync(directory, { recursive: true })
+  const file = path.join(directory, item.frames[0].id)
+  fs.writeFileSync(file, Buffer.from([255,216,255,217]))
+  client.addMaterial(p, item)
+  client.shareMaterial({ kind: 'image', jpegBase64: '/9j/2Q==', occurredAt: end })
+  client.setScreenshots({ enabled: false, minutes: 5 })
+  assert.ok(!fs.existsSync(file))
+  const pending = p.history.materials.find(m => m.id === item.id)
+  assert.ok(pending && !pending.frames?.length)
+  assert.ok(p.history.materials.find(m => m.kind === 'image'))
+})
+
+test('upgrade attaches an old automatic screenshot only to its own queued dwell', async (t) => {
+  const sent = []
+  const { launch, dir, url } = await setup(t, (item) => { sent.push(item); return 202 })
+  const terminal = 'desktop-offline'
+  const key = createHash('sha256').update(url + '\n' + terminal).digest('hex')
+  const id = randomUUID()
+  const at = '2026-11-16T01:00:10.000Z'
+  const valid = { id: randomUUID(), kind: 'image', source: 'screenshot', at,
+    context: { activity_id: id, title: '项目周会' } }
+  const orphan = { ...valid, id: randomUUID(), context: { activity_id: randomUUID() } }
+  const periodic = path.join(dir, 'media-' + key, 'periodic')
+  fs.mkdirSync(periodic, { recursive: true })
+  for (const image of [valid, orphan]) fs.writeFileSync(path.join(periodic, image.id), Buffer.from([255,216,255,217]))
+  fs.writeFileSync(path.join(dir, 'agent-settings.json'), JSON.stringify({
+    url, terminal, collecting: true, screenshotsEnabled: true, captureVersion: 4,
+    secret: Buffer.from('test').toString('base64'),
+  }))
+  const dwell = { id, source: 'window', kind: 'perception', body: {
+    event_id: id, occurred_at: at, state_key: 'desktop.window_span', value: {
+      foreground_app: 'Editor', window_title: '项目周会', started_at: '2026-11-16T01:00:00.000Z',
+      ended_at: at, duration_seconds: 10,
+    },
+  } }
+  fs.writeFileSync(path.join(dir, 'terminal-' + key + '.json'), JSON.stringify({ materials: [valid, orphan, dwell] }))
+  const client = launch()
+  await until(() => !client.state().pendingMaterials && fs.readdirSync(periodic).length === 0)
+  assert.deepEqual(sent.map(item => item.route), ['/v1/perceptions/desktop-window'])
+  assert.equal(sent[0].body.event_id, id)
+  assert.equal(sent[0].body.frames.length, 1)
+  assert.equal(sent[0].body.frames[0].window_title, '项目周会')
 })
 
 test('upgrade reroutes queued dwell to perceptions and resumes after a lost old slice receipt', async (t) => {
