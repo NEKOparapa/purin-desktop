@@ -395,3 +395,44 @@
 .history-browser {
   container-type: inline-size;
 }
+
+.profile-heading h2 {
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 23px;
+  line-height: 1.4;
+}
+.profile-document {
+  max-width: 68ch;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.75;
+}
+.profile-document h3 {
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  margin: 20px 0 6px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.profile-document h3:first-child {
+  border-top: 0;
+  margin-top: 0;
+  padding-top: 0;
+}
+.profile-document h4 {
+  margin: 12px 0 4px;
+  font-weight: 550;
+}
+.profile-document ul {
+  list-style: disc outside;
+  padding-inline-start: 1.4em;
+}
+.profile-document li::marker {
+  color: var(--quiet);
+}
+.profile-document p {
+  white-space: pre-line;
+  margin: 5px 0;
+}

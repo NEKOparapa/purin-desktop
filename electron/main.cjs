@@ -147,6 +147,7 @@ function start() {
     state: 'state',
     loadEarlier: 'loadEarlier',
     schedule: 'schedule',
+    userProfile: 'userProfile',
     notificationPage: 'notificationPage',
     readNotification: 'readNotification',
     history: 'history',

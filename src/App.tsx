@@ -453,7 +453,7 @@ export default function App() {
         {page === 'notices' && <NotificationInbox key={JSON.stringify([agent.url,agent.terminal,connectionVersion,agent.configured,focusNotice])} connected={agent.configured} settings={showSettings} focusId={focusNotice}/>}
         {page === 'memory' && (
           <MemoryBrowser
-            key={JSON.stringify([agent.url, agent.terminal, connectionVersion])}
+            connectionKey={JSON.stringify([agent.url, agent.terminal, agent.connectionRevision, connectionVersion])}
             connected={agent.configured}
             settings={showSettings}
           />

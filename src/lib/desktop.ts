@@ -22,6 +22,11 @@ export function setBrowserAppearance(mode: Appearance) {
 export type HistoryView =
   'conversation' | 'notification' | 'perception' | 'slice' | 'chat' | 'timeline'
 
+export interface UserProfileDocument {
+  status: 'ready' | 'empty' | 'unconfigured'
+  markdown: string
+}
+
 export interface DeviceFile { id: string; name: string; size_bytes: number; content_type: string }
 export interface DeviceNotice {
   id: string; title: string; body: string; created_at: string; expires_at: string | null;
@@ -143,6 +148,7 @@ export interface AgentState {
   url: string
   terminal: string
   configured: boolean
+  connectionRevision?: number
   collecting: boolean
   screenshotsEnabled: boolean
   screenshotMinutes: number
@@ -178,6 +184,7 @@ declare global {
       state(): Promise<AgentState>
       configure(settings: Connection): Promise<void>
       schedule(range: ScheduleRange): Promise<ResultsPage<ScheduleEntry>>
+      userProfile(): Promise<UserProfileDocument>
       history(options: {
         view: HistoryView
         cursor?: string

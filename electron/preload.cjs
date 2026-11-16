@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('wintermute', {
   state: () => ipcRenderer.invoke('agent:state'),
   loadEarlier: () => ipcRenderer.invoke('agent:loadEarlier'),
   schedule: (options) => ipcRenderer.invoke('agent:schedule', options),
+  userProfile: () => ipcRenderer.invoke('agent:userProfile'),
   notificationPage: (cursor) => ipcRenderer.invoke('agent:notificationPage', cursor),
   readNotification: (id) => ipcRenderer.invoke('agent:readNotification', id),
   downloadNotificationFile: (file) => ipcRenderer.invoke('agent:downloadNotificationFile', file),

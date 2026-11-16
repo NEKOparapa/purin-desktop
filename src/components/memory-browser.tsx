@@ -4,15 +4,17 @@ import type { ActivityLayer, HistoryItem, HistoryView } from '@/lib/desktop'
 import { emptyPage, useHistoryPages, type PageState } from '@/lib/history-pages'
 import { Files } from './history-files'
 import { CompressionBrowser, OriginalDisclosure } from './compression-browser'
+import { UserProfile } from './user-profile'
 import './memory-browser.css'
 
-const views: { id: HistoryView; label: string }[] = [
+const views: { id: HistoryView | 'profile'; label: string }[] = [
   { id: 'chat', label: '对话历史' },
   { id: 'timeline', label: '时间线历史' },
   { id: 'conversation', label: '交流层' },
   { id: 'notification', label: '通知层' },
   { id: 'perception', label: '感知层' },
   { id: 'slice', label: '切片层' },
+  { id: 'profile', label: '用户档案' },
 ]
 const dateFormat = new Intl.DateTimeFormat('zh-CN', { dateStyle: 'long' })
 const timeFormat = new Intl.DateTimeFormat('zh-CN', {
@@ -299,9 +301,11 @@ function ActivityHistory({
 }
 
 export function MemoryBrowser({
+  connectionKey,
   connected,
   settings,
 }: {
+  connectionKey: string
   connected: boolean
   settings: () => void
 }) {
@@ -323,9 +327,11 @@ export function MemoryBrowser({
         ))}
       </div>
       {connected ? (
-        view.id === 'slice' || view.id === 'perception' ? (
+        view.id === 'profile' ? (
+          <UserProfile key={connectionKey} />
+        ) : view.id === 'slice' || view.id === 'perception' ? (
           <ActivityHistory
-            key={view.id}
+            key={connectionKey + view.id}
             layer={view.id}
             label={view.label}
             openTimeline={() =>
@@ -333,12 +339,20 @@ export function MemoryBrowser({
             }
           />
         ) : (
-          <HistoryList key={view.id} view={view.id} label={view.label} />
+          <HistoryList
+            key={connectionKey + view.id}
+            view={view.id}
+            label={view.label}
+          />
         )
       ) : (
         <div className="history-empty">
           <Plug size={22} aria-hidden="true" />
-          <p>连接后可浏览后端历史记录</p>
+          <p>
+            {view.id === 'profile'
+              ? '连接后可查看用户档案'
+              : '连接后可浏览后端历史记录'}
+          </p>
           <button onClick={settings}>连接设置</button>
         </div>
       )}

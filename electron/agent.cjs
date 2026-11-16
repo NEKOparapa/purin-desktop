@@ -208,6 +208,7 @@ class DesktopAgent {
     const file = path.join(this.dir, 'terminal-' + key + '.json')
     this.profile = {
       ...settings,
+      revision: (this.profile?.revision ?? 0) + 1,
       token,
       file,
       mediaDirectory: path.join(this.dir, 'media-' + key),
@@ -281,6 +282,7 @@ class DesktopAgent {
     return {
       url: p.url,
       terminal: p.terminal,
+      connectionRevision: p.revision,
       appearance: this.appearance,
       configured: !!p.token,
       collecting: !!p.collecting,
@@ -364,6 +366,25 @@ class DesktopAgent {
     this.publish()
     this.sync()
     this.capture()
+  }
+
+  async userProfile() {
+    const p = this.profile
+    if (!p.token) throw new Error('请先连接终端')
+    try {
+      const doc = await request(p, '/v1/profile', undefined, p.controller.signal)
+      if (p !== this.profile || p.controller.signal.aborted) throw new Error('连接已更改')
+      if (!['ready', 'empty', 'unconfigured'].includes(doc?.status) ||
+          typeof doc.markdown !== 'string' ||
+          (doc.status === 'ready' && !doc.markdown.trim()))
+        throw new Error('后端返回的用户档案格式无效')
+      return { status: doc.status, markdown: doc.status === 'ready' ? doc.markdown : '' }
+    } catch (error) {
+      if (p !== this.profile || p.controller.signal.aborted) throw new Error('连接已更改')
+      if (error.status === 404) throw new Error('当前后端不支持用户档案，请更新后端。')
+      if (error instanceof SyntaxError) throw new Error('后端返回的用户档案格式无效')
+      throw error
+    }
   }
 
   async notificationPage(cursor) {
