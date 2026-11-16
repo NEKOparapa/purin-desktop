@@ -1,6 +1,90 @@
-import { useState } from 'react'
+import { useContext, useEffect, useState } from 'react'
 import { FileDown } from 'lucide-react'
 import type { HistoryFile } from '@/lib/desktop'
+
+import { HistoryConnection, useNearViewport } from './history-viewport'
+
+function VisibleScreenshot({
+  file,
+  revision,
+  retry,
+}: {
+  file: HistoryFile
+  revision: number
+  retry: () => void
+}) {
+  const [url, setUrl] = useState('')
+  const [error, setError] = useState('')
+  useEffect(() => {
+    let active = true
+    let objectUrl = ''
+    async function load() {
+      if (!active) return
+      try {
+        const bytes = await window.wintermute!.previewHistoryImage({
+          id: file.id,
+          connectionRevision: revision,
+        })
+        if (!active) return
+        objectUrl = URL.createObjectURL(
+          new Blob([bytes], { type: 'image/jpeg' }),
+        )
+        setUrl(objectUrl)
+      } catch {
+        if (active) setError('截图读取失败')
+      }
+    }
+    queueMicrotask(() => void load())
+    return () => {
+      active = false
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [file.id, revision])
+
+  if (error)
+    return (
+      <div className="history-image-state" role="status">
+        {error}
+        <button className="history-inline" onClick={retry}>
+          重新加载截图
+        </button>
+      </div>
+    )
+  return url ? (
+    <img src={url} alt={file.name} onError={() => setError('截图无法显示')} />
+  ) : (
+    <span className="history-image-state">正在读取截图…</span>
+  )
+}
+
+function Screenshot({ file }: { file: HistoryFile }) {
+  const revision = useContext(HistoryConnection)
+  const { element, near } = useNearViewport<HTMLElement>()
+  const [attempt, setAttempt] = useState(0)
+  return (
+    <li className="history-screenshot">
+      <figure ref={element}>
+        <div className="history-image-surface">
+          {near &&
+          revision !== undefined &&
+          window.wintermute?.previewHistoryImage ? (
+            <VisibleScreenshot
+              key={revision + ':' + attempt}
+              file={file}
+              revision={revision}
+              retry={() => setAttempt((a) => a + 1)}
+            />
+          ) : (
+            <span className="history-image-state">
+              {near ? '请更新桌面客户端以预览截图' : '截图预览'}
+            </span>
+          )}
+        </div>
+        <figcaption>{file.name}</figcaption>
+      </figure>
+    </li>
+  )
+}
 
 function message(error: unknown, fallback: string) {
   return error instanceof Error && error.message
@@ -57,9 +141,14 @@ export function Files({ files }: { files: HistoryFile[] }) {
   if (!files.length) return null
   return (
     <ul className="history-files" aria-label="附件">
-      {files.map((file) => (
-        <DownloadFile key={file.id} file={file} />
-      ))}
+      {files.map((file) =>
+        file.content_type === 'image/jpeg' ||
+        (!file.content_type && /\.jpe?g$/i.test(file.name)) ? (
+          <Screenshot key={file.id} file={file} />
+        ) : (
+          <DownloadFile key={file.id} file={file} />
+        ),
+      )}
     </ul>
   )
 }

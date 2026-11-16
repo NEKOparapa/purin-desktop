@@ -176,7 +176,12 @@ function Navigation({
   ) : null
 }
 type OriginalProps = { id: string; layer: ActivityLayer; activity?: boolean }
-function OriginalData({ id, layer, activity }: OriginalProps) {
+export function OriginalData({
+  id,
+  layer,
+  activity,
+  rawOnly = false,
+}: OriginalProps & { rawOnly?: boolean }) {
   const fetch = useCallback(
     (cursor?: string) =>
       client().compression({ kind: 'source', id, activity, cursor }),
@@ -205,7 +210,10 @@ function OriginalData({ id, layer, activity }: OriginalProps) {
           <Files files={record.files} />
         </section>
       ))}
-      {extraction && (
+      {!result.busy && !result.error && !result.items.length && (
+        <p>暂无原始资料</p>
+      )}
+      {extraction && !rawOnly && (
         <section>
           <h5>{layer === 'slice' ? '切片提取结果' : '感知活动文字'}</h5>
           {(extraction.strategy || extraction.source_count > 1) && (
@@ -248,7 +256,7 @@ export function OriginalDisclosure(props: OriginalProps) {
   )
 }
 
-function Comparison({ id }: { id: string }) {
+function Comparison({ id, summaryOnly }: { id: string; summaryOnly: boolean }) {
   const fetch = useCallback(
     (cursor?: string) => client().compression({ kind: 'batch', id, cursor }),
     [id],
@@ -256,33 +264,44 @@ function Comparison({ id }: { id: string }) {
   const result = usePages<BatchObservation, CompressionDetail>(fetch)
   const data = result.page
   return (
-    <div className="compression-columns">
-      <section aria-label="压缩前">
-        <h4>压缩前 · 活动输入</h4>
-        <ol className="compression-inputs">
-          {result.items.map((item) => (
-            <li key={item.id}>
-              <div className="compression-meta">
-                {item.source} ·{' '}
-                <time dateTime={item.occurred_at}>
-                  {timeRange(item.occurred_at, item.occurred_at)}
-                </time>
-              </div>
-              <p>{item.text}</p>
-              {item.source_count > 0 && (
-                <OriginalDisclosure id={item.id} layer={item.layer} activity />
-              )}
-            </li>
-          ))}
-        </ol>
-        <Navigation {...result} more="加载更多活动输入" />
-      </section>
+    <div
+      className={summaryOnly ? 'compression-summary' : 'compression-columns'}
+    >
+      {!summaryOnly && (
+        <section aria-label="压缩前">
+          <h4>压缩前 · 活动输入</h4>
+          <ol className="compression-inputs">
+            {result.items.map((item) => (
+              <li key={item.id}>
+                <div className="compression-meta">
+                  {item.source} ·{' '}
+                  <time dateTime={item.occurred_at}>
+                    {timeRange(item.occurred_at, item.occurred_at)}
+                  </time>
+                </div>
+                <p>{item.text}</p>
+                {item.source_count > 0 && (
+                  <OriginalDisclosure
+                    id={item.id}
+                    layer={item.layer}
+                    activity
+                  />
+                )}
+              </li>
+            ))}
+          </ol>
+          <Navigation {...result} more="加载更多活动输入" />
+        </section>
+      )}
+      {summaryOnly && <Navigation {...result} next={null} more="" />}
       {data && (
         <section aria-label="压缩后">
-          <h4>压缩后</h4>
+          {!summaryOnly && <h4>压缩后</h4>}
           {data.batch.partial ? (
             <p className="compression-note">
-              此批次仅部分记录对本会话可见，仅展示本会话的输入。
+              {summaryOnly
+                ? '此批次仅部分记录对本会话可见，摘要不可见。'
+                : '此批次仅部分记录对本会话可见，仅展示本会话的输入。'}
             </p>
           ) : (
             <>
@@ -322,7 +341,10 @@ export function CompressionBrowser({
   )
   const [selected, setSelected] = useState<string | null>(null)
   return (
-    <section className="history-list" aria-label="压缩对照">
+    <section
+      className="history-list"
+      aria-label={layer === 'perception' ? '压缩信息' : '压缩对照'}
+    >
       <div className="history-tools">
         <button className="history-inline" onClick={openTimeline}>
           查看已投递的时间线
@@ -363,7 +385,9 @@ export function CompressionBrowser({
               {batch.partial ? '部分可见' : statuses[batch.status]}
             </span>
           </button>
-          {selected === batch.id && <Comparison id={batch.id} />}
+          {selected === batch.id && (
+            <Comparison id={batch.id} summaryOnly={layer === 'perception'} />
+          )}
         </article>
       ))}
       {!result.items.length && !result.busy && !result.error && (

@@ -3,6 +3,33 @@ const path = require('node:path')
 const { randomUUID } = require('node:crypto')
 const { pipeline } = require('node:stream/promises')
 
+const imageLimit = 4 * 1024 * 1024
+
+async function readHistoryImage(response) {
+  if (response.headers.get('content-type')?.split(';')[0].trim().toLowerCase() !== 'image/jpeg' ||
+      Number(response.headers.get('content-length')) > imageLimit) {
+    await response.body?.cancel()
+    throw new Error('附件不是可预览的 JPEG 截图，或超过 4 MiB')
+  }
+  if (!response.body) throw new Error('截图内容为空')
+  const chunks = []
+  let size = 0
+  for await (const chunk of response.body) {
+    size += chunk.byteLength
+    if (size > imageLimit) throw new Error('截图超过 4 MiB')
+    chunks.push(chunk)
+  }
+  const bytes = new Uint8Array(size)
+  let offset = 0
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  if (bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes[2] !== 0xff)
+    throw new Error('截图文件格式无效')
+  return bytes.buffer
+}
+
 function suggestedName(name) {
   if (typeof name !== 'string') throw new Error('无效的附件名')
   const base = path.win32
@@ -38,4 +65,4 @@ async function saveHistoryFile({ id, name }, choosePath, getFile) {
   }
 }
 
-module.exports = { saveHistoryFile }
+module.exports = { saveHistoryFile, readHistoryImage }

@@ -153,6 +153,7 @@ function start() {
     notificationPage: 'notificationPage',
     readNotification: 'readNotification',
     history: 'history',
+    previewHistoryImage: 'previewHistoryImage',
     compression: 'compression',
     configure: 'configure',
     send: 'send',

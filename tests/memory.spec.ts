@@ -7,18 +7,22 @@ async function openMemory(
   page: Page,
   read: (query: Query) => Promise<HistoryPage> | HistoryPage,
   download: (file: HistoryFile) => { saved: boolean } = () => ({ saved: true }),
+  preview: (request: { id: string; connectionRevision: number }) => void | Promise<void> = () => {},
 ) {
   await page.exposeFunction('readFixture', read)
   await page.exposeFunction('downloadFixture', download)
+  await page.exposeFunction('previewFixture', preview)
   await page.addInitScript(() => {
     const fixture = window as unknown as {
       readFixture: (query: Query) => Promise<HistoryPage>
       downloadFixture: (file: HistoryFile) => Promise<{ saved: boolean }>
+      previewFixture: (request: { id: string; connectionRevision: number }) => Promise<void>
     }
     Object.assign(window, {
       wintermute: {
         state: async () => ({
           configured: true,
+          connectionRevision: 1,
           url: 'https://wintermute.example',
           terminal: 'desktop',
           appearance: 'system',
@@ -26,6 +30,14 @@ async function openMemory(
         }),
         subscribe: () => () => {},
         history: (query: Query) => fixture.readFixture(query),
+        previewHistoryImage: async (request: { id: string; connectionRevision: number }) => {
+          await fixture.previewFixture(request)
+          const canvas = document.createElement('canvas')
+          canvas.width = 8
+          canvas.height = 4
+          const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg'))
+          return blob!.arrayBuffer()
+        },
         downloadHistoryFile: (file: HistoryFile) =>
           fixture.downloadFixture(file),
       },
@@ -46,10 +58,10 @@ function item(id: string, text: string, files: HistoryFile[] = []) {
   }
 }
 
-test('six history views, paginated filtering and filename-only downloads', async ({
+test('six history views, paginated filtering and audio downloads', async ({
   page,
 }) => {
-  const file = { id: 'opaque-file-token', name: '会议原始截图.png' }
+  const file = { id: 'opaque-file-token', name: '会议录音.ogg' }
   const downloads: HistoryFile[] = []
   const reads: Query[] = []
   await openMemory(
@@ -201,7 +213,7 @@ test('empty history and download errors are actionable', async ({ page }) => {
   ).toBeEnabled()
 })
 
-test('groups screen captures and reads frame facts and filenames on demand', async ({
+test('groups screen captures and previews visible frames automatically', async ({
   page,
 }) => {
   const group = {
@@ -258,7 +270,7 @@ test('groups screen captures and reads frame facts and filenames on demand', asy
   await expect(toggle).toHaveAttribute('aria-expanded', 'false')
   await expect(page.getByText('3 张截图')).toBeVisible()
   await expect(
-    page.getByRole('button', { name: '用户分享.jpg', exact: true }),
+    page.getByRole('img', { name: '用户分享.jpg', exact: true }),
   ).toBeVisible()
   expect(reads.filter((q) => q.groupId)).toHaveLength(0)
   await toggle.click()
@@ -267,7 +279,8 @@ test('groups screen captures and reads frame facts and filenames on demand', asy
   await expect(page.getByRole('alert')).toContainText('明细读取失败')
   failPage = false
   await page.getByRole('button', { name: '重试' }).click()
-  const firstFile = page.getByRole('button', {
+  await page.getByText('capture-1.jpg', { exact: true }).scrollIntoViewIfNeeded()
+  const firstFile = page.getByRole('img', {
     name: 'capture-1.jpg',
     exact: true,
   })
@@ -280,8 +293,7 @@ test('groups screen captures and reads frame facts and filenames on demand', asy
   await toggle.click()
   await expect(firstFile).toBeVisible()
   await expect(page.getByText('邀请已发出。')).toHaveCount(0)
-  await firstFile.click()
-  expect(downloads).toEqual([{ id: 'one', name: 'capture-1.jpg' }])
+  expect(downloads).toEqual([])
   expect(reads.filter((q) => q.groupId)).toEqual([
     { view: 'slice', groupId: 'evt_run' },
     { view: 'slice', groupId: 'evt_run', cursor: 'next' },
@@ -397,8 +409,9 @@ test('compares the same batch with its persisted summaries and opens scoped orig
   await expect(page.getByText('已提取的图像事实')).toBeVisible()
   expect(calls).toContainEqual({ kind: 'source', id: 'obs', activity: true })
   expect(downloads).toEqual([])
-  await page.getByRole('button', { name: '会议窗口.jpg' }).click()
-  expect(downloads).toEqual([file])
+  await page.getByText('会议窗口.jpg', { exact: true }).scrollIntoViewIfNeeded()
+  await expect(page.getByRole('img', { name: '会议窗口.jpg' })).toBeVisible()
+  expect(downloads).toEqual([])
   await page.getByRole('button', { name: '加载更多活动输入' }).click()
   await expect(page.getByText('后续打开了会议清单')).toBeVisible()
   await page.getByRole('button', { name: '加载更早批次' }).click()
@@ -409,6 +422,93 @@ test('compares the same batch with its persisted summaries and opens scoped orig
   await expect(
     page.getByRole('button', { name: '时间线历史', exact: true }),
   ).toHaveAttribute('aria-pressed', 'true')
+})
+
+test('perception shows the complete event, ordered observations with inline frames, and stored summaries', async ({page}) => {
+  const start = '2026-11-15T09:00:00Z'
+  const first = '2026-11-15T09:01:00Z'
+  const second = '2026-11-15T09:02:00Z'
+  const jpg = {id: 'evt_a:frame:0', name: 'first.jpg', occurred_at: first, content_type: 'image/jpeg'}
+  const raw = {
+    terminal_id: '会议电脑', event_id: 'evt_a', producer_event_id: 'local-a',
+    payload: {state_key: 'desktop.window_span', value: {
+      foreground_app: 'Editor', started_at: start, ended_at: second, duration_seconds: 90,
+      work_objects: [{occurred_at: first, window_title: '议程文档'}],
+      visual_observations: [{occurred_at: second, text: '风险清单出现两个待办。'}],
+    }},
+  }
+  const previews: string[] = []
+  let failPreview = true
+  await openMemory(page, ({view}) => ({
+    items: view === 'perception' ? [{ ...item('evt_a', '摘要', [jpg, {...jpg,id:'evt_a:frame:1',name:'second.jpg',occurred_at:second}]), raw }] : [],
+    next_cursor: null,
+  }), undefined, ({id, connectionRevision}) => {
+    expect(connectionRevision).toBe(1)
+    previews.push(id)
+    if (failPreview && id === jpg.id) throw new Error('offline')
+  })
+  await page.evaluate(() => {
+    const api = window.wintermute!
+    Object.assign(api,{compression: async ({kind}: {kind:string}) => {
+      const batch = {id:'1', terminal_id:'会议电脑', started_at:'2026-11-15T09:00:00Z', ended_at:'2026-11-15T09:02:00Z', perception_count:1,slice_count:0,status:'ready',partial:false}
+      return kind === 'list' ? {items:[batch],next_cursor:null}
+        : {batch,items:[],next_cursor:null,rule_text:'规则结果',ai_text:'已保存的模型摘要',rollup:null}
+    }})
+  })
+  await page.getByRole('button', {name:'感知层',exact:true}).click()
+  await expect(page.getByRole('button', {name:'格式化信息'})).toHaveAttribute('aria-pressed','true')
+  await expect(page.getByRole('heading', {name:'Editor'})).toBeVisible()
+  await expect(page.getByText('停留 1 分钟 30 秒')).toBeVisible()
+  await expect(page.getByText('议程文档')).toBeVisible()
+  await expect(page.getByText('截图读取失败')).toBeVisible()
+  failPreview = false
+  await page.getByRole('button',{name:'重新加载截图'}).click()
+  await expect(page.getByRole('img',{name:'first.jpg'})).toBeVisible()
+  const description=page.locator('li').filter({has:page.getByText('风险清单出现两个待办。',{exact:true})}).last()
+  await description.getByText('second.jpg').scrollIntoViewIfNeeded()
+  await expect(description.getByRole('img',{name:'second.jpg'})).toBeVisible()
+  await page.getByRole('button',{name:'原始信息'}).click()
+  await expect(page.locator('.perception-json')).toHaveText(JSON.stringify(raw,null,2))
+  await page.getByText('first.jpg', {exact: true}).scrollIntoViewIfNeeded()
+  await expect(page.getByRole('img',{name:'first.jpg'})).toBeVisible()
+  await page.getByRole('button',{name:'压缩信息'}).click()
+  await page.getByRole('button',{name:/会议电脑/}).click()
+  await expect(page.getByText('规则结果')).toBeVisible()
+  await expect(page.getByText('已保存的模型摘要')).toBeVisible()
+  await expect(page.getByRole('img')).toHaveCount(0)
+  expect(previews).toContain('evt_a:frame:0')
+  expect(previews).toContain('evt_a:frame:1')
+})
+
+test('screenshot reads follow the viewport and release image URLs when leaving memory', async ({ page }) => {
+  const reads: string[] = []
+  const rows = Array.from({length: 20}, (_, i) =>
+    item('event-' + i, '已完成的前台停留', [{id:'frame-' + i, name:'窗口-' + i + '.jpg'}]),
+  )
+  await openMemory(page, ({view}) => ({
+    items: view === 'perception' ? rows : [], next_cursor: null,
+  }), undefined, ({id}) => { reads.push(id) })
+  const released: string[] = []
+  await page.exposeFunction('recordRelease', (url: string) => released.push(url))
+  await page.evaluate(() => {
+    const original = URL.revokeObjectURL.bind(URL)
+    URL.revokeObjectURL = (url) => {
+      original(url)
+      void (window as unknown as {recordRelease: (url: string) => Promise<void>}).recordRelease(url)
+    }
+  })
+  await page.getByRole('button',{name:'感知层',exact:true}).click()
+  const first = page.getByRole('img',{name:'窗口-0.jpg',exact:true})
+  await expect(first).toBeVisible()
+  const url = await first.getAttribute('src')
+  expect(reads).not.toContain('frame-19')
+  await page.getByText('窗口-19.jpg',{exact:true}).scrollIntoViewIfNeeded()
+  await expect(page.getByRole('img',{name:'窗口-19.jpg',exact:true})).toBeVisible()
+  await expect(first).toHaveCount(0)
+  await expect.poll(() => released).toContain(url)
+  const lastUrl = await page.getByRole('img',{name:'窗口-19.jpg'}).getAttribute('src')
+  await page.getByRole('button',{name:'切片层',exact:true}).click()
+  await expect.poll(() => released).toContain(lastUrl)
 })
 
 test('the open chat journal refreshes on return and reflects a database reset', async ({page}) => {

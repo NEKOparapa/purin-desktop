@@ -37,6 +37,9 @@ export interface NoticeAlert { id: string; title: string; body: string; open: bo
 export interface HistoryFile {
   id: string
   name: string
+  content_type?: string
+  occurred_at?: string
+  window_title?: string
 }
 export interface ScreenshotGroup {
   id: string
@@ -54,6 +57,7 @@ export interface HistoryItem {
   source: string
   text: string
   files: HistoryFile[]
+  raw?: Record<string, unknown>
   group?: ScreenshotGroup | null
 }
 export interface HistoryPage {
@@ -225,6 +229,7 @@ declare global {
       downloadNotificationFile(file: {notificationId: string; file: DeviceFile}): Promise<{saved: boolean}>
       onNotice(callback: (alert: NoticeAlert) => void): () => void
       downloadHistoryFile(file: HistoryFile): Promise<{ saved: boolean }>
+      previewHistoryImage(options: { id: string; connectionRevision: number }): Promise<ArrayBuffer>
       loadEarlier(): Promise<void>
       send(text: string): Promise<void>
       retry(id: string): Promise<void>

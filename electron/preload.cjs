@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('wintermute', {
     return () => ipcRenderer.removeListener('agent:notice', listener)
   },
   history: (options) => ipcRenderer.invoke('agent:history', options),
+  previewHistoryImage: (options) => ipcRenderer.invoke('agent:previewHistoryImage', options),
   compression: (options) => ipcRenderer.invoke('agent:compression', options),
   downloadHistoryFile: (file) =>
     ipcRenderer.invoke('agent:downloadHistoryFile', file),

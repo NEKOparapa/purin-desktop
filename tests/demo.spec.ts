@@ -64,7 +64,7 @@ test('connection settings are reachable from disconnected memory and chat', asyn
     settings.getByRole('checkbox', { name: '浏览器接入' }),
   ).toBeVisible()
   await expect(
-    settings.getByRole('checkbox', { name: '采集前台窗口代表帧' }),
+    settings.getByRole('checkbox', { name: '自动截图（前台窗口）' }),
   ).toBeDisabled()
   await expect(settings.getByRole('checkbox')).toHaveCount(3)
   await expect(settings).toContainText('窗口标题')

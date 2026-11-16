@@ -9,7 +9,7 @@ const { DesktopAgent } = require('../electron/agent.cjs')
 test('history uses the bound terminal and fetches an attachment only after Save', async (t) => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'wintermute-history-'))
   const requests = []
-  const bytes = Buffer.from([255, 216, 0, 255, 217])
+  const bytes = Buffer.from([255, 216, 255, 224, 255, 217])
   const file = { id: 'evt_meeting', name: '周会截图.jpg' }
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost')
@@ -66,7 +66,7 @@ test('history uses the bound terminal and fetches an attachment only after Save'
     )
       return res.end(JSON.stringify({ items: [], next_cursor: null }))
     if (url.pathname === '/v1/history/files/' + file.id) {
-      res.writeHead(200, { 'Content-Length': bytes.length })
+      res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Content-Length': bytes.length })
       return res.end(bytes)
     }
     if (url.pathname === '/v1/history/files/partial') {
@@ -181,4 +181,20 @@ test('history uses the bound terminal and fetches an attachment only after Save'
     agent.schedule({ ...range, cursor: 'legacy' }),
     /升级后端/,
   )
+  const revision = agent.state().connectionRevision
+  const image = await agent.previewHistoryImage({ id: file.id, connectionRevision: revision })
+  assert.ok(image instanceof ArrayBuffer)
+  assert.deepEqual(Buffer.from(image), bytes)
+  const reads = requests.length
+  await assert.rejects(agent.previewHistoryImage({ id: file.id, connectionRevision: revision - 1 }), /连接已更改/)
+  await assert.rejects(agent.previewHistoryImage({ id: '../files/other', connectionRevision: revision }), /无效/)
+  assert.equal(requests.length, reads)
+})
+
+test('inline screenshot preview rejects non-images and oversized streamed responses', async () => {
+  const { readHistoryImage } = require('../electron/history.cjs')
+  await assert.rejects(readHistoryImage(new Response('<svg/>', { headers: { 'Content-Type': 'image/svg+xml' } })), /JPEG/)
+  const jpeg = { headers: { 'Content-Type': 'image/jpeg' } }
+  await assert.rejects(readHistoryImage(new Response('invalid', jpeg)), /格式无效/)
+  await assert.rejects(readHistoryImage(new Response(new Uint8Array(4 * 1024 * 1024 + 1), jpeg)), /4 MiB/)
 })

@@ -396,6 +396,92 @@
   container-type: inline-size;
 }
 
+.perception-entry > header,
+.perception-interval,
+.perception-title span,
+.perception-details small,
+.history-screenshot figcaption {
+  color: var(--muted);
+  font-size: 12px;
+}
+.perception-entry h3 {
+  margin: 5px 0 2px;
+  font-size: 17px;
+  font-weight: 600;
+}
+.perception-title {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 5px 12px;
+}
+.perception-interval { font-variant-numeric: tabular-nums; }
+.perception-details { margin-top: 14px; }
+.perception-details h4, .compression-summary h5 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.perception-details > ol {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.perception-details > ol > li {
+  display: grid;
+  grid-template-columns: 7ch minmax(0, 1fr);
+  align-items: baseline;
+  gap: 16px;
+  margin: 7px 0;
+  font-size: 14px;
+}
+.perception-details > ol > li > time { margin-left: 0; }
+.perception-details li p { margin-top: 0; }
+.perception-json {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--mono, monospace);
+  font-size: 12px;
+  line-height: 1.65;
+  padding: 12px;
+  margin-top: 10px;
+  border-radius: 6px;
+  background: var(--hover);
+}
+.perception-fields { margin: 8px 0 0; }
+.perception-legacy { min-height: 4rem; }
+.perception-fields div { display: grid; grid-template-columns: minmax(5em, 24%) 1fr; gap: 12px; padding: 3px 0; }
+.perception-fields dt { font-size: 13px; color: var(--muted); }
+.perception-fields dd { white-space: pre-wrap; font-size: 14px; }
+.history-screenshot figure { width: min(100%, 640px); margin: 5px 0; }
+.history-image-surface {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--hover);
+}
+.history-image-surface img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  object-fit: contain;
+}
+.history-image-state { display: grid; gap: 5px; justify-items: center; color: var(--muted); font-size: 12px; }
+.history-screenshot figcaption { margin-top: 5px; overflow-wrap: anywhere; }
+.compression-summary {
+  margin-bottom: 15px;
+  padding: 12px 15px;
+  border-left: 2px solid var(--line);
+}
+.compression-summary p { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.7; }
+.compression-summary p + h5, .compression-summary details h5 { margin-top: 12px; }
+
 .profile-heading h2 {
   color: var(--ink);
   font-family: var(--serif);

@@ -17,7 +17,7 @@ const {
 } = require('./window-spans.cjs')
 const { BrowserBridge } = require('./browser-bridge.cjs')
 const { canSample, observeFrame, finishFrames } = require('./representative-frames.cjs')
-const { saveHistoryFile } = require('./history.cjs')
+const { saveHistoryFile, readHistoryImage } = require('./history.cjs')
 const { ChatHistory } = require('./chat-history.cjs')
 const { notificationPath, pageRoute, validatePage, deliverPending } = require('./notifications.cjs')
 const initialProfileMarkdown = require('./profile-template.json')
@@ -704,6 +704,27 @@ class DesktopAgent {
         ]),
       })
     })
+  }
+
+  async previewHistoryImage({ id, connectionRevision }) {
+    const p = this.profile
+    if (!p.token) throw new Error('请先连接终端')
+    if (connectionRevision !== p.revision) throw new Error('连接已更改，请重新打开记忆')
+    if (typeof id !== 'string' || !/^[\w:-]{1,256}$/.test(id))
+      throw new Error('无效的截图编号')
+    try {
+      const response = await fetchResponse(p, '/v1/history/files/' + encodeURIComponent(id), {
+        signal: AbortSignal.any([p.controller.signal, AbortSignal.timeout(30000)]),
+      })
+      const bytes = await readHistoryImage(response)
+      if (p !== this.profile) throw new Error('连接已更改，请重新打开记忆')
+      return bytes
+    } catch (error) {
+      if (p !== this.profile || p.controller.signal.aborted)
+        throw new Error('连接已更改，请重新打开记忆')
+      if (error.status === 404) throw new Error('后端找不到这张截图')
+      throw error
+    }
   }
 
   settings(p = this.profile) {

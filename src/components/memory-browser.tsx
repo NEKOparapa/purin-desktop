@@ -3,6 +3,8 @@ import { BookOpen, ChevronRight, Plug, RotateCw, Search, X } from 'lucide-react'
 import type { ActivityLayer, HistoryItem, HistoryView } from '@/lib/desktop'
 import { emptyPage, useHistoryPages, type PageState } from '@/lib/history-pages'
 import { Files } from './history-files'
+import { HistoryConnection } from './history-viewport'
+import { PerceptionRecord, type PerceptionMode } from './perception-record'
 import { CompressionBrowser, OriginalDisclosure } from './compression-browser'
 import { UserProfile } from './user-profile'
 import './memory-browser.css'
@@ -27,6 +29,7 @@ function matches(item: HistoryItem, term: string) {
     item.text,
     item.source,
     item.role,
+    item.raw && JSON.stringify(item.raw),
     item.group?.app,
     item.group?.subject,
     ...item.files.map((f) => f.name),
@@ -163,9 +166,13 @@ function HistoryRecords({
   read,
   term,
   layer,
-}: { items: HistoryItem[]; term: string; layer?: ActivityLayer } & ReturnType<
-  typeof useHistoryPages
->) {
+  raw,
+}: {
+  items: HistoryItem[]
+  term: string
+  layer?: ActivityLayer
+  raw: boolean
+} & ReturnType<typeof useHistoryPages>) {
   const rows = []
   let previousDay: string | null = null
   for (const item of items) {
@@ -180,7 +187,9 @@ function HistoryRecords({
       {rows.map(({ item, date, heading }) => (
         <li key={item.id}>
           {heading && <h2>{heading}</h2>}
-          {item.group ? (
+          {layer === 'perception' ? (
+            <PerceptionRecord item={item} raw={raw} />
+          ) : item.group ? (
             <GroupRecord item={item} pages={pages} read={read} term={term} />
           ) : (
             <article className="history-entry">
@@ -208,7 +217,15 @@ function HistoryRecords({
   )
 }
 
-function HistoryList({ view, label }: { view: HistoryView; label: string }) {
+function HistoryList({
+  view,
+  label,
+  raw = false,
+}: {
+  view: HistoryView
+  label: string
+  raw?: boolean
+}) {
   const { pages, read } = useHistoryPages(view)
   const page = pages.get(null) ?? emptyPage
   const [query, setQuery] = useState('')
@@ -251,6 +268,7 @@ function HistoryList({ view, label }: { view: HistoryView; label: string }) {
         read={read}
         term={term}
         layer={view === 'slice' || view === 'perception' ? view : undefined}
+        raw={raw}
       />
       {!page.loading && !page.error && !visible.length && (
         <div className="history-empty" role="status">
@@ -277,6 +295,34 @@ function ActivityHistory({
   openTimeline: () => void
 }) {
   const [compare, setCompare] = useState(false)
+  const [mode, setMode] = useState<PerceptionMode>('formatted')
+  if (layer === 'perception')
+    return (
+      <>
+        <div className="history-modes" role="group" aria-label="感知层显示方式">
+          {(
+            [
+              ['formatted', '格式化信息'],
+              ['raw', '原始信息'],
+              ['compressed', '压缩信息'],
+            ] as const
+          ).map(([id, title]) => (
+            <button
+              key={id}
+              aria-pressed={mode === id}
+              onClick={() => setMode(id)}
+            >
+              {title}
+            </button>
+          ))}
+        </div>
+        {mode === 'compressed' ? (
+          <CompressionBrowser layer={layer} openTimeline={openTimeline} />
+        ) : (
+          <HistoryList view={layer} label={label} raw={mode === 'raw'} />
+        )}
+      </>
+    )
   return (
     <>
       <div
@@ -302,60 +348,64 @@ function ActivityHistory({
 
 export function MemoryBrowser({
   connectionKey,
+  connectionRevision,
   connected,
   settings,
 }: {
   connectionKey: string
+  connectionRevision?: number
   connected: boolean
   settings: () => void
 }) {
   const [view, setView] = useState(views[0])
   return (
-    <section className="browse-page history-browser">
-      <div className="page-heading">
-        <h1>记忆</h1>
-      </div>
-      <div className="history-views" role="group" aria-label="历史视图">
-        {views.map((v) => (
-          <button
-            key={v.id}
-            aria-pressed={view.id === v.id}
-            onClick={() => setView(v)}
-          >
-            {v.label}
-          </button>
-        ))}
-      </div>
-      {connected ? (
-        view.id === 'profile' ? (
-          <UserProfile key={connectionKey} />
-        ) : view.id === 'slice' || view.id === 'perception' ? (
-          <ActivityHistory
-            key={connectionKey + view.id}
-            layer={view.id}
-            label={view.label}
-            openTimeline={() =>
-              setView(views.find((v) => v.id === 'timeline')!)
-            }
-          />
-        ) : (
-          <HistoryList
-            key={connectionKey + view.id}
-            view={view.id}
-            label={view.label}
-          />
-        )
-      ) : (
-        <div className="history-empty">
-          <Plug size={22} aria-hidden="true" />
-          <p>
-            {view.id === 'profile'
-              ? '连接后可查看用户档案'
-              : '连接后可浏览后端历史记录'}
-          </p>
-          <button onClick={settings}>连接设置</button>
+    <HistoryConnection.Provider value={connectionRevision}>
+      <section className="browse-page history-browser">
+        <div className="page-heading">
+          <h1>记忆</h1>
         </div>
-      )}
-    </section>
+        <div className="history-views" role="group" aria-label="历史视图">
+          {views.map((v) => (
+            <button
+              key={v.id}
+              aria-pressed={view.id === v.id}
+              onClick={() => setView(v)}
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
+        {connected ? (
+          view.id === 'profile' ? (
+            <UserProfile key={connectionKey} />
+          ) : view.id === 'slice' || view.id === 'perception' ? (
+            <ActivityHistory
+              key={connectionKey + view.id}
+              layer={view.id}
+              label={view.label}
+              openTimeline={() =>
+                setView(views.find((v) => v.id === 'timeline')!)
+              }
+            />
+          ) : (
+            <HistoryList
+              key={connectionKey + view.id}
+              view={view.id}
+              label={view.label}
+            />
+          )
+        ) : (
+          <div className="history-empty">
+            <Plug size={22} aria-hidden="true" />
+            <p>
+              {view.id === 'profile'
+                ? '连接后可查看用户档案'
+                : '连接后可浏览后端历史记录'}
+            </p>
+            <button onClick={settings}>连接设置</button>
+          </div>
+        )}
+      </section>
+    </HistoryConnection.Provider>
   )
 }
