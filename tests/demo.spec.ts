@@ -55,7 +55,7 @@ test('connection settings are reachable from disconnected memory and chat', asyn
   await draft.press('Enter')
   await expect(page.getByRole('dialog').getByLabel('终端 ID')).toBeVisible()
   await expect(page.getByRole('button', { name: '验证并保存' })).toBeDisabled()
-  await page.getByRole('button', { name: '信息采集' }).click()
+  await page.getByRole('button', { name: '权限设置' }).click()
   const settings = page.getByRole('dialog')
   await expect(
     settings.getByRole('checkbox', { name: '采集桌面活动' }),
@@ -159,7 +159,7 @@ test('editing a connection preserves the active terminal and its failed material
   await expect(settings.getByRole('button', { name: '重试此项' })).toHaveCount(
     0,
   )
-  await settings.getByRole('button', { name: '信息采集' }).click()
+  await settings.getByRole('button', { name: '权限设置' }).click()
   await expect(settings).toContainText('上传失败 · HTTP 400')
   await settings.getByRole('button', { name: '重试此项' }).click()
   await settings.getByRole('button', { name: '丢弃此项' }).click()

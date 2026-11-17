@@ -17,7 +17,7 @@ const tabs = [
   { id: 'connection', label: '连接' },
   { id: 'keys', label: '接口密钥' },
   { id: 'appearance', label: '外观' },
-  { id: 'capture', label: '信息采集' },
+  { id: 'permissions', label: '权限设置' },
 ] as const
 
 export function AgentSettings({
@@ -263,33 +263,9 @@ export function AgentSettings({
               {feedback}
             </p>
           )}
-          {state.configured && !editing && (
-            <div className="activity-settings">
-              <label>
-                <input
-                  type="checkbox"
-                  checked={!!state.remoteCommandsEnabled}
-                  disabled={!api || busy || !state.remoteTools?.length}
-                  onChange={e => {
-                    const enabled = e.target.checked
-                    void change(() => api?.setRemoteCommands({
-                      enabled, connectionRevision: state.connectionRevision,
-                    }))
-                  }}
-                />
-                允许主 Agent 在本机执行命令
-              </label>
-              <p>{state.remoteTools?.length
-                ? `主 Agent 可通过 ${state.remoteTools.join('、')} 以当前用户权限运行命令。命令和输出会记录在「记忆」中。`
-                : '通过 HTTPS 或本机地址连接，并确保本机安装了命令行工具。'}</p>
-              {(state.remoteIssue || sourceFeedback) && (
-                <p role="status">{state.remoteIssue || sourceFeedback}</p>
-              )}
-            </div>
-          )}
         </>
       )}
-      {tab === 'capture' && (
+      {tab === 'permissions' && (
         <>
           <div className="activity-settings">
             <label>
@@ -349,6 +325,30 @@ export function AgentSettings({
               <p role="status">{state.screenshotIssue}</p>
             )}
           </div>
+          {state.configured && (
+            <div className="activity-settings">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={!!state.remoteCommandsEnabled}
+                  disabled={!api || busy || !state.remoteTools?.length}
+                  onChange={e => {
+                    const enabled = e.target.checked
+                    void change(() => api?.setRemoteCommands({
+                      enabled, connectionRevision: state.connectionRevision,
+                    }))
+                  }}
+                />
+                允许主 Agent 在本机执行命令
+              </label>
+              <p>{state.remoteTools?.length
+                ? `主 Agent 可通过 ${state.remoteTools.join('、')} 以当前用户权限运行命令。命令和输出会记录在「记忆」中。`
+                : '通过 HTTPS 或本机地址连接，并确保本机安装了命令行工具。'}</p>
+              {state.remoteIssue && (
+                <p role="status">{state.remoteIssue}</p>
+              )}
+            </div>
+          )}
           {(state.lastMaterial ||
             state.pendingMaterials > 0 ||
             state.materialIssue) && (
