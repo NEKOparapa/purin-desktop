@@ -1,71 +1,25 @@
-import { useEffect, useRef, useState } from 'react'
-import {
-  BookOpen,
-  ChevronRight,
-  Cpu,
-  Plug,
-  RotateCw,
-  Search,
-  X,
-} from 'lucide-react'
-import type {
-  ActivityLayer,
-  ContextPreview,
-  HistoryItem,
-  HistoryView,
-  PerceptionDestinationFilter,
-} from '@/lib/desktop'
-import {
-  emptyPage,
-  useHistoryPages,
-  type HistoryFilter,
-  type PageState,
-} from '@/lib/history-pages'
+import { useEffect, useState } from 'react'
+import { BookOpen, ChevronRight, Plug, RotateCw, Search, X } from 'lucide-react'
+import type { ActivityLayer, HistoryItem, HistoryView } from '@/lib/desktop'
+import { emptyPage, useHistoryPages, type PageState } from '@/lib/history-pages'
 import { Files } from './history-files'
 import { HistoryConnection } from './history-viewport'
 import { PerceptionBrowser } from './perception-browser'
 import { CompressionBrowser, OriginalDisclosure } from './compression-browser'
 import { UserProfile } from './user-profile'
 import { TerminalToolHistory } from './terminal-tool-history'
-import { ContextPreviewPanel, FlowOverview } from './flow-overview'
-import { TimelineSources } from './timeline-sources'
 import './memory-browser.css'
 
-type MemoryViewId = HistoryView | 'overview' | 'profile' | 'terminal-tools'
-
-interface MemoryViewOption {
-  id: MemoryViewId
-  label: string
-}
-
-const viewGroups: { group: string; items: MemoryViewOption[] }[] = [
-  {
-    group: '数据流',
-    items: [
-      { id: 'overview', label: '总览' },
-      { id: 'perception', label: '设备观测' },
-      { id: 'slice', label: '切片' },
-      { id: 'timeline', label: '时间线' },
-    ],
-  },
-  {
-    group: '对话',
-    items: [
-      { id: 'chat', label: '对话历史' },
-      { id: 'conversation', label: '交流' },
-      { id: 'notification', label: '通知' },
-    ],
-  },
-  {
-    group: '档案与工具',
-    items: [
-      { id: 'profile', label: '用户档案' },
-      { id: 'terminal-tools', label: '终端工具' },
-    ],
-  },
+const views: { id: HistoryView | 'profile' | 'terminal-tools'; label: string }[] = [
+  { id: 'chat', label: '对话历史' },
+  { id: 'timeline', label: '时间线历史' },
+  { id: 'conversation', label: '交流层' },
+  { id: 'notification', label: '通知层' },
+  { id: 'perception', label: '感知层' },
+  { id: 'slice', label: '切片层' },
+  { id: 'profile', label: '用户档案' },
+  { id: 'terminal-tools', label: '终端工具调用' },
 ]
-
-const allViews = viewGroups.flatMap((g) => g.items)
 const dateFormat = new Intl.DateTimeFormat('zh-CN', { dateStyle: 'long' })
 const timeFormat = new Intl.DateTimeFormat('zh-CN', {
   timeStyle: 'medium',
@@ -208,28 +162,16 @@ function GroupRecord({
   )
 }
 
-function isTimelineEntry(view: HistoryView, item: HistoryItem) {
-  if (!/^history-[1-9][0-9]*-[0-9]+$/.test(item.id)) return false
-  if (view === 'timeline') return true
-  return view === 'chat' && item.role === 'user' && item.source.includes('活动时间线')
-}
-
 function HistoryRecords({
-  view,
   items,
   pages,
   read,
   term,
   layer,
-  highlightedId,
-  onSelectPerception,
 }: {
-  view: HistoryView
   items: HistoryItem[]
   term: string
   layer?: ActivityLayer
-  highlightedId?: string | null
-  onSelectPerception?: (eventId: string) => void
 } & ReturnType<typeof useHistoryPages>) {
   const rows = []
   let previousDay: string | null = null
@@ -242,95 +184,34 @@ function HistoryRecords({
   }
   return (
     <ol className="history-records">
-      {rows.map(({ item, date, heading }) => {
-        const highlighted = highlightedId === item.id
-        return (
-          <li key={item.id}>
-            {heading && <h2>{heading}</h2>}
-            {item.group ? (
-              <GroupRecord item={item} pages={pages} read={read} term={term} />
-            ) : (
-              <article
-                className="history-entry"
-                data-message-id={item.id}
-                data-highlighted={highlighted ? 'true' : undefined}
-              >
-                <header>
-                  <strong>{item.source}</strong>
-                  <span className="history-role" aria-label={'角色 ' + item.role}>
-                    {item.role}
-                  </span>
-                  {date ? (
-                    <time dateTime={item.occurred_at ?? undefined}>
-                      {timeFormat.format(date)}
-                    </time>
-                  ) : (
-                    <span className="history-unknown-time">时间未记录</span>
-                  )}
-                </header>
-                {item.text && <p>{item.text}</p>}
-                <Files files={item.files} />
-                {layer && <OriginalDisclosure id={item.id} layer={layer} />}
-                {onSelectPerception && isTimelineEntry(view, item) && (
-                  <TimelineSources
-                    messageId={item.id}
-                    onSelectPerception={onSelectPerception}
-                  />
+      {rows.map(({ item, date, heading }) => (
+        <li key={item.id}>
+          {heading && <h2>{heading}</h2>}
+          {item.group ? (
+            <GroupRecord item={item} pages={pages} read={read} term={term} />
+          ) : (
+            <article className="history-entry">
+              <header>
+                <strong>{item.source}</strong>
+                <span className="history-role" aria-label={'角色 ' + item.role}>
+                  {item.role}
+                </span>
+                {date ? (
+                  <time dateTime={item.occurred_at ?? undefined}>
+                    {timeFormat.format(date)}
+                  </time>
+                ) : (
+                  <span className="history-unknown-time">时间未记录</span>
                 )}
-              </article>
-            )}
-          </li>
-        )
-      })}
+              </header>
+              {item.text && <p>{item.text}</p>}
+              <Files files={item.files} />
+              {layer && <OriginalDisclosure id={item.id} layer={layer} />}
+            </article>
+          )}
+        </li>
+      ))}
     </ol>
-  )
-}
-
-function ContextDrawer({ open }: { open: boolean }) {
-  const [preview, setPreview] = useState<ContextPreview>()
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const supported = Boolean(window.wintermute?.contextPreview)
-
-  useEffect(() => {
-    const api = window.wintermute
-    if (!open || !api?.contextPreview) return
-    let alive = true
-    queueMicrotask(() => {
-      if (!alive) return
-      setLoading(true)
-      setError('')
-    })
-    api
-      .contextPreview()
-      .then((res) => {
-        if (alive) setPreview(res)
-      })
-      .catch((e) => {
-        if (alive)
-          setError(
-            e instanceof Error
-              ? e.message.replace(/^.*?Error: /, '')
-              : '读取模型上下文预览失败。',
-          )
-      })
-      .finally(() => {
-        if (alive) setLoading(false)
-      })
-    return () => {
-      alive = false
-    }
-  }, [open])
-
-  if (!open) return null
-  return (
-    <div className="context-drawer">
-      <ContextPreviewPanel
-        preview={preview}
-        loading={loading}
-        error={supported ? error : '当前桌面端或后端不支持模型上下文预览。'}
-      />
-    </div>
   )
 }
 
@@ -338,47 +219,15 @@ function HistoryList({
   view,
   label,
   openTimeline,
-  onSelectPerception,
-  destinationFilter,
-  onDestinationFilterChange,
-  rangeBounds,
-  onClearRange,
-  selectedPerceptionId,
-  onSelectPerceptionId,
-  highlightMessageId,
 }: {
   view: HistoryView
   label: string
-  openTimeline?: (messageId?: string | null) => void
-  onSelectPerception?: (eventId: string) => void
-  destinationFilter?: PerceptionDestinationFilter
-  onDestinationFilterChange?: (next: PerceptionDestinationFilter) => void
-  rangeBounds?: { from: string; to: string; label: string } | null
-  onClearRange?: () => void
-  selectedPerceptionId?: string
-  onSelectPerceptionId?: (id: string) => void
-  highlightMessageId?: string | null
+  openTimeline?: () => void
 }) {
-  const historyFilter: HistoryFilter | undefined =
-    view === 'perception'
-      ? {
-          destination:
-            destinationFilter && destinationFilter !== 'all'
-              ? destinationFilter
-              : undefined,
-          from: rangeBounds?.from,
-          to: rangeBounds?.to,
-        }
-      : undefined
-
-  const { pages, read } = useHistoryPages(view, historyFilter)
+  const { pages, read } = useHistoryPages(view)
   const page = pages.get(null) ?? emptyPage
   const [query, setQuery] = useState('')
   const [revision, setRevision] = useState(0)
-  const [showContext, setShowContext] = useState(false)
-  const autoSeekPages = useRef(0)
-  const scrolledId = useRef<string | null>(null)
-
   const term = query.trim().toLowerCase()
   const visible = page.items.filter(
     (item) =>
@@ -387,37 +236,6 @@ function HistoryList({
       (item.group &&
         pages.get(item.group.id)?.items.some((frame) => matches(frame, term))),
   )
-
-  useEffect(() => {
-    autoSeekPages.current = 0
-    scrolledId.current = null
-  }, [highlightMessageId])
-
-  useEffect(() => {
-    if (!highlightMessageId || (view !== 'timeline' && view !== 'chat')) return
-    const found = page.items.some((item) => item.id === highlightMessageId)
-    if (found) {
-      if (scrolledId.current !== highlightMessageId) {
-        const el = document.querySelector(
-          `[data-message-id="${CSS.escape(highlightMessageId)}"]`,
-        )
-        if (el) {
-          scrolledId.current = highlightMessageId
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        }
-      }
-      return
-    }
-    if (!page.loading && page.next && autoSeekPages.current < 4) {
-      autoSeekPages.current += 1
-      void read(null, page.next)
-    }
-  }, [highlightMessageId, view, page.items, page.loading, page.next, read])
-
-  const hasPerceptionFilter =
-    view === 'perception' &&
-    ((destinationFilter && destinationFilter !== 'all') || Boolean(rangeBounds))
-
   return (
     <section aria-label={label} className="history-list">
       <div className="history-tools">
@@ -435,61 +253,24 @@ function HistoryList({
             </button>
           )}
         </label>
-        <div className="history-tool-buttons">
-          {(view === 'chat' || view === 'timeline') && (
-            <button
-              type="button"
-              className="history-refresh"
-              aria-pressed={showContext}
-              onClick={() => setShowContext((open) => !open)}
-            >
-              <Cpu size={14} aria-hidden="true" /> 模型上下文预览
-            </button>
-          )}
-          <button
-            className="history-refresh"
-            onClick={() => {
-              setRevision((n) => n + 1)
-              void read(null, null)
-            }}
-            disabled={page.loading}
-          >
-            <RotateCw size={14} aria-hidden="true" /> 刷新
-          </button>
-        </div>
+        <button
+          className="history-refresh"
+          onClick={() => { setRevision(n=>n+1); void read(null, null) }}
+          disabled={page.loading}
+        >
+          <RotateCw size={14} aria-hidden="true" /> 刷新
+        </button>
       </div>
-
-      {(view === 'chat' || view === 'timeline') && (
-        <ContextDrawer open={showContext} />
-      )}
-
-      {view === 'perception' && openTimeline ? (
-        (visible.length > 0 || hasPerceptionFilter) && (
-          <PerceptionBrowser
-            items={visible}
-            openTimeline={openTimeline}
-            revision={revision}
-            destinationFilter={destinationFilter}
-            onDestinationFilterChange={onDestinationFilterChange}
-            selectedId={selectedPerceptionId}
-            onSelectId={onSelectPerceptionId}
-            activeRangeLabel={rangeBounds?.label}
-            onClearRange={onClearRange}
-          />
-        )
-      ) : (
-        <HistoryRecords
-          view={view}
-          items={visible}
-          pages={pages}
-          read={read}
-          term={term}
-          layer={view === 'slice' ? view : undefined}
-          highlightedId={highlightMessageId}
-          onSelectPerception={onSelectPerception}
-        />
-      )}
-      {!page.loading && !page.error && !visible.length && !hasPerceptionFilter && (
+      {view === 'perception' && openTimeline ? visible.length > 0 && <PerceptionBrowser
+        items={visible} openTimeline={openTimeline} revision={revision}
+      /> : <HistoryRecords
+        items={visible}
+        pages={pages}
+        read={read}
+        term={term}
+        layer={view === 'slice' ? view : undefined}
+      />}
+      {!page.loading && !page.error && !visible.length && (
         <div className="history-empty" role="status">
           <BookOpen size={22} aria-hidden="true" />
           {term ? '已加载的记录中没有匹配项' : '暂无记录'}
@@ -508,38 +289,14 @@ function ActivityHistory({
   layer,
   label,
   openTimeline,
-  destinationFilter,
-  onDestinationFilterChange,
-  rangeBounds,
-  onClearRange,
-  selectedPerceptionId,
-  onSelectPerceptionId,
 }: {
   layer: ActivityLayer
   label: string
-  openTimeline: (messageId?: string | null) => void
-  destinationFilter?: PerceptionDestinationFilter
-  onDestinationFilterChange?: (next: PerceptionDestinationFilter) => void
-  rangeBounds?: { from: string; to: string; label: string } | null
-  onClearRange?: () => void
-  selectedPerceptionId?: string
-  onSelectPerceptionId?: (id: string) => void
+  openTimeline: () => void
 }) {
   const [compare, setCompare] = useState(false)
   if (layer === 'perception')
-    return (
-      <HistoryList
-        view={layer}
-        label={label}
-        openTimeline={openTimeline}
-        destinationFilter={destinationFilter}
-        onDestinationFilterChange={onDestinationFilterChange}
-        rangeBounds={rangeBounds}
-        onClearRange={onClearRange}
-        selectedPerceptionId={selectedPerceptionId}
-        onSelectPerceptionId={onSelectPerceptionId}
-      />
-    )
+    return <HistoryList view={layer} label={label} openTimeline={openTimeline} />
   return (
     <>
       <div
@@ -555,10 +312,7 @@ function ActivityHistory({
         </button>
       </div>
       {compare ? (
-        <CompressionBrowser
-          layer={layer}
-          openTimeline={() => openTimeline(null)}
-        />
+        <CompressionBrowser layer={layer} openTimeline={openTimeline} />
       ) : (
         <HistoryList view={layer} label={label} />
       )}
@@ -570,88 +324,33 @@ export function MemoryBrowser({
   connectionKey,
   connectionRevision,
   connected,
-  pendingLocalCount = 0,
   settings,
 }: {
   connectionKey: string
   connectionRevision?: number
   connected: boolean
-  pendingLocalCount?: number
   settings: () => void
 }) {
-  const [view, setView] = useState<MemoryViewOption>(allViews[0])
-  const [destinationFilter, setDestinationFilter] =
-    useState<PerceptionDestinationFilter>('all')
-  const [rangeBounds, setRangeBounds] = useState<{
-    from: string
-    to: string
-    label: string
-  } | null>(null)
-  const [selectedPerceptionId, setSelectedPerceptionId] = useState<string>()
-  const [highlightMessageId, setHighlightMessageId] = useState<string | null>(
-    null,
-  )
-
-  function openTimeline(messageId?: string | null) {
-    setHighlightMessageId(messageId ?? null)
-    setView(allViews.find((v) => v.id === 'timeline')!)
-  }
-
-  function openPerceptionEvent(eventId: string) {
-    setDestinationFilter('all')
-    setRangeBounds(null)
-    setSelectedPerceptionId(eventId)
-    setView(allViews.find((v) => v.id === 'perception')!)
-  }
-
-  function openFilteredPerception(
-    destination: PerceptionDestinationFilter,
-    bounds?: { from: string; to: string },
-  ) {
-    setDestinationFilter(destination)
-    setRangeBounds(
-      bounds ? { ...bounds, label: '所选时间段' } : null,
-    )
-    setSelectedPerceptionId(undefined)
-    setView(allViews.find((v) => v.id === 'perception')!)
-  }
-
+  const [view, setView] = useState(views[0])
   return (
     <HistoryConnection.Provider value={connectionRevision}>
       <section className="browse-page history-browser" data-view={view.id}>
         <div className="page-heading">
           <h1>记忆</h1>
         </div>
-        <nav className="history-views-grouped" aria-label="历史视图">
-          {viewGroups.map((group) => (
-            <div key={group.group} className="history-view-group">
-              <span className="history-view-group-label">{group.group}</span>
-              <div className="history-view-group-buttons" role="group" aria-label={group.group}>
-                {group.items.map((v) => (
-                  <button
-                    key={v.id}
-                    aria-pressed={view.id === v.id}
-                    onClick={() => {
-                      if (v.id !== 'timeline') setHighlightMessageId(null)
-                      setView(v)
-                    }}
-                  >
-                    {v.label}
-                  </button>
-                ))}
-              </div>
-            </div>
+        <div className="history-views" role="group" aria-label="历史视图">
+          {views.map((v) => (
+            <button
+              key={v.id}
+              aria-pressed={view.id === v.id}
+              onClick={() => setView(v)}
+            >
+              {v.label}
+            </button>
           ))}
-        </nav>
+        </div>
         {connected ? (
-          view.id === 'overview' ? (
-            <FlowOverview
-              key={connectionKey}
-              pendingLocalCount={pendingLocalCount}
-              onFilterPerception={openFilteredPerception}
-              revision={connectionRevision ?? 0}
-            />
-          ) : view.id === 'profile' ? (
+          view.id === 'profile' ? (
             <UserProfile key={connectionKey} />
           ) : view.id === 'terminal-tools' ? (
             <TerminalToolHistory key={connectionKey} />
@@ -660,21 +359,15 @@ export function MemoryBrowser({
               key={connectionKey + view.id}
               layer={view.id}
               label={view.label}
-              openTimeline={openTimeline}
-              destinationFilter={destinationFilter}
-              onDestinationFilterChange={setDestinationFilter}
-              rangeBounds={rangeBounds}
-              onClearRange={() => setRangeBounds(null)}
-              selectedPerceptionId={selectedPerceptionId}
-              onSelectPerceptionId={setSelectedPerceptionId}
+              openTimeline={() =>
+                setView(views.find((v) => v.id === 'timeline')!)
+              }
             />
           ) : (
             <HistoryList
               key={connectionKey + view.id}
               view={view.id}
               label={view.label}
-              highlightMessageId={highlightMessageId}
-              onSelectPerception={openPerceptionEvent}
             />
           )
         ) : (

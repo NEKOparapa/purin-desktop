@@ -83,7 +83,7 @@ test('terminal call history shows paginated, live results from all targets', asy
   await page.evaluate(() => Object.assign(window.wintermute!, {
     terminalToolHistory: (window as unknown as { readToolCalls: unknown }).readToolCalls,
   }))
-  await page.getByRole('button', { name: '终端工具', exact: true }).click()
+  await page.getByRole('button', { name: '终端工具调用', exact: true }).click()
   const row = page.getByRole('article')
   await expect(row).toContainText('会议电脑')
   await expect(row).toContainText('shell')
@@ -143,7 +143,6 @@ test('six history views, paginated filtering and audio downloads', async ({
       return { saved: downloads.length > 1 }
     },
   )
-  await page.getByRole('button', { name: '对话历史', exact: true }).click()
   const entry = page
     .getByRole('article')
     .filter({ hasText: '收到，附上新议程。' })
@@ -176,13 +175,13 @@ test('six history views, paginated filtering and audio downloads', async ({
   )
   expect(reads).toContainEqual({ view: 'chat', cursor: 'older-page' })
   for (const [label, view] of [
-    ['时间线', 'timeline'],
-    ['交流', 'conversation'],
-    ['通知', 'notification'],
-    ['设备观测', 'perception'],
-    ['切片', 'slice'],
+    ['时间线历史', 'timeline'],
+    ['交流层', 'conversation'],
+    ['通知层', 'notification'],
+    ['感知层', 'perception'],
+    ['切片层', 'slice'],
   ]) {
-    await page.getByRole('navigation', { name: '历史视图' }).getByRole('button', { name: label, exact: true }).click()
+    await page.getByRole('button', { name: label, exact: true }).click()
     await expect(page.getByText('后端记录 ' + view)).toBeVisible()
     await expect(page.getByRole('article')).toHaveCount(1)
     if (view === 'timeline') await expect(attachment).toHaveCount(0)
@@ -215,10 +214,9 @@ test('keeps newer view on a late page and retries failed reads without losing ol
         }
       : { items: [item('latest', '会议进行中')], next_cursor: 'older-activity' }
   })
-  await page.getByRole('button', { name: '对话历史', exact: true }).click()
   await page.getByRole('button', { name: '加载更早记录' }).click()
   await expect.poll(() => !!finishOldPage).toBe(true)
-  await page.getByRole('button', { name: '时间线', exact: true }).click()
+  await page.getByRole('button', { name: '时间线历史', exact: true }).click()
   await expect(page.getByText('会议进行中')).toBeVisible()
   finishOldPage({ items: [item('stale', '其他视图的记录')], next_cursor: null })
   await page.getByRole('button', { name: '加载更早记录' }).click()
@@ -257,9 +255,8 @@ test('empty history and download errors are actionable', async ({ page }) => {
       throw new Error('文件已不存在')
     },
   )
-  await page.getByRole('button', { name: '对话历史', exact: true }).click()
   await expect(page.getByText('暂无记录')).toBeVisible()
-  await page.getByRole('button', { name: '切片', exact: true }).click()
+  await page.getByRole('button', { name: '切片层', exact: true }).click()
   await page.getByRole('button', { name: '会议录音.ogg', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('文件已不存在')
   await expect(
@@ -319,7 +316,7 @@ test('groups screen captures and previews visible frames automatically', async (
       return { saved: true }
     },
   )
-  await page.getByRole('button', { name: '切片', exact: true }).click()
+  await page.getByRole('button', { name: '切片层', exact: true }).click()
   const toggle = page.getByRole('button', { name: /QQ · 家庭组邀请/ })
   await expect(toggle).toHaveAttribute('aria-expanded', 'false')
   await expect(page.getByText('3 张截图')).toBeVisible()
@@ -447,7 +444,7 @@ test('compares the same batch with its persisted summaries and opens scoped orig
     }
     api.wintermute.compression = api.inspectFixture
   })
-  await page.getByRole('button', { name: '切片', exact: true }).click()
+  await page.getByRole('button', { name: '切片层', exact: true }).click()
   await page.getByRole('button', { name: '查看原始资料' }).click()
   await expect(page.getByText('直接从记录读取的事实')).toBeVisible()
   await page.getByRole('button', { name: '压缩对照', exact: true }).click()
@@ -474,11 +471,11 @@ test('compares the same batch with its persisted summaries and opens scoped orig
   await expect(page.getByText('跨批次汇总')).toHaveCount(0)
   await page.getByRole('button', { name: '查看已投递的时间线' }).click()
   await expect(
-    page.getByRole('button', { name: '时间线', exact: true }),
+    page.getByRole('button', { name: '时间线历史', exact: true }),
   ).toHaveAttribute('aria-pressed', 'true')
 })
 
-test('perception shows the vertical flow trace, inline frames, byte units, and stored summaries', async ({page}) => {
+test('perception shows the complete event, ordered observations with inline frames, and stored summaries', async ({page}) => {
   const start = '2026-11-15T09:00:00Z'
   const first = '2026-11-15T09:01:00Z'
   const second = '2026-11-15T09:02:00Z'
@@ -494,7 +491,7 @@ test('perception shows the vertical flow trace, inline frames, byte units, and s
   const previews: string[] = []
   let failPreview = true
   await openMemory(page, ({view}) => ({
-    items: view === 'perception' ? [{ ...item('evt_a', '摘要', [jpg, {...jpg,id:'evt_a:frame:1',name:'second.jpg',occurred_at:second}]), raw, destination: 'summarized' }] : [],
+    items: view === 'perception' ? [{ ...item('evt_a', '摘要', [jpg, {...jpg,id:'evt_a:frame:1',name:'second.jpg',occurred_at:second}]), raw }] : [],
     next_cursor: null,
   }), undefined, ({id, connectionRevision}) => {
     expect(connectionRevision).toBe(1)
@@ -505,19 +502,17 @@ test('perception shows the vertical flow trace, inline frames, byte units, and s
     const api = window.wintermute!
     Object.assign(api,{compression: async ({kind,id}: {kind:string;id:string}) => {
       if(kind!=='stages' || id!=='evt_a') throw Error('请求了其他记录')
-      return { dwell_threshold_seconds: 5,
-        decisions:[{kind:'title',label:'闪现标题',seconds:2,kept:false}],
+      return { decisions:[{kind:'title',label:'闪现标题',seconds:2,kept:false}],
         retained:{work_objects:['议程文档']},
         parts:[{kind:'observation',text:'会议电脑 · 议程文档',round_id:'1',delivered:false}],
-        rounds:[{id:'1',status:'ready',input:'来自上一轮的摘要和本轮新增记录',summary:'已保存的模型摘要', member_count: 2, members: [{id:'evt_a',kind:'observation',occurred_at:'2026-11-15T09:00:00Z',text:'会议电脑 · 议程文档'},{id:'evt_b',kind:'observation',occurred_at:'2026-11-15T09:03:00Z',text:'终端 · pytest'}]}],
+        rounds:[{id:'1',status:'ready',input:'来自上一轮的摘要和本轮新增记录',summary:'已保存的模型摘要'}],
         ai_enabled:true, pending_size:50,budget:800 }
     }})
   })
-  await page.getByRole('button', {name:'设备观测',exact:true}).click()
+  await page.getByRole('button', {name:'感知层',exact:true}).click()
+  await expect(page.getByRole('group',{name:'压缩过程'}).getByRole('button')).toHaveText(['原始信息','过滤筛选','规则压缩','格式排版','AI 压缩'])
+  await expect(page.getByRole('button', {name:'原始信息'})).toHaveAttribute('aria-pressed','true')
   await expect(page.getByRole('heading', {name:'Editor'})).toBeVisible()
-  await expect(page.locator('.perception-inspect-head')).toContainText('🧠 已并入摘要 R1')
-  await expect(page.getByText('估算单位')).toHaveCount(0)
-  await expect(page.getByText(/字节（约 \d+ tokens）/).first()).toBeVisible()
   await expect(page.getByText('停留 1 分钟 30 秒')).toBeVisible()
   await expect(page.getByText('切换到「议程文档」',{exact:true})).toBeVisible()
   await expect(page.getByText('截图读取失败')).toBeVisible()
@@ -528,20 +523,25 @@ test('perception shows the vertical flow trace, inline frames, byte units, and s
   await description.getByText('second.jpg').scrollIntoViewIfNeeded()
   await expect(description.getByRole('img',{name:'second.jpg'})).toBeVisible()
   await page.getByText('完整上报 JSON').click()
-  await expect(page.locator('.perception-json').first()).toHaveText(JSON.stringify(raw,null,2))
+  await expect(page.locator('.perception-json')).toHaveText(JSON.stringify(raw,null,2))
+  await page.getByText('first.jpg', {exact: true}).scrollIntoViewIfNeeded()
+  await expect(page.getByRole('img',{name:'first.jpg'})).toBeVisible()
+  await page.getByRole('button',{name:'规则压缩'}).click()
   await expect(page.getByRole('row').filter({hasText:'闪现标题'})).toContainText('过滤')
-  await expect(page.getByRole('region', { name: '③ 时间线文字' }).getByText('会议电脑 · 议程文档', { exact: true })).toBeVisible()
+  await page.getByRole('button',{name:'格式排版'}).click()
+  await expect(page.getByText('会议电脑 · 议程文档')).toBeVisible()
+  await expect(page.getByText('闪现标题')).toHaveCount(0)
+  await page.getByRole('button',{name:'AI 压缩'}).click()
   await expect(page.getByText('已保存的模型摘要')).toBeVisible()
-  await page.getByText('查看同轮 2 条观测').click()
-  await expect(page.getByText('终端 · pytest')).toBeVisible()
-  await page.getByText('查看本轮完整输入（R1）').click()
+  await page.getByText('查看本轮完整输入').click()
   await expect(page.getByText('来自上一轮的摘要和本轮新增记录')).toBeVisible()
+  await expect(page.getByRole('img')).toHaveCount(0)
   expect(previews).toContain('evt_a:frame:0')
   expect(previews).toContain('evt_a:frame:1')
 })
 
 test('stage selection follows the record and ignores late responses for another visit', async ({page}) => {
-  const rows = ['Editor','QQ'].map((app,i)=>({...item(app,app),filter_result:i?'filtered':'kept',destination:i?'filtered':'buffered',raw:{payload:{
+  const rows = ['Editor','QQ'].map((app,i)=>({...item(app,app),filter_result:i?'filtered':'kept',raw:{payload:{
     state_key:'desktop.window_span',value:{foreground_app:app,duration_seconds:i?5:30}}}}))
   await openMemory(page,()=>({items:rows,next_cursor:null}))
   let release!: () => void
@@ -556,24 +556,29 @@ test('stage selection follows the record and ignores late responses for another 
       ai_enabled:true,pending_size:75,budget:800 }
   })
   await page.evaluate(()=>Object.assign(window.wintermute!,{compression:(window as unknown as {readStages:unknown}).readStages}))
-  await page.getByRole('button',{name:'设备观测',exact:true}).click()
-  await expect(page.getByText('正在读取后续流向…')).toBeVisible()
+  await page.getByRole('button',{name:'感知层',exact:true}).click()
+  await page.getByRole('button',{name:'规则压缩'}).click()
+  await expect(page.getByText('正在读取处理记录…')).toBeVisible()
   const list=page.getByRole('navigation',{name:'采集记录'})
   await list.getByRole('button',{name:/QQ/}).click()
-  await expect(page.getByText(/整次停留未超过 5 秒/)).toBeVisible()
-  const filter=page.getByRole('combobox',{name:'按去向筛选'})
+  await expect(page.getByText('整次停留已过滤')).toBeVisible()
+  const filter=page.getByRole('combobox',{name:'按过滤结果筛选'})
   await filter.selectOption('filtered')
   await expect(list.getByRole('button')).toHaveCount(1)
-  await expect(page.getByRole('row').filter({hasText:'QQ'})).toContainText('过滤（≤5 秒）')
+  await page.getByRole('button',{name:'过滤筛选',exact:true}).click()
+  await expect(page.getByRole('row').filter({hasText:'QQ'})).toContainText('过滤（5 秒及以内）')
   await filter.selectOption('partial')
   await expect(page.getByRole('status')).toContainText('没有符合此筛选条件')
   await filter.selectOption('filtered')
   release()
-  await expect(page.getByText(/已被规则过滤，未生成时间线文字/)).toBeVisible()
-  await expect(page.getByText(/已过滤，不会进入模型上下文/)).toBeVisible()
+  await page.getByRole('button',{name:'格式排版'}).click()
+  await expect(page.getByText(/没有生成时间线文字/)).toBeVisible()
+  await page.getByRole('button',{name:'AI 压缩'}).click()
+  await expect(page.getByText(/无需 AI 压缩/)).toBeVisible()
   await filter.selectOption('all')
   await list.getByRole('button',{name:/Editor/}).click()
-  await expect(page.getByText(/75 \/ 800 字节/).first()).toBeVisible()
+  await expect(page.getByText('尚未超过压缩预算')).toBeVisible()
+  await expect(page.getByText(/75 \/ 800/)).toBeVisible()
   finished=true
   await page.evaluate(()=>window.dispatchEvent(new Event('focus')))
   await expect(page.getByText('本轮完成')).toBeVisible()
@@ -594,7 +599,7 @@ test('a pending visit on an older page gains its description in capture order', 
         visual_observations:ready?[{frame_index:0,occurred_at:shot,text:'议程里写着部署评审'}]:[]},
     }}}],next_cursor:null}
   })
-  await page.getByRole('button',{name:'设备观测',exact:true}).click()
+  await page.getByRole('button',{name:'感知层',exact:true}).click()
   await page.getByRole('button',{name:'加载更早记录'}).click()
   await page.getByRole('navigation',{name:'采集记录'}).getByRole('button',{name:/编辑器/}).click()
   await expect(page.getByText(/正在识别截图/)).toBeVisible()
@@ -626,7 +631,7 @@ test('screenshot reads follow the viewport and release image URLs when leaving m
       void (window as unknown as {recordRelease: (url: string) => Promise<void>}).recordRelease(url)
     }
   })
-  await page.getByRole('button',{name:'设备观测',exact:true}).click()
+  await page.getByRole('button',{name:'感知层',exact:true}).click()
   const first = page.getByRole('img',{name:'窗口-0.jpg',exact:true})
   await expect(first).toBeVisible()
   const url = await first.getAttribute('src')
@@ -636,14 +641,13 @@ test('screenshot reads follow the viewport and release image URLs when leaving m
   await expect(first).toHaveCount(0)
   await expect.poll(() => released).toContain(url)
   const lastUrl = await page.getByRole('img',{name:'窗口-19.jpg'}).getAttribute('src')
-  await page.getByRole('button',{name:'切片',exact:true}).click()
+  await page.getByRole('button',{name:'切片层',exact:true}).click()
   await expect.poll(() => released).toContain(lastUrl)
 })
 
 test('the open chat journal refreshes on return and reflects a database reset', async ({page}) => {
   let rows = [item('old','旧记录')]
   await openMemory(page, () => ({items:rows, next_cursor:null}))
-  await page.getByRole('button', { name: '对话历史', exact: true }).click()
   await expect(page.getByText('旧记录')).toBeVisible()
   rows = [item('new','提醒回复'), ...rows]
   await page.evaluate(() => window.dispatchEvent(new Event('focus')))
@@ -652,195 +656,4 @@ test('the open chat journal refreshes on return and reflects a database reset', 
   await page.evaluate(() => window.dispatchEvent(new Event('focus')))
   await expect(page.getByText('暂无记录')).toBeVisible()
   await expect(page.getByText('旧记录')).toHaveCount(0)
-})
-
-test('overview funnel filters perception, jumps to exact timeline message with highlight, and breaks down sources', async ({ page }) => {
-  const obs1 = {
-    ...item('evt_1', 'VS Code 停留'),
-    destination: 'delivered',
-    filter_result: 'partial',
-    raw: {
-      terminal_id: '桌面终端',
-      payload: {
-        state_key: 'desktop.window_span',
-        value: { foreground_app: 'VS Code', window_title: 'perception-browser.tsx', duration_seconds: 720 },
-      },
-    },
-  }
-  const obs2 = {
-    ...item('evt_2', 'Toast 停留'),
-    destination: 'filtered',
-    filter_result: 'filtered',
-    raw: {
-      terminal_id: '桌面终端',
-      payload: {
-        state_key: 'desktop.window_span',
-        value: { foreground_app: 'Toast', duration_seconds: 2 },
-      },
-    },
-  }
-  const timelineMsg = {
-    ...item('history-9-0', '感知摘要：用户上午在编辑感知浏览器 UI。'),
-    source: '活动时间线',
-  }
-  const historyQueries: Query[] = []
-
-  await openMemory(page, (query) => {
-    historyQueries.push(query)
-    if (query.view === 'perception') {
-      const all = [obs1, obs2]
-      const dest = (query as Query & { destination?: string }).destination
-      const filtered = dest ? all.filter((row) => row.destination === dest) : all
-      return { items: filtered, next_cursor: null }
-    }
-    if (query.view === 'timeline') {
-      return { items: [item('history-12-0', '更晚的时间线'), timelineMsg], next_cursor: null }
-    }
-    return { items: [], next_cursor: null }
-  })
-
-  await page.evaluate(() => {
-    Object.assign(window.wintermute!, {
-      perceptionSummary: async () => ({
-        from: '2026-11-17T00:00:00Z',
-        to: '2026-11-18T00:00:00Z',
-        uploaded: 10,
-        filtered: 4,
-        kept: 6,
-        partial: 1,
-        observation_lines: 6,
-        visual_lines: 1,
-        round_count: 1,
-        summarized_events: 4,
-        buffered_events: 1,
-        delivered_events: 1,
-        acknowledged_events: 0,
-        delivery_runs: 1,
-        destinations: { filtered: 4, buffered: 1, summarized: 0, delivered: 1, acknowledged: 0, unprojected: 0 },
-        pending_bytes: 340,
-        budget: 800,
-      }),
-      pendingTimeline: async () => ({
-        message: { text: '13:45 Slack 查看通知 | 来源设备：桌面终端', timestamp: '2026-11-17T05:45:00Z', origin: '活动时间线', bytes: 42 },
-        budget: 800,
-      }),
-      contextPreview: async () => ({
-        segments: [
-          { kind: 'system', label: '系统提示词（含用户档案）', bytes: 300, tokens_approx: 100, base_bytes: 200, profile_bytes: 100, profile_present: true, preview: '档案预览' },
-          { kind: 'session_summary', label: '会话摘要', bytes: 120, tokens_approx: 40, summarized_messages: 4, compactions: 1, text: '早些时候讨论了方案。' },
-          { kind: 'recent_messages', label: '最近消息', bytes: 180, tokens_approx: 60, message_count: 1, items: [{ role: 'user', origin: '用户原话', timestamp: null, bytes: 180, tokens_approx: 60, text: '我上午在干嘛？' }] },
-          { kind: 'pending_timeline', label: '待带入时间线', bytes: 340, tokens_approx: 113, budget: 800, timestamp: null, text: '13:45 Slack 查看通知' },
-        ],
-        total_bytes: 940,
-        total_tokens_approx: 313,
-        input_limit: 60000,
-      }),
-      compression: async ({ kind, id }: { kind: string; id: string }) => {
-        if (kind !== 'stages') return { items: [], next_cursor: null }
-        if (id === 'evt_1') {
-          return {
-            dwell_threshold_seconds: 5,
-            decisions: [{ kind: 'title', label: 'settings.json', seconds: 1, kept: false }],
-            retained: { foreground_app: 'VS Code' },
-            parts: [{
-              kind: 'observation',
-              text: '编辑 perception-browser.tsx 12 分钟',
-              delivered: true,
-              round_id: '12',
-              delivery: {
-                run_id: 'run-1',
-                input_index: 0,
-                delivered_at: '2026-11-17T05:20:00Z',
-                form: 'summary',
-                message: { id: 'history-9-0', text: '感知摘要：用户上午在编辑感知浏览器 UI。', timestamp: '2026-11-17T05:20:00Z', origin: '活动时间线' },
-                trigger: { text: '我上午在干嘛？' },
-              },
-            }],
-            rounds: [{
-              id: '12',
-              status: 'ready',
-              input: '已有摘要 + 24 条观测',
-              summary: '用户上午在编辑感知浏览器 UI。',
-              member_count: 2,
-              members: [{ id: 'evt_1', kind: 'observation', occurred_at: '2026-11-17T05:02:00Z', text: '编辑 perception-browser.tsx 12 分钟' }],
-              later: [{ id: '13', status: 'ready', summary: '后续滚动摘要 R13' }],
-              next_id: '13',
-            }],
-            ai_enabled: true,
-            pending_size: 340,
-            budget: 800,
-          }
-        }
-        return {
-          dwell_threshold_seconds: 5,
-          decisions: [{ kind: 'application', label: 'Toast', seconds: 2, kept: false }],
-          retained: null,
-          parts: [{ kind: 'observation', text: '', delivered: false, round_id: null }],
-          rounds: [],
-          ai_enabled: true,
-          pending_size: 340,
-          budget: 800,
-        }
-      },
-      timelineSources: async () => ({
-        message: { id: 'history-9-0', text: '感知摘要：用户上午在编辑感知浏览器 UI。', bytes: 60 },
-        parts: [
-          {
-            kind: 'perception_summary',
-            round_id: '12',
-            text: '感知摘要：用户上午在编辑感知浏览器 UI。',
-            summary: '用户上午在编辑感知浏览器 UI。',
-            bytes: 60,
-            member_count: 1,
-            members: [{ event_id: 'evt_1', activity_id: 'evt_1', kind: 'observation', occurred_at: '2026-11-17T05:02:00Z', text: '编辑 perception-browser.tsx 12 分钟' }],
-          },
-          {
-            kind: 'slice',
-            activity_id: 'slice_1',
-            text: '会议确认发布时间',
-            bytes: 27,
-            source: '切片 · 手机',
-            occurred_at: '2026-11-17T05:10:00Z',
-            source_event_ids: ['slice_1'],
-          },
-        ],
-        counts: { total_activities: 2, summary_count: 1, perception_count: 1, slice_count: 1 },
-      }),
-    })
-  })
-
-  // Refresh overview after installing mocked endpoints so funnel, pending timeline, and context preview load.
-  await page.getByRole('button', { name: '刷新', exact: true }).click()
-  await expect(page.getByRole('region', { name: '感知数据流漏斗' })).toBeVisible()
-  await expect(page.getByText('13:45 Slack 查看通知 | 来源设备：桌面终端')).toBeVisible()
-  await expect(page.getByRole('region', { name: '模型上下文预览' })).toContainText('系统提示词（含用户档案）')
-  await expect(page.getByRole('region', { name: '模型上下文预览' })).toContainText('940 字节')
-
-  // Click filtered funnel node -> switches to 设备观测 with filtered items only.
-  await page.getByRole('button', { name: /已过滤/ }).click()
-  await expect(page.getByRole('button', { name: '设备观测', exact: true })).toHaveAttribute('aria-pressed', 'true')
-  await expect(page.getByRole('navigation', { name: '采集记录' }).getByRole('button')).toHaveCount(1)
-  await expect(page.getByRole('heading', { name: 'Toast' })).toBeVisible()
-
-  // Switch filter to delivered -> inspect VS Code record and jump to exact timeline message.
-  await page.getByRole('combobox', { name: '按去向筛选' }).selectOption('delivered')
-  await expect(page.getByRole('heading', { name: 'VS Code' })).toBeVisible()
-  await expect(page.locator('.perception-inspect-head')).toContainText('✅ 已进入上下文（摘要形式）')
-  await expect(page.getByText('触发对话：「我上午在干嘛？」')).toBeVisible()
-  await expect(page.getByText(/后续并入 R13/)).toBeVisible()
-
-  await page.getByRole('button', { name: /定位到该消息/ }).click()
-  await expect(page.getByRole('button', { name: '时间线', exact: true })).toHaveAttribute('aria-pressed', 'true')
-  const targetEntry = page.locator('[data-message-id="history-9-0"]')
-  await expect(targetEntry).toHaveAttribute('data-highlighted', 'true')
-
-  // Expand 拆解来源 and jump back to evt_1 in 设备观测.
-  await targetEntry.getByRole('button', { name: /拆解来源/ }).click()
-  await expect(targetEntry).toContainText('感知摘要 R12（覆盖 1 条）')
-  await expect(targetEntry).toContainText('会议确认发布时间')
-  await targetEntry.getByText('查看所含 1 条观测').click()
-  await targetEntry.getByRole('button', { name: /跳回记录/ }).click()
-  await expect(page.getByRole('button', { name: '设备观测', exact: true })).toHaveAttribute('aria-pressed', 'true')
-  await expect(page.getByRole('heading', { name: 'VS Code' })).toBeVisible()
-  expect(historyQueries.some((q) => (q as Query & { destination?: string }).destination === 'filtered')).toBe(true)
 })

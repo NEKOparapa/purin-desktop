@@ -49,23 +49,6 @@ export interface ScreenshotGroup {
   frame_count: number
   change_count: number
 }
-export type PerceptionDestination =
-  | 'filtered'
-  | 'buffered'
-  | 'summarized'
-  | 'delivered'
-  | 'acknowledged'
-  | 'unprojected'
-
-export type PerceptionDestinationFilter =
-  | 'all'
-  | 'filtered'
-  | 'partial'
-  | 'kept'
-  | 'buffered'
-  | 'summarized'
-  | 'delivered'
-
 export interface HistoryItem {
   id: string
   occurred_at: string | null
@@ -75,7 +58,6 @@ export interface HistoryItem {
   files: HistoryFile[]
   raw?: Record<string, unknown>
   filter_result?: 'filtered' | 'partial' | 'kept' | 'unprojected'
-  destination?: PerceptionDestination
   group?: ScreenshotGroup | null
 }
 export interface HistoryPage {
@@ -151,211 +133,15 @@ export interface OriginalDetail extends ResultsPage<OriginalRecord> {
   }
 }
 
-export interface PerceptionDelivery {
-  run_id?: string | null
-  input_index?: number | null
-  delivered_at?: string | null
-  form?: 'raw' | 'summary' | null
-  message: {
-    id: string | null
-    text: string
-    timestamp?: string | null
-    origin?: string | null
-  } | null
-  trigger: {
-    text: string
-    timestamp?: string | null
-    origin?: string | null
-  } | null
-}
-
-export interface PerceptionRoundMember {
-  id: string
-  kind: 'observation' | 'visual'
-  occurred_at: string | null
-  text: string
-}
-
-export interface PerceptionRoundLater {
-  id: string
-  status: 'pending' | 'ready' | 'retrying' | 'disabled'
-  summary: string | null
-  started_at?: string | null
-  ended_at?: string | null
-}
-
-export interface PerceptionRound {
-  id: string
-  status: 'pending' | 'ready' | 'retrying' | 'disabled'
-  input: string
-  summary: string | null
-  started_at?: string | null
-  ended_at?: string | null
-  members?: PerceptionRoundMember[]
-  member_count?: number
-  later?: PerceptionRoundLater[]
-  next_id?: string | null
-}
-
 export interface PerceptionStages {
   dwell_threshold_seconds?: number
   decisions: { kind: 'application' | 'title'; label: string; seconds: number; kept: boolean }[]
   retained: unknown
-  parts: {
-    kind: 'observation' | 'visual'
-    text: string
-    delivered: boolean
-    round_id: string | null
-    delivery?: PerceptionDelivery | null
-  }[]
-  rounds: PerceptionRound[]
+  parts: { kind: 'observation' | 'visual'; text: string; delivered: boolean; round_id: string | null }[]
+  rounds: { id: string; status: 'pending' | 'ready' | 'retrying' | 'disabled'; input: string; summary: string | null }[]
   ai_enabled: boolean
   budget: number
   pending_size: number
-}
-
-export interface PendingTimeline {
-  message: {
-    text: string
-    timestamp?: string | null
-    origin?: string | null
-    bytes?: number
-  } | null
-  budget: number
-}
-
-export interface PerceptionSummary {
-  from: string | null
-  to: string | null
-  uploaded: number
-  filtered: number
-  kept: number
-  partial: number
-  observation_lines: number
-  visual_lines: number
-  round_count: number
-  summarized_events: number
-  buffered_events: number
-  delivered_events: number
-  acknowledged_events: number
-  delivery_runs: number
-  destinations: Record<PerceptionDestination, number>
-  pending_bytes: number
-  budget: number
-}
-
-export type TimelineSourcePart =
-  | {
-      kind: 'note'
-      text: string
-      bytes: number
-    }
-  | {
-      kind: 'perception_summary'
-      round_id: string
-      started_at?: string | null
-      ended_at?: string | null
-      text: string
-      summary: string
-      bytes: number
-      member_count: number
-      members: {
-        event_id: string
-        activity_id: string
-        kind: 'observation' | 'visual'
-        occurred_at: string | null
-        text: string
-      }[]
-    }
-  | {
-      kind: 'perception_line'
-      event_id: string
-      activity_id: string
-      line_kind: 'observation' | 'visual'
-      occurred_at: string | null
-      text: string
-      bytes: number
-    }
-  | {
-      kind: 'slice'
-      activity_id: string
-      batch_id?: string | null
-      occurred_at: string | null
-      ended_at?: string | null
-      text: string
-      bytes: number
-      source: string
-      source_event_ids: string[]
-      summarized?: boolean
-    }
-
-export interface TimelineSources {
-  message: {
-    id: string
-    text: string
-    timestamp?: string | null
-    origin?: string | null
-    bytes: number
-  }
-  parts: TimelineSourcePart[]
-  counts: {
-    total_activities: number
-    summary_count: number
-    perception_count: number
-    slice_count: number
-  }
-}
-
-export type ContextPreviewSegment =
-  | {
-      kind: 'system'
-      label: string
-      bytes: number
-      tokens_approx: number
-      base_bytes: number
-      profile_bytes: number
-      profile_present: boolean
-      preview: string
-    }
-  | {
-      kind: 'session_summary'
-      label: string
-      bytes: number
-      tokens_approx: number
-      summarized_messages: number
-      compactions: number
-      text: string
-    }
-  | {
-      kind: 'recent_messages'
-      label: string
-      bytes: number
-      tokens_approx: number
-      message_count: number
-      items: {
-        role: string
-        origin: string
-        timestamp: string | null
-        bytes: number
-        tokens_approx: number
-        text: string
-      }[]
-    }
-  | {
-      kind: 'pending_timeline'
-      label: string
-      bytes: number
-      tokens_approx: number
-      budget: number
-      timestamp: string | null
-      text: string
-    }
-
-export interface ContextPreview {
-  segments: ContextPreviewSegment[]
-  total_bytes: number
-  total_tokens_approx: number
-  input_limit: number | null
 }
 
 export interface ScheduleEntry {
@@ -447,14 +233,7 @@ declare global {
         view: HistoryView
         cursor?: string
         groupId?: string
-        destination?: string
-        from?: string
-        to?: string
       }): Promise<HistoryPage>
-      pendingTimeline?(): Promise<PendingTimeline>
-      perceptionSummary?(options?: { from?: string; to?: string }): Promise<PerceptionSummary>
-      timelineSources?(options: { id: string }): Promise<TimelineSources>
-      contextPreview?(): Promise<ContextPreview>
       compression(options: { kind: 'stages'; id: string }): Promise<PerceptionStages>
       compression(options: {
         kind: 'list'

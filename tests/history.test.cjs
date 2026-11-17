@@ -56,10 +56,6 @@ test('history uses the bound terminal and fetches an attachment only after Save'
       )
     }
     if (url.pathname === '/v1/history') {
-      if (url.searchParams.has('destination') && url.searchParams.get('cursor') === 'old-server') {
-        res.writeHead(400)
-        return res.end(JSON.stringify({ error: 'invalid_query' }))
-      }
       if (url.searchParams.has('grouped') && url.searchParams.has('cursor')) {
         const oldServer = url.searchParams.get('cursor') === 'old-server'
         res.writeHead(oldServer ? 400 : 403)
@@ -74,14 +70,6 @@ test('history uses the bound terminal and fetches an attachment only after Save'
         }),
       )
     }
-    if (url.pathname === '/v1/history/timeline/pending')
-      return res.end(JSON.stringify({ message: { text: '待带入', bytes: 9 }, budget: 800 }))
-    if (url.pathname === '/v1/history/perception/summary')
-      return res.end(JSON.stringify({ uploaded: 3, filtered: 1, kept: 2 }))
-    if (url.pathname === '/v1/history/timeline/history-9-0/sources')
-      return res.end(JSON.stringify({ message: { id: 'history-9-0', text: '时间线', bytes: 9 }, parts: [], counts: { total_activities: 0, summary_count: 0, perception_count: 0, slice_count: 0 } }))
-    if (url.pathname === '/v1/history/context/preview')
-      return res.end(JSON.stringify({ segments: [], total_bytes: 0, total_tokens_approx: 0, input_limit: 60000 }))
     if (url.pathname === '/v1/history/screenshot-groups/evt_run')
       return res.end(JSON.stringify({ items: [], next_cursor: null }))
     if (url.pathname === '/v1/history/perceptions/evt%3Aunique/stages' && !url.search)
@@ -223,16 +211,6 @@ test('history uses the bound terminal and fetches an attachment only after Save'
   await assert.rejects(agent.previewHistoryImage({ id: file.id, connectionRevision: revision - 1 }), /连接已更改/)
   await assert.rejects(agent.previewHistoryImage({ id: '../files/other', connectionRevision: revision }), /无效/)
   assert.equal(requests.length, reads)
-
-  await agent.history({ view: 'perception', destination: 'filtered', from: '2026-11-17T00:00:00Z', to: '2026-11-18T00:00:00Z' })
-  assert.equal(requests.at(-1).searchParams.get('destination'), 'filtered')
-  await agent.history({ view: 'perception', destination: 'filtered', cursor: 'old-server' })
-  assert.equal(requests.at(-1).searchParams.get('destination'), null)
-  assert.equal((await agent.pendingTimeline()).budget, 800)
-  assert.equal((await agent.perceptionSummary({ from: '2026-11-17T00:00:00Z' })).uploaded, 3)
-  assert.equal((await agent.timelineSources({ id: 'history-9-0' })).message.id, 'history-9-0')
-  await assert.rejects(agent.timelineSources({ id: '../bad' }), /无效/)
-  assert.equal((await agent.contextPreview()).input_limit, 60000)
 })
 
 test('inline screenshot preview rejects non-images and oversized streamed responses', async () => {
