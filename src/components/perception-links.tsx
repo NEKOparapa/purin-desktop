@@ -11,7 +11,7 @@ import { Navigation, OriginalDisclosure } from './compression-browser'
 export type TraceNavigation = {
   openMember: (member: TraceMember) => void
   openMessage: (message: ContextMessageRef) => void
-  openSummary: (round: SummaryRoundRef, summary: string) => void
+  openSummary: (round: SummaryRoundRef) => void
 }
 
 export function PerceptionLinks({
@@ -20,6 +20,7 @@ export function PerceptionLinks({
   eventId,
   openMember,
   openMessage,
+  openSummary,
 }: TraceNavigation & {
   target: string
   message?: ContextMessageRef
@@ -39,6 +40,7 @@ export function PerceptionLinks({
   const result = usePages<TraceMember, TracePage>(fetch)
   const page = result.page
   const round = target.startsWith('round-')
+  const prior = page?.round?.previous_summary
   return (
     <section className="trace-group">
       {page && (
@@ -53,11 +55,17 @@ export function PerceptionLinks({
               </details>
             </>
           )}
-          <h4>{round ? '本轮合并的新增记录' : '这条消息同次处理的记录'}</h4>
-          {round && !result.items.length && (
-            <p className="stage-note">本轮只压缩了已有摘要。</p>
-          )}
+          <h4>{round ? '引用记录' : '这条消息同次处理的记录'}</h4>
           <ul className="trace-members">
+            {prior && (
+              <li>
+                <button className="history-inline" onClick={() => openSummary(prior)}>
+                  上一轮 AI 摘要 · {new Date(prior.occurred_at).toLocaleString('zh-CN', {
+                    hour12: false,
+                  })} ↗
+                </button>
+              </li>
+            )}
             {result.items.map((member) => {
               const label = [
                 new Date(member.occurred_at).toLocaleString('zh-CN', {
@@ -93,6 +101,9 @@ export function PerceptionLinks({
               )
             })}
           </ul>
+          {round && !result.items.length && !prior && (
+            <p className="stage-note">本轮没有可定位的引用记录。</p>
+          )}
         </>
       )}
       <Navigation {...result} more="更多关联记录" />

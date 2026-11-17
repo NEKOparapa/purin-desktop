@@ -450,6 +450,9 @@
 .trace-toggle time, .trace-title small, .trace-status, .stage-caption small { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .trace-toggle time { text-align: right; }
 .trace-title { display: grid; min-width: 0; }
+.trace-title-line { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 8px; }
+.trace-title-line strong { min-width: 0; overflow-wrap: anywhere; }
+.trace-budget { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .trace-title small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .trace-title strong { font-size: 15px; font-weight: 600; }
 .trace-status { border-radius: 4px; background: var(--hover); padding: 1px 5px; }

@@ -579,7 +579,8 @@ test('stage selection follows the record and ignores late responses for another 
 })
 
 test('a visit opens the stored message and follows a peer outside the loaded page', async ({page}) => {
-  const ref = {id:'history-4-1',written_at:'2026-11-17T10:00:00Z'}
+  const ref = {id:'history-4-1',written_at:'2026-11-17T10:00:00Z',
+    usage:{tokens:119,budget:800,devices:['desktop'],duration_seconds:120}}
   const visit = (app:string,at:string) => ({
     ...item(app,app), occurred_at:at, context_messages:[ref], raw:{payload:{state_key:'desktop.window_span',
       value:{foreground_app:app,started_at:at,duration_seconds:60,window_title:app+'.md'}}}
@@ -604,6 +605,8 @@ test('a visit opens the stored message and follows a peer outside the loaded pag
   await page.evaluate(()=>Object.assign(window.wintermute!,{compression:(window as unknown as {traceFixture:unknown}).traceFixture}))
   await page.getByRole('button',{name:'感知层',exact:true}).click()
   await expect(page.locator('.trace-title strong')).toHaveText(['Editor','时间线消息写入上下文'])
+  await expect(page.locator('.trace-toggle[data-kind="message"] .trace-budget')).toHaveText('约 119 / 800 tokens')
+  await expect(page.locator('.trace-toggle[data-kind="message"] small')).toHaveText('来源设备 desktop · 使用时长 2 分钟')
   await page.locator('.trace-toggle').first().click()
   await expect(page.locator('.trace-group pre')).toHaveText(original)
   await page.getByRole('button',{name:/Chrome ↗/}).click()
@@ -620,18 +623,24 @@ test('a visit opens the stored message and follows a peer outside the loaded pag
 
 test('a completed AI round appears on refresh and links back to its source before context delivery', async ({page}) => {
   const time = '2026-11-17T09:15:00Z'
-  const ref = {id:'round-8',occurred_at:time,generated_at:time}
+  const usage = {tokens:45,budget:300,devices:['pc','mobile'],duration_seconds:66}
+  const ref = {id:'round-8',occurred_at:time,generated_at:time,usage}
+  const earlier = {id:'round-3',occurred_at:'2026-11-17T08:00:00Z',generated_at:null,
+    usage:{...usage,devices:['mobile'],duration_seconds:51}}
   const summary = '先查看清单，随后打开部署文档。'
   const input = '09:10 清单；09:12 部署文档。'
   const visit = {...item('evt_a','清单'),occurred_at:'2026-11-17T09:10:00Z',
+    usage:{tokens:37,budget:800,devices:['pc'],duration_seconds:15},
     raw:{payload:{state_key:'desktop.window_span',value:{foreground_app:'Editor',duration_seconds:15}}}}
   const marker = {...item(ref.id,summary),occurred_at:time,source:'AI 摘要',summary_round:ref}
   let ready = false
   await openMemory(page,({view})=>({items:view==='perception'?(ready?[marker,visit]:[visit]):[],next_cursor:null}))
   await page.exposeFunction('summaryFixture',({kind,id}:{kind:string;id:string})=>{
     if(kind==='trace'){
+      if(id===earlier.id) return {round:{input:'早先的活动',summary:'先前的摘要',previous_summary:null},
+        text:null,written_at:null,next_cursor:null,items:[]}
       expect(id).toBe(ref.id)
-      return {round:{input,summary},text:null,written_at:null,next_cursor:null,
+      return {round:{input,summary,previous_summary:earlier},text:null,written_at:null,next_cursor:null,
         items:[{id:visit.id,event_id:visit.id,title:'Editor',occurred_at:visit.occurred_at,terminal:'pc'}]}
     }
     expect(id).toBe(visit.id)
@@ -645,10 +654,17 @@ test('a completed AI round appears on refresh and links back to its source befor
   ready = true
   await page.evaluate(()=>window.dispatchEvent(new Event('focus')))
   await expect(page.locator('.trace-title strong')).toHaveText(['Editor','AI 摘要'])
+  await expect(page.locator('.trace-budget')).toHaveText(['约 37 / 800 tokens','约 45 / 300 tokens'])
+  await expect(page.locator('.trace-title small')).toHaveText([
+    '来源设备 pc · 使用时长 15 秒','来源设备 pc、mobile · 使用时长 1 分钟 6 秒'])
   await page.locator('.trace-toggle[data-kind="summary"]').click()
   await expect(page.locator('.trace-detail').getByText(summary,{exact:true})).toBeVisible()
   await page.getByText('查看本轮完整输入',{exact:true}).click()
   await expect(page.getByText(input,{exact:true})).toBeVisible()
+  await page.getByRole('button',{name:/上一轮 AI 摘要/}).click()
+  await expect(page.locator('.trace-detail').getByText('先前的摘要',{exact:true})).toBeVisible()
+  await expect(page.locator('.trace-toggle[aria-expanded=true] small')).toHaveText('来源设备 mobile · 使用时长 51 秒')
+  await page.locator('#perception-row-round-8').click()
   await page.getByRole('button',{name:/Editor ↗/}).click()
   await expect(page.locator('.trace-toggle[aria-expanded=true]')).toContainText('Editor')
   await page.getByRole('button',{name:/在时间轴查看这次摘要/}).click()

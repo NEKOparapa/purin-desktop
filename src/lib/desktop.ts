@@ -61,6 +61,7 @@ export interface HistoryItem {
   context_messages?: ContextMessageRef[]
   pending_context?: boolean
   summary_round?: SummaryRoundRef
+  usage?: TimelineUsage
   group?: ScreenshotGroup | null
 }
 export interface HistoryPage {
@@ -149,16 +150,25 @@ export interface PerceptionStages {
   pending_size: number
 }
 
+export interface TimelineUsage {
+  tokens: number
+  budget: number
+  devices: string[]
+  duration_seconds: number | null
+}
+
 export interface ContextMessageRef {
   id: string
   written_at: string | null
   activity_at?: string | null
   parts?: ('observation' | 'visual')[]
+  usage?: TimelineUsage
 }
 export interface SummaryRoundRef {
   id: string
   occurred_at: string
   generated_at: string | null
+  usage?: TimelineUsage
 }
 export interface TraceMember {
   id: string
@@ -166,9 +176,10 @@ export interface TraceMember {
   title: string
   terminal: string
   occurred_at: string
+  usage?: TimelineUsage
 }
 export interface TracePage extends ResultsPage<TraceMember> {
-  round?: { input: string; summary: string | null }
+  round?: { input: string; summary: string | null; previous_summary?: SummaryRoundRef | null }
   text: string | null
   written_at: string | null
 }

@@ -5,9 +5,10 @@ import type {
   HistoryItem,
   PerceptionStages,
   SummaryRoundRef,
+  TimelineUsage,
   TraceMember,
 } from '@/lib/desktop'
-import { perceptionLabel, record, text } from '@/lib/perception'
+import { duration, perceptionLabel, record, text } from '@/lib/perception'
 import { PerceptionRecord } from './perception-record'
 import { PerceptionLinks, type TraceNavigation } from './perception-links'
 
@@ -160,9 +161,7 @@ function AIResult({
           {round.timeline_entry && round.summary && (
             <button
               className="history-inline"
-              onClick={() =>
-                navigation.openSummary(round.timeline_entry!, round.summary!)
-              }
+              onClick={() => navigation.openSummary(round.timeline_entry!)}
             >
               在时间轴查看这次摘要 ↗
             </button>
@@ -358,7 +357,10 @@ type TimelineRow = {
   id: string
   at: string | null
   title: string
-  subtitle: string
+  usage?: TimelineUsage
+  device?: string
+  duration?: string
+  timeNote?: string
   status: string
   kind: 'visit' | 'summary' | 'message'
   item?: HistoryItem
@@ -372,9 +374,9 @@ function visitRow(item: HistoryItem): TimelineRow {
     id: item.id,
     at: text(value.started_at) || item.occurred_at,
     title: info.title,
-    subtitle: [info.duration, info.subject, info.source]
-      .filter(Boolean)
-      .join(' · '),
+    usage: item.usage,
+    device: text(item.raw?.terminal_id),
+    duration: info.duration,
     status: item.context_messages?.length
       ? item.pending_context
         ? '部分已写入'
@@ -392,26 +394,22 @@ function messageRow(message: ContextMessageRef): TimelineRow {
     id: message.id,
     at: message.written_at ?? message.activity_at ?? null,
     title: '时间线消息写入上下文',
-    subtitle: message.written_at
-      ? '会话原文'
-      : message.activity_at
-        ? '按消息内的活动时间排列 · 写入时刻未记录'
-        : '写入时刻未记录',
+    usage: message.usage,
+    timeNote: message.written_at ? undefined : '写入时刻未记录，按活动时间排列',
     status: '已写入',
     kind: 'message',
   }
 }
 
-function summaryRow(ref: SummaryRoundRef, summary: string): TimelineRow {
+function summaryRow(ref: SummaryRoundRef): TimelineRow {
   return {
     kind: 'summary',
     id: ref.id,
     at: ref.occurred_at,
     title: 'AI 摘要',
     status: '已生成',
-    subtitle: ref.generated_at
-      ? summary
-      : '按本轮开始时间排列 · 生成时刻未记录',
+    usage: ref.usage,
+    timeNote: ref.generated_at ? undefined : '生成时刻未记录，按本轮开始时间排列',
   }
 }
 
@@ -435,7 +433,7 @@ export function PerceptionBrowser({
     rows.set(
       item.id,
       item.summary_round
-        ? summaryRow(item.summary_round, item.text)
+        ? summaryRow(item.summary_round)
         : visitRow(item),
     )
     for (const ref of item.context_messages ?? [])
@@ -461,12 +459,13 @@ export function PerceptionBrowser({
           id: member.event_id,
           at: member.occurred_at,
           title: member.title,
-          subtitle: member.terminal,
+          device: member.terminal,
+          usage: member.usage,
           status: '关联记录',
         })
     },
     openMessage: (message) => jump(messageRow(message)),
-    openSummary: (ref, summary) => jump(summaryRow(ref, summary)),
+    openSummary: (ref) => jump(summaryRow(ref)),
   }
   useEffect(() => {
     if (!selected || focusTarget.current !== selected) return
@@ -509,6 +508,12 @@ export function PerceptionBrowser({
           const previous =
             i && ordered[i - 1].at ? new Date(ordered[i - 1].at!) : null
           const open = selected === row.id
+          const usage = row.usage
+          const devices = usage?.devices.join('、') || row.device || '未记录'
+          const elapsed = usage?.duration_seconds != null
+            ? duration(usage.duration_seconds)
+            : row.duration || '未记录'
+          const budgetKind = row.kind === 'summary' ? '摘要输出' : '上下文投递'
           return (
             <li key={row.id}>
               {(!previous ||
@@ -527,7 +532,7 @@ export function PerceptionBrowser({
                   setSelected(open ? null : row.id)
                 }}
               >
-                <time dateTime={row.at ?? undefined}>
+                <time dateTime={row.at ?? undefined} title={row.timeNote}>
                   {stamp ? clock.format(stamp) : '—'}
                 </time>
                 <span className="trace-point" aria-hidden>
@@ -535,8 +540,18 @@ export function PerceptionBrowser({
                   {row.kind === 'summary' && <NotebookText size={14} />}
                 </span>
                 <span className="trace-title">
-                  <strong>{row.title}</strong>
-                  <small>{row.subtitle}</small>
+                  <span className="trace-title-line">
+                    <strong>{row.title}</strong>
+                    <span className="trace-budget"
+                      title={`按 UTF-8 字节估算的文本用量 / 当前${budgetKind}预算`}>
+                      {usage
+                        ? `约 ${usage.tokens.toLocaleString('zh-CN')} / ${usage.budget.toLocaleString('zh-CN')} tokens`
+                        : 'token 预算未记录'}
+                    </span>
+                  </span>
+                  <small title={`来源设备 ${devices} · 使用时长 ${elapsed}`}>
+                    来源设备 {devices} · 使用时长 {elapsed}
+                  </small>
                 </span>
                 <span className="trace-status">{row.status}</span>
                 <ChevronRight size={14} className="trace-chevron" aria-hidden />
