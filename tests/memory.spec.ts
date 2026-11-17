@@ -503,7 +503,7 @@ test('a visit separates original JSON and attachments, filter decisions and rule
     const api = window.wintermute!
     Object.assign(api,{compression: async ({kind,id}: {kind:string;id:string}) => {
       if(kind!=='stages' || id!=='evt_a') throw Error('请求了其他记录')
-      return { decisions:[{kind:'title',label:'闪现标题',seconds:2,kept:false}],
+      return { decisions:[{kind:'application',label:'Editor',seconds:90,kept:true},{kind:'title',label:'闪现标题',seconds:2,kept:false}],
         retained:{work_objects:['议程文档']},
         parts:[{kind:'observation',text:'会议电脑 · 议程文档',round_id:'1',delivered:false}],
         rounds:[{id:'1',status:'ready',input:'来自上一轮的摘要和本轮新增记录',summary:'已保存的模型摘要'}],
@@ -528,6 +528,8 @@ test('a visit separates original JSON and attachments, filter decisions and rule
   await page.getByText('first.jpg', {exact: true}).scrollIntoViewIfNeeded()
   await expect(page.getByRole('img',{name:'first.jpg'})).toBeVisible()
   await expect(page.getByRole('row').filter({hasText:'闪现标题'})).toContainText('过滤')
+  await expect(detail.getByRole('row')).toHaveCount(2)
+  await expect(detail.getByText(/个短停留标题|应用或窗口标题停留/)).toHaveCount(0)
   await detail.getByText('查看过滤后保留的字段').click()
   await expect(detail.locator('section').nth(1).locator('pre')).toHaveText(JSON.stringify({work_objects:['议程文档']},null,2))
   await expect(page.getByText('会议电脑 · 议程文档')).toBeVisible()
@@ -564,7 +566,8 @@ test('stage selection follows the record and ignores late responses for another 
   await filter.selectOption('filtered')
   await expect(list.locator('.trace-toggle')).toHaveCount(1)
   await list.getByRole('button',{name:/QQ/}).click()
-  await expect(page.getByRole('row').filter({hasText:'QQ'})).toContainText('过滤（5 秒及以内）')
+  await expect(page.getByText('整次停留已过滤')).toBeVisible()
+  await expect(page.getByRole('table')).toHaveCount(0)
   await filter.selectOption('partial')
   await expect(page.getByRole('status')).toContainText('没有符合此筛选条件')
   await filter.selectOption('filtered')
@@ -652,7 +655,7 @@ test('a completed AI round appears on refresh and links back to its source befor
   const ref = {id:'round-8',occurred_at:time,generated_at:time,usage}
   const earlier = {id:'round-3',occurred_at:'2026-11-17T08:00:00Z',generated_at:null,
     usage:{...usage,devices:['mobile'],duration_seconds:51}}
-  const summary = '先查看清单，随后打开部署文档。'
+  const summary = '先查看清单，随后打开部署文档。'.repeat(100) + '\n完整摘要的最后一行。'
   const input = '09:10 清单；09:12 部署文档。'
   const visit = {...item('evt_a','清单'),occurred_at:'2026-11-17T09:10:00Z',
     usage:{tokens:37,budget:800,devices:['pc'],duration_seconds:15},

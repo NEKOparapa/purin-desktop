@@ -141,7 +141,7 @@ export interface PerceptionStages {
   record?: HistoryItem
   context_messages?: ContextMessageRef[]
   dwell_threshold_seconds?: number
-  filter_reason?: 'wintermute_app' | null
+  filter_reason?: 'wintermute_app' | 'short_dwell' | null
   decisions: { kind: 'application' | 'title'; label: string; seconds: number; kept: boolean }[]
   retained: unknown
   parts: { kind: 'observation' | 'visual'; text: string; delivered: boolean; round_id: string | null }[]
@@ -180,7 +180,12 @@ export interface TraceMember {
   usage?: TimelineUsage
 }
 export interface TracePage extends ResultsPage<TraceMember> {
-  round?: { input: string; summary: string | null; previous_summary?: SummaryRoundRef | null }
+  round?: {
+    input: string
+    summary: string | null
+    archived_text_only?: boolean
+    previous_summary?: SummaryRoundRef | null
+  }
   text: string | null
   written_at: string | null
 }

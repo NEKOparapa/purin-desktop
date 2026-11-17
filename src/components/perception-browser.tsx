@@ -30,58 +30,42 @@ const outcomes = {
 function RuleResult({ data }: { data: PerceptionStages }) {
   if (data.filter_reason === 'wintermute_app')
     return <p>Wintermute 自身活动固定整条过滤。</p>
-  if (!data.parts.length)
+  if (!data.parts.length && data.filter_reason !== 'short_dwell')
     return <p className="stage-note">这次上报没有在本会话形成新的活动记录。</p>
   // Servers predating per-record thresholds used three seconds.
   const threshold = data.dwell_threshold_seconds ?? 3
-  const removed = data.decisions.filter((row) => !row.kept).length
+  const titles = data.decisions.filter((row) => row.kind === 'title')
   return (
     <>
-      <p>
-        {data.retained === null
-          ? '整次停留已过滤'
-          : removed
-            ? `已过滤 ${removed} 个短停留标题`
-            : '保留这条观测'}
-      </p>
-      {data.decisions.length > 0 && (
-        <>
-          <p className="stage-note">
-            应用或窗口标题停留 {threshold} 秒及以内会被过滤。
-          </p>
-          <table className="rule-decisions">
-            <thead>
-              <tr>
-                <th>工作对象</th>
-                <th>停留</th>
-                <th>结果</th>
+      {data.retained === null && <p>整次停留已过滤</p>}
+      {titles.length > 0 && (
+        <table className="rule-decisions">
+          <thead>
+            <tr>
+              <th>工作对象</th>
+              <th>停留</th>
+              <th>结果</th>
+            </tr>
+          </thead>
+          <tbody>
+            {titles.map((row, index) => (
+              <tr key={index} data-kept={row.kept}>
+                <td>{row.label}</td>
+                <td>
+                  {row.seconds.toLocaleString('zh-CN', {
+                    maximumFractionDigits: 6,
+                  })}{' '}
+                  秒
+                </td>
+                <td>
+                  {row.kept
+                    ? `保留（超过 ${threshold} 秒）`
+                    : `过滤（${threshold} 秒及以内）`}
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {data.decisions.map((row, index) => (
-                <tr key={index} data-kept={row.kept}>
-                  <td>
-                    <small>
-                      {row.kind === 'application' ? '应用' : '标题'}
-                    </small>
-                    {row.label}
-                  </td>
-                  <td>
-                    {row.seconds.toLocaleString('zh-CN', {
-                      maximumFractionDigits: 6,
-                    })}{' '}
-                    秒
-                  </td>
-                  <td>
-                    {row.kept
-                      ? `保留（超过 ${threshold} 秒）`
-                      : `过滤（${threshold} 秒及以内）`}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </>
+            ))}
+          </tbody>
+        </table>
       )}
       {data.retained !== null && (
         <details className="stage-disclosure">
@@ -100,7 +84,7 @@ function Formatted({ data }: { data: PerceptionStages }) {
   if (!parts.length)
     return (
       <p className="stage-note">
-        {data.parts.length || data.filter_reason === 'wintermute_app'
+        {data.parts.length || data.filter_reason
           ? '整条记录已过滤，没有生成压缩文本。'
           : '这条记录没有生成压缩文本。'}
       </p>

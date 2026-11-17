@@ -487,11 +487,9 @@
 .stage-disclosure pre { max-height: 32rem; overflow: auto; }
 .rule-decisions { width: 100%; margin: 13px 0; border-collapse: collapse; font-size: 13px; }
 .rule-decisions th, .rule-decisions td { padding: 6px 3px; text-align: left; border-bottom: 1px solid var(--line); }
-.rule-decisions th, .rule-decisions small { font-size: 12px; font-weight: 450; color: var(--muted); }
-.rule-decisions td small { display: block; }
+.rule-decisions th { font-size: 12px; font-weight: 450; color: var(--muted); }
 .rule-decisions td:not(:first-child) { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .rule-decisions tr[data-kept='false'] td:first-child { color: var(--muted); text-decoration: line-through; }
-.rule-decisions tr[data-kept='false'] td small { text-decoration: none; }
 @container (max-width: 630px) {
   .trace-detail { margin-left: 14px; }
   .trace-status { font-size: 11px; }
