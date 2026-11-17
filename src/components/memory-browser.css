@@ -428,9 +428,6 @@
   container-type: inline-size;
 }
 
-.perception-interval,
-.perception-title span,
-.perception-details small,
 .history-screenshot figcaption {
   color: var(--muted);
   font-size: 12px;
@@ -463,7 +460,7 @@
 .trace-toggle:not([data-kind='visit']) .trace-point { width: 17px; height: 17px; border: 0; color: var(--primary); }
 .trace-toggle[data-kind='summary'] .trace-point { color: var(--notification); }
 .trace-detail { margin: 0 0 8px calc(var(--axis-left) + 15px); padding: 0 14px; border: 1px solid var(--line); border-radius: 8px; overflow-wrap: anywhere; }
-.perception-stage > section + section, .perception-stage > details + section { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 12px; }
+.perception-stage > section + section { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 12px; }
 .trace-group { padding: 8px 0; }
 .trace-group h4 { font-size: 13px; font-weight: 550; margin: 6px 0; }
 .trace-members { list-style: none; padding: 0; margin: 0 0 9px; font-size: 13px; }
@@ -474,16 +471,18 @@
 .perception-stage h3 { font-size: 15px; font-weight: 600; }
 .stage-note, .stage-disclosure summary { color: var(--muted); font-size: 13px; }
 .stage-note { margin: 5px 0; }
-.stage-text, .stage-summary { margin-top: 8px; white-space: pre-wrap; }
+.stage-text { margin-top: 8px; white-space: pre-wrap; }
 .stage-text {
   padding: 12px 14px;
   border-left: 2px solid var(--line);
   font: inherit;
   background: var(--hover);
 }
-.stage-caption { flex-wrap: wrap; }
+.stage-caption { font-size: 13px; color: var(--muted); }
 .stage-section + .stage-section { margin-top: 20px; }
-.stage-link, .stage-disclosure { margin-top: 15px; }
+.stage-disclosure { margin-top: 8px; }
+.trace-shortcuts { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.trace-shortcuts:not(:empty) { margin-top: 10px; }
 .stage-disclosure summary { width: fit-content; cursor: pointer; }
 .stage-disclosure pre { max-height: 32rem; overflow: auto; }
 .rule-decisions { width: 100%; margin: 13px 0; border-collapse: collapse; font-size: 13px; }
@@ -497,35 +496,12 @@
   .trace-detail { margin-left: 14px; }
   .trace-status { font-size: 11px; }
 }
-.perception-title {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 5px 12px;
-}
-.perception-interval { font-variant-numeric: tabular-nums; }
-.perception-details { margin-top: 14px; }
-.perception-details h4, .compression-summary h5 {
+.compression-summary h5 {
   margin: 0 0 6px;
   font-size: 12px;
   font-weight: 600;
   color: var(--muted);
 }
-.perception-details > ol {
-  padding: 0;
-  margin: 0;
-  list-style: none;
-}
-.perception-details > ol > li {
-  display: grid;
-  grid-template-columns: 7ch minmax(0, 1fr);
-  align-items: baseline;
-  gap: 16px;
-  margin: 7px 0;
-  font-size: 14px;
-}
-.perception-details > ol > li > time { margin-left: 0; }
-.perception-details li p { margin-top: 0; }
 .perception-json {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -537,10 +513,6 @@
   border-radius: 6px;
   background: var(--hover);
 }
-.perception-fields { margin: 8px 0 0; }
-.perception-fields div { display: grid; grid-template-columns: minmax(5em, 24%) 1fr; gap: 12px; padding: 3px 0; }
-.perception-fields dt { font-size: 13px; color: var(--muted); }
-.perception-fields dd { white-space: pre-wrap; font-size: 14px; }
 .history-screenshot figure { width: min(100%, 640px); margin: 5px 0; }
 .history-image-surface {
   display: grid;

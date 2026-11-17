@@ -35,13 +35,13 @@ function RuleResult({ data }: { data: PerceptionStages }) {
   const removed = data.decisions.filter((row) => !row.kept).length
   return (
     <>
-      <h3>
+      <p>
         {data.retained === null
           ? '整次停留已过滤'
           : removed
             ? `已过滤 ${removed} 个短停留标题`
             : '保留这条观测'}
-      </h3>
+      </p>
       {data.decisions.length > 0 && (
         <>
           <p className="stage-note">
@@ -83,7 +83,7 @@ function RuleResult({ data }: { data: PerceptionStages }) {
       )}
       {data.retained !== null && (
         <details className="stage-disclosure">
-          <summary>规则处理后的字段</summary>
+          <summary>查看过滤后保留的字段</summary>
           <pre className="perception-json">
             {JSON.stringify(data.retained, null, 2)}
           </pre>
@@ -99,117 +99,21 @@ function Formatted({ data }: { data: PerceptionStages }) {
     return (
       <p className="stage-note">
         {data.parts.length
-          ? '整条记录已被规则过滤，没有生成时间线文字。'
-          : '本会话没有这次上报的时间线文字。'}
+          ? '整条记录已过滤，没有生成压缩文本。'
+          : '这条记录没有生成压缩文本。'}
       </p>
     )
   return (
     <>
       {parts.map((part) => (
-        <section key={part.kind} className="stage-section">
+        <div key={part.kind} className="stage-section">
           <div className="stage-caption">
-            <h3>{part.kind === 'visual' ? '截图识别补充' : '观测记录'}</h3>
-            <small>{size(part.text)} 估算单位</small>
+            <span>{part.kind === 'visual' ? '截图识别补充' : '规则压缩文本'}</span>
+            <small>约 {size(part.text)} tokens</small>
           </div>
           <pre className="stage-text">{part.text}</pre>
-        </section>
+        </div>
       ))}
-    </>
-  )
-}
-
-const roundStatus = {
-  pending: '等待摘要结果',
-  ready: '摘要已生成',
-  retrying: '生成失败，等待重试',
-  disabled: 'AI 压缩已关闭',
-}
-
-function AIResult({
-  data,
-  eventId,
-  navigation,
-}: {
-  data: PerceptionStages
-  eventId: string
-  navigation: TraceNavigation
-}) {
-  const remaining = data.parts.filter(
-    (part) => part.text && part.round_id === null,
-  )
-  const accumulating = remaining.some((part) => !part.delivered)
-  return (
-    <>
-      {data.rounds.map((round) => (
-        <section key={round.id} className="stage-section">
-          <div className="stage-caption">
-            <h3>本轮滚动摘要</h3>
-            <small>{roundStatus[round.status]}</small>
-          </div>
-          {data.parts.length > 1 && (
-            <p className="stage-note">
-              本轮纳入
-              {data.parts
-                .filter((part) => part.round_id === round.id)
-                .map((part) =>
-                  part.kind === 'visual' ? '截图识别补充' : '观测记录',
-                )
-                .join('、')}
-            </p>
-          )}
-          {round.summary && <p className="stage-summary">{round.summary}</p>}
-          {round.timeline_entry && round.summary && (
-            <button
-              className="history-inline"
-              onClick={() => navigation.openSummary(round.timeline_entry!)}
-            >
-              在时间轴查看这次摘要 ↗
-            </button>
-          )}
-          <p className="stage-note">
-            本轮输入 {size(round.input)}
-            {round.summary ? ` → 输出 ${size(round.summary)}` : ''} 估算单位
-          </p>
-          {data.context_messages && (
-            <PerceptionLinks
-              target={'round-' + round.id}
-              eventId={eventId}
-              {...navigation}
-            />
-          )}
-          <details className="stage-disclosure">
-            <summary>查看本轮完整输入</summary>
-            <pre className="stage-text">{round.input}</pre>
-          </details>
-        </section>
-      ))}
-      {accumulating && (
-        <section className="stage-section">
-          <h3>
-            {!data.ai_enabled
-              ? 'AI 压缩已关闭'
-              : data.pending_size > data.budget
-                ? '已超预算，等待后台处理'
-                : '尚未超过压缩预算'}
-          </h3>
-          <p className="stage-note">
-            当前会话待处理 {data.pending_size.toLocaleString()} /{' '}
-            {data.budget.toLocaleString()} 估算单位
-          </p>
-        </section>
-      )}
-      {remaining.some((part) => part.delivered) && (
-        <p className="stage-note">
-          本次活动已有投递回执，对应文字没有单独保存的 AI 摘要。
-        </p>
-      )}
-      {!data.rounds.length && !remaining.length && (
-        <p className="stage-note">
-          {data.parts.length
-            ? '规则已过滤这条记录，无需 AI 压缩。'
-            : '本会话没有可用于压缩的新观测。'}
-        </p>
-      )}
     </>
   )
 }
@@ -269,13 +173,11 @@ function VisitDetails({
   }, [id, needsRecord, revision, retry])
   const raw = item ?? data?.record
   const messages = data?.context_messages ?? raw?.context_messages
-  const nonempty = data?.parts.filter((part) => part.text)
-  const pending = nonempty?.some((part) => !part.delivered)
   return (
     <div className="perception-stage">
       {raw && (
         <section>
-          <h3>采到了什么</h3>
+          <h3>原始信息</h3>
           <PerceptionRecord item={raw} />
         </section>
       )}
@@ -288,64 +190,34 @@ function VisitDetails({
       {data && (
         <>
           <section>
-            <h3>哪些信息被过滤</h3>
+            <h3>过滤处理</h3>
             <RuleResult data={data} />
           </section>
-          {nonempty && nonempty.length > 0 && (
-            <details className="stage-disclosure">
-              <summary>查看规则处理后的活动文字</summary>
-              <Formatted data={data} />
-            </details>
-          )}
-          {!!data.rounds.length && (
-            <section>
-              <h3>摘要合并</h3>
-              <AIResult data={data} eventId={id} navigation={navigation} />
-            </section>
-          )}
           <section>
-            <h3>最终进入上下文</h3>
-            {messages?.map((message) => (
-              <div key={message.id}>
-                {message.parts?.length && data.parts.length > 1 && (
-                  <p className="stage-note">
-                    {message.parts
-                      .map((part) =>
-                        part === 'visual' ? '截图识别补充' : '停留记录',
-                      )
-                      .join('、')}
-                  </p>
-                )}
-                <PerceptionLinks
-                  target={message.id}
-                  eventId={id}
-                  message={message}
-                  {...navigation}
-                />
-              </div>
-            ))}
-            {pending && (
-              <p className="stage-note">
-                {messages?.length
-                  ? '另有活动文字等待写入会话。'
-                  : '活动文字已生成，等待写入会话。'}
-              </p>
-            )}
-            {!messages?.length && !pending && (
-              <p className="stage-note">
-                {!data.parts.length
-                  ? '本会话没有由这次采集生成的活动文字。'
-                  : !nonempty?.length
-                    ? '整条被过滤，没有上下文原文。'
-                    : '已有处理回执，无法定位当时的上下文原文。'}
-              </p>
-            )}
-            {!data.rounds.length && pending && (
-              <details className="stage-disclosure">
-                <summary>查看压缩进度</summary>
-                <AIResult data={data} eventId={id} navigation={navigation} />
-              </details>
-            )}
+            <h3>压缩处理</h3>
+            <Formatted data={data} />
+            <div className="trace-shortcuts">
+              {data.rounds.map(({ timeline_entry: ref }) => ref && (
+                <button
+                  key={ref.id}
+                  className="history-inline"
+                  onClick={() => navigation.openSummary(ref)}
+                >
+                  查看关联摘要
+                  {data.rounds.length > 1 && ' · ' + clock.format(new Date(ref.occurred_at))} ↗
+                </button>
+              ))}
+              {messages?.map((ref) => (
+                <button
+                  key={ref.id}
+                  className="history-inline"
+                  onClick={() => navigation.openMessage(ref)}
+                >
+                  查看上下文原文
+                  {messages.length > 1 && ref.parts?.includes('visual') && ' · 截图识别补充'} ↗
+                </button>
+              ))}
+            </div>
           </section>
         </>
       )}

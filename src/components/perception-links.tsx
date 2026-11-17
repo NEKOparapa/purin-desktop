@@ -16,15 +16,10 @@ export type TraceNavigation = {
 
 export function PerceptionLinks({
   target,
-  message,
-  eventId,
   openMember,
-  openMessage,
   openSummary,
-}: TraceNavigation & {
+}: Pick<TraceNavigation, 'openMember' | 'openSummary'> & {
   target: string
-  message?: ContextMessageRef
-  eventId?: string
 }) {
   const fetch = useCallback(
     (cursor?: string) => {
@@ -45,7 +40,7 @@ export function PerceptionLinks({
     <section className="trace-group">
       {page && (
         <>
-          {round && !eventId && page.round && (
+          {round && page.round && (
             <>
               <h4>AI 摘要原文</h4>
               <pre className="stage-text">{page.round.summary}</pre>
@@ -78,9 +73,7 @@ export function PerceptionLinks({
                 .join(' · ')
               return (
                 <li key={member.id}>
-                  {member.event_id === eventId ? (
-                    <span>{label}（本条）</span>
-                  ) : member.event_id ? (
+                  {member.event_id ? (
                     <button
                       className="history-inline"
                       onClick={() => openMember(member)}
@@ -111,14 +104,6 @@ export function PerceptionLinks({
         <>
           <h4>写入上下文的整段原文</h4>
           <pre className="stage-text">{page.text}</pre>
-          {message && (
-            <button
-              className="history-inline"
-              onClick={() => openMessage(message)}
-            >
-              定位这条时间线消息 ↗
-            </button>
-          )}
         </>
       )}
     </section>
