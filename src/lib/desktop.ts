@@ -144,7 +144,7 @@ export interface PerceptionStages {
   filter_reason?: 'wintermute_app' | 'short_dwell' | null
   decisions: { kind: 'application' | 'title'; label: string; seconds: number; kept: boolean }[]
   retained: unknown
-  parts: { kind: 'observation' | 'visual'; text: string; delivered: boolean; round_id: string | null }[]
+  parts: { kind: 'observation' | 'visual'; text: string; tokens?: number; delivered: boolean; round_id: string | null }[]
   rounds: { id: string; status: 'pending' | 'ready' | 'retrying' | 'disabled'; input: string; summary: string | null; timeline_entry?: SummaryRoundRef | null }[]
   ai_enabled: boolean
   budget: number
@@ -153,6 +153,7 @@ export interface PerceptionStages {
 
 export interface TimelineUsage {
   tokens: number
+  tokenizer?: 'deepseek-v4'
   budget: number
   devices: string[]
   duration_seconds: number | null

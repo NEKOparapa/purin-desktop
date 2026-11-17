@@ -651,7 +651,7 @@ test('a visit opens the stored message and follows a peer outside the loaded pag
 
 test('a completed AI round appears on refresh and links back to its source before context delivery', async ({page}) => {
   const time = '2026-11-17T09:15:00Z'
-  const usage = {tokens:45,budget:300,devices:['pc','mobile'],duration_seconds:66}
+  const usage = {tokens:45,tokenizer:'deepseek-v4' as const,budget:300,devices:['pc','mobile'],duration_seconds:66}
   const ref = {id:'round-8',occurred_at:time,generated_at:time,usage}
   const earlier = {id:'round-3',occurred_at:'2026-11-17T08:00:00Z',generated_at:null,
     usage:{...usage,devices:['mobile'],duration_seconds:51}}
@@ -682,7 +682,7 @@ test('a completed AI round appears on refresh and links back to its source befor
   ready = true
   await page.evaluate(()=>window.dispatchEvent(new Event('focus')))
   await expect(page.locator('.trace-title strong')).toHaveText(['AI 摘要','Editor'])
-  await expect(page.locator('.trace-budget')).toHaveText(['约 45 tokens','约 37 tokens'])
+  await expect(page.locator('.trace-budget')).toHaveText(['45 tokens','约 37 tokens'])
   await expect(page.locator('.trace-title small')).toHaveText([
     '来源设备 pc、mobile · 使用时长 1 分钟 6 秒','来源设备 pc · 使用时长 15 秒'])
   await page.locator('.trace-toggle[data-kind="summary"]').click()

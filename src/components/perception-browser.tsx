@@ -17,8 +17,6 @@ const clock = new Intl.DateTimeFormat('zh-CN', {
   timeStyle: 'medium',
   hour12: false,
 })
-const size = (text: string) =>
-  new TextEncoder().encode(text).length.toLocaleString('zh-CN')
 
 const outcomes = {
   filtered: '整条过滤',
@@ -95,7 +93,7 @@ function Formatted({ data }: { data: PerceptionStages }) {
         <div key={part.kind} className="stage-section">
           <div className="stage-caption">
             <span>{part.kind === 'visual' ? '截图识别补充' : '规则压缩文本'}</span>
-            <small>约 {size(part.text)} tokens</small>
+            {part.tokens != null && <small>{part.tokens.toLocaleString('zh-CN')} tokens</small>}
           </div>
           <pre className="stage-text">{part.text}</pre>
         </div>
@@ -402,9 +400,9 @@ export function PerceptionBrowser({
                   <span className="trace-title-line">
                     <strong>{row.title}</strong>
                     <span className="trace-budget"
-                      title="按 UTF-8 字节估算的文本用量">
+                      title={usage?.tokenizer ? 'DeepSeek 分词器统计的文本用量' : undefined}>
                       {usage
-                        ? `约 ${usage.tokens.toLocaleString('zh-CN')} tokens`
+                        ? `${usage.tokenizer ? '' : '约 '}${usage.tokens.toLocaleString('zh-CN')} tokens`
                         : 'token 数未记录'}
                     </span>
                   </span>
