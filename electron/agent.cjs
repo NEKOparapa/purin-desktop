@@ -2,26 +2,22 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { randomUUID, createHash } = require('node:crypto')
 const {
-  prepareShare,
-  sliceBody,
   submitMaterial,
-  mediaPath,
   framePath,
   removeMaterialFiles,
   desktopWindowRoute,
 } = require('./materials.cjs')
 const {
   advanceWindowSpan,
-  migrateWindowSlice,
   minDwellMs,
+  maxSampleGap,
 } = require('./window-spans.cjs')
-const { BrowserBridge } = require('./browser-bridge.cjs')
-const { canSample, observeFrame, finishFrames } = require('./representative-frames.cjs')
+const { newTitleRun, sameTitle, nextFrameAt, saveSample, finishTitle, discardSamples } = require('./representative-frames.cjs')
 const { saveHistoryFile, readHistoryImage } = require('./history.cjs')
 const { ChatHistory } = require('./chat-history.cjs')
 const { notificationPath, pageRoute, validatePage, deliverPending } = require('./notifications.cjs')
 const initialProfileMarkdown = require('./profile-template.json')
-const captureVersion = 5
+const captureVersion = 6
 
 function read(file, fallback) {
   try {
@@ -37,9 +33,19 @@ function save(file, value) {
   fs.renameSync(file + '.tmp', file)
 }
 
-function recordWindow(profile, sample, at) {
+function recordWindow(profile, sample, at, target) {
   const history = profile.history
   const previous = history.windowSpan
+  const title = sample?.window_title || ''
+  const eligible = profile.screenshotsEnabled && sample?.activity === 'active' &&
+    target && target.pid !== process.pid
+  const gap = at.getTime() - Date.parse(previous?.lastSeen)
+  const interrupted = gap > maxSampleGap || gap < 0
+  let discarded = []
+  if (previous?.titleRun && (interrupted || !eligible || previous.app !== sample.foreground_app ||
+    !sameTitle(previous.titleRun, title, target))) {
+    discarded = finishTitle(previous, interrupted ? previous.lastSeen : at.toISOString())
+  }
   const { active, candidate, finished } = advanceWindowSpan(
     previous,
     profile.windowCandidate,
@@ -47,8 +53,7 @@ function recordWindow(profile, sample, at) {
     at,
   )
   if (finished) {
-    const frames = finishFrames(profile, previous, finished.occurred_at,
-      () => save(profile.file, history))
+    const frames = previous.frames ?? []
     history.materials.push({
       id: finished.event_id,
       kind: 'perception',
@@ -60,34 +65,15 @@ function recordWindow(profile, sample, at) {
   }
   history.windowSpan = active
   profile.windowCandidate = candidate
-  return finished
-}
-
-// A pre-upgrade screenshot can be recovered only if its original dwell is still queued.
-function attachQueuedScreenshots(history, images, mediaDirectory) {
-  const owners = new Map(history.materials
-    .filter(item => item.source === 'window' && item.body?.state_key === 'desktop.window_span')
-    .map(item => [item.id, item]))
-  if (history.windowSpan) owners.set(history.windowSpan.id, history.windowSpan)
-  const unused = []
-  for (const image of images) {
-    const owner = owners.get(image.context?.activity_id)
-    const file = framePath({ mediaDirectory }, image.id)
-    const span = owner?.body?.value ?? owner
-    const start = Date.parse(span?.started_at ?? span?.start)
-    const end = Date.parse(span?.ended_at ?? span?.awaySince ?? span?.lastSeen)
-    const at = Date.parse(image.at)
-    const bytes = fs.statSync(file, { throwIfNoEntry: false })?.size
-    const frames = owner?.frames ?? []
-    // Old JPEGs can be 4 MiB each. Keep the combined JSON within the existing proxy limit.
-    const totalBytes = frames.reduce((sum, frame) => sum + frame.bytes, 0)
-    if (owner && start <= at && at <= end && bytes > 0 && frames.length < 4 &&
-        totalBytes + bytes <= 5 * 1024 * 1024) {
-      frames.push({ id: image.id, occurred_at: image.at, window_title: image.context.title, bytes })
-      owner.frames = frames.sort((a, b) => Date.parse(a.occurred_at) - Date.parse(b.occurred_at))
-    } else unused.push(file)
+  const current = candidate ?? active
+  if (current && eligible && !sameTitle(current.titleRun, title, target))
+    current.titleRun = newTitleRun(title, target, at.toISOString())
+  if (candidate && !eligible) delete candidate.titleRun
+  if (discarded.length) {
+    save(profile.file, history)
+    discardSamples(profile, discarded)
   }
-  return unused
+  return finished
 }
 
 function migrateCaptureSettings(dir, configFile, settings) {
@@ -108,39 +94,37 @@ function migrateCaptureSettings(dir, configFile, settings) {
     let changed = Object.hasOwn(history, 'lastAgenda')
     delete history.lastAgenda
     // v3 used this queue exclusively for live desktop.activity observations.
-    // Completed spans and explicit shares have their own durable materials queue.
-    for (const field of ['pending', 'lastObserved', 'lastSent']) {
+    for (const field of ['pending', 'lastObserved', 'lastSent', 'browserReceipts', 'processing']) {
       if (Object.hasOwn(history, field)) {
         delete history[field]
         changed = true
       }
     }
-    if (history.lastMaterial?.label === '日历安排') {
+    if (history.lastMaterial && history.lastMaterial.label !== '前台停留') {
       delete history.lastMaterial
       changed = true
     }
     if (history.materials) {
-      const retained = history.materials.filter(
-        (item) =>
-          item.source !== 'calendar' &&
-          item.body?.state_key !== 'desktop.calendar',
-      )
-      if (retained.length !== history.materials.length) changed = true
-      history.materials = retained.map((item) => {
-        if (item.source !== 'window' || item.kind !== 'slice') return item
+      const retained = history.materials.filter(item =>
+        item.source === 'window' && item.kind === 'perception' &&
+        item.body?.state_key === 'desktop.window_span')
+      if (retained.length !== history.materials.length) {
+        history.materials = retained
         changed = true
-        return migrateWindowSlice(item)
-      })
+      }
     }
-    const oldImages = history.materials?.filter(item => item.source === 'screenshot') ?? []
-    if (oldImages.length) {
-      const mediaDirectory = path.join(dir, 'media-' + path.parse(name.name).name.slice('terminal-'.length))
-      const unused = attachQueuedScreenshots(history, oldImages, mediaDirectory)
-      history.materials = history.materials.filter(item => item.source !== 'screenshot')
-      save(file, history)
-      for (const file of unused) fs.rmSync(file, { force: true })
-    } else if (changed) save(file, history)
+    if (changed) save(file, history)
+    const mediaDirectory = path.join(dir, 'media-' + path.parse(name.name).name.slice('terminal-'.length))
+    // Old explicit-share attachments lived directly in this profile's media directory.
+    // Current automatic frames live under periodic/.
+    if (fs.existsSync(mediaDirectory)) {
+      for (const entry of fs.readdirSync(mediaDirectory, { withFileTypes: true })) {
+        if (entry.isFile() && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(entry.name))
+          fs.unlinkSync(path.join(mediaDirectory, entry.name))
+      }
+    }
   }
+  delete settings.browserSecret
   delete settings.calendarFile
   delete settings.calendarSecret
   delete settings.windowTitles
@@ -192,15 +176,12 @@ async function fetchResponse(profile, route, options) {
   return response
 }
 
-async function request(profile, route, body, signal, binaryHeaders) {
-  // The compound receipt is issued after the vision model processes up to four frames.
-  const timeout = AbortSignal.timeout(route === desktopWindowRoute ? 600000 : binaryHeaders ? 60000 : 8000)
+async function request(profile, route, body, signal) {
+  const timeout = AbortSignal.timeout(route.startsWith(desktopWindowRoute) ? 600000 : 8000)
   const response = await fetchResponse(profile, route, {
     method: body === undefined ? 'GET' : 'POST',
-    headers:
-      binaryHeaders ??
-      (body === undefined ? {} : { 'Content-Type': 'application/json' }),
-    body: binaryHeaders ? body : JSON.stringify(body),
+    headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
     signal: signal ? AbortSignal.any([timeout, signal]) : timeout,
   })
   return response.json()
@@ -235,14 +216,16 @@ class DesktopAgent {
     this.open(settings, token)
     this.pollTimer = setInterval(() => this.sync(), 2200)
     if (presentNotifications) this.notificationTimer = setInterval(() => this.pollNotifications(), 5000)
-    this.captureTimer = setInterval(() => this.capture(), 15000)
+    this.captureTimer = setInterval(() => {
+      const p = this.profile
+      if (p.screenshotsEnabled || Date.now() >= (p.nextActivityPoll || 0)) void this.capture()
+    }, 1000)
     this.sync()
     this.capture()
   }
 
   open(settings, token) {
     this.finishWindow()
-    if (this.profile?.bridge) void this.profile.bridge.stop()
     this.profile?.controller.abort()
     this.profile?.captureController.abort()
     const key = createHash('sha256')
@@ -274,13 +257,9 @@ class DesktopAgent {
     p.history.outbox ??= []
     p.history.materials ??= []
     p.screenshotsEnabled = !!(p.collecting && p.screenshotsEnabled)
-    p.screenshotMinutes = [1, 5, 15].includes(p.screenshotMinutes)
-      ? p.screenshotMinutes
-      : 5
     p.screenshotEpoch = 0
-    p.nextScreenshot = 0
-    if (!p.screenshotsEnabled && (p.history.windowSpan?.frames?.length ||
-        p.history.materials.some(item => item.source === 'screenshot' || item.frames?.length))) {
+    if (!p.screenshotsEnabled && (p.history.windowSpan?.titleRun || p.history.windowSpan?.frames?.length ||
+        p.history.materials.some(item => item.frames?.length))) {
       this.dropAutomatic(p, 'screenshot')
       save(p.file, p.history)
     }
@@ -288,16 +267,14 @@ class DesktopAgent {
     const directory = path.join(p.mediaDirectory, 'periodic')
     if (fs.existsSync(directory)) {
       const queued = new Set((p.history.windowSpan?.frames || []).map(frame => frame.id))
+      for (const frame of p.history.windowSpan?.titleRun?.samples || []) queued.add(frame.id)
       for (const item of p.history.materials) {
-        if (item.source === 'screenshot') queued.add(item.id)
         for (const frame of item.frames || []) queued.add(frame.id)
       }
       for (const id of fs.readdirSync(directory))
         if (/^[0-9a-f-]{36}$/.test(id) && !queued.has(id))
           fs.rmSync(path.join(directory, id), { force: true })
     }
-    p.history.processing ??= []
-    p.history.browserReceipts ??= []
     if (
       !p.collecting &&
       (p.history.windowSpan ||
@@ -312,10 +289,6 @@ class DesktopAgent {
       recordWindow(p, null, new Date(end))
       save(p.file, p.history)
     }
-    p.bridge = new BrowserBridge({
-      onCapture: (event) => this.browserCapture(p, event),
-    })
-    if (p.browserSecret && p.token) this.restoreBridge(p)
   }
 
   state() {
@@ -328,17 +301,12 @@ class DesktopAgent {
       configured: !!p.token,
       collecting: !!p.collecting,
       screenshotsEnabled: !!p.screenshotsEnabled,
-      screenshotMinutes: p.screenshotMinutes,
       screenshotIssue: p.screenshotIssue || '',
-      browserEnabled: !!p.browserSecret,
-      browserIssue: p.browserIssue || '',
       pendingMaterials: p.history.materials.length,
       materialIssue: p.materialIssue || '',
       lastMaterial: p.history.lastMaterial || null,
       failedMaterial:
         p.history.materials.find((item) => item.error)?.id || null,
-      processing: p.history.processing.length,
-      processingIssue: p.processingIssue || '',
       issue: p.issue,
       sampleIssue: p.sampleIssue,
       lastSpan: p.history.lastSpan ?? null,
@@ -734,10 +702,8 @@ class DesktopAgent {
       secret: p.secret,
       collecting: !!p.collecting,
       screenshotsEnabled: !!p.screenshotsEnabled,
-      screenshotMinutes: p.screenshotMinutes,
       appearance: this.appearance,
       captureVersion,
-      browserSecret: p.browserSecret || null,
     }
   }
 
@@ -776,23 +742,19 @@ class DesktopAgent {
     if (enabled) this.capture()
   }
 
-  setScreenshots({ enabled, minutes }) {
+  setScreenshots({ enabled }) {
     const p = this.profile
     if (
       !p.token ||
-      typeof enabled !== 'boolean' ||
-      ![1, 5, 15].includes(minutes)
+      typeof enabled !== 'boolean'
     )
       throw new Error('截图设置无效')
     if (enabled && (!p.collecting || !this.screenshot))
       throw new Error('请先开启桌面活动采集')
     this.savePreferences({
       screenshotsEnabled: enabled,
-      screenshotMinutes: minutes,
     })
     p.screenshotsEnabled = enabled
-    p.screenshotMinutes = minutes
-    p.nextScreenshot = 0
     p.screenshotEpoch++
     p.screenshotIssue = ''
     if (!enabled) this.dropAutomatic(p, 'screenshot')
@@ -814,12 +776,16 @@ class DesktopAgent {
     p.history.windowSpan = null
   }
 
-  // Remove queued observations when their source is disconnected. Explicit shares survive.
+  // Remove queued observations when their source is disconnected.
   dropAutomatic(p, source) {
     if (p.uploading?.source === source) p.uploadController?.abort()
     const removed = []
     if (source === 'screenshot') {
-      p.frameProbe = null
+      if (p.windowCandidate) delete p.windowCandidate.titleRun
+      if (p.history.windowSpan?.titleRun) {
+        removed.push(...p.history.windowSpan.titleRun.samples)
+        delete p.history.windowSpan.titleRun
+      }
       if (p.history.windowSpan?.frames) {
         removed.push(...p.history.windowSpan.frames)
         delete p.history.windowSpan.frames
@@ -836,8 +802,6 @@ class DesktopAgent {
         item.retryAt = 0
         item.error = ''
       }
-      if (item.source === source && !item.body)
-        fs.rmSync(mediaPath(p, item), { force: true })
     }
     p.history.materials = p.history.materials.filter(
       (item) => item.source !== source,
@@ -850,99 +814,41 @@ class DesktopAgent {
     }
   }
 
-  addMaterial(p, item) {
-    if (p !== this.profile || !p.token || p.controller.signal.aborted)
-      throw new Error('请先连接终端')
-    p.history.materials.push(item)
-  }
-
-  shareMaterial(material) {
-    const p = this.profile
-    if (!p.token) throw new Error('请先连接终端')
-    const item = prepareShare(material, p.mediaDirectory)
-    this.addMaterial(p, item)
-    this.persist(p)
-    void this.flushMaterials(p)
-  }
-
   async flushMaterials(p = this.profile) {
     if (p.flushing || !p.token || p.controller.signal.aborted) return
     p.flushing = true
     try {
-      // Keep each perception source ordered while allowing unrelated uploads to proceed.
-      const waitingKeys = new Set()
+      // Deliver completed visits in capture order.
       for (const item of [...p.history.materials]) {
         if (p.controller.signal.aborted) return
         if (!p.history.materials.includes(item)) continue
-        const key = item.kind === 'perception' ? item.body.state_key : null
-        if (key && waitingKeys.has(key)) continue
-        if (item.retryAt > Date.now() || item.rejected) {
-          if (key) waitingKeys.add(key)
-          continue
-        }
+        if (item.retryAt > Date.now() || item.rejected) break
         p.uploading = item
         p.uploadController = new AbortController()
         try {
-          const receipt = await submitMaterial(
+          await submitMaterial(
             p,
             item,
             request,
             p.uploadController.signal,
           )
           if (!p.history.materials.includes(item)) continue
-          if (!item.body && receipt.event_id && !p.controller.signal.aborted)
-            p.history.processing.push({
-              id: receipt.event_id,
-              kind: item.kind,
-              label: item.label,
-            })
-        } catch (uploadError) {
+        } catch (error) {
           if (p.controller.signal.aborted) return
           if (p.uploadController.signal.aborted || !p.history.materials.includes(item)) continue
-          let error = uploadError
-          // An older server can reject the new shape after accepting this
-          // exact v2 slice. Only an explicit duplicate receipt confirms that.
-          let oldReceipt = false
-          if (
-            item.legacyWindowText &&
-            !item.frames?.length &&
-            error.status === 409 &&
-            error.code === 'event_id_conflict'
-          ) {
-            try {
-              const receipt = await request(
-                p,
-                '/v1/slices',
-                {
-                  event_id: item.body.event_id,
-                  occurred_at: item.body.occurred_at,
-                  text: item.legacyWindowText,
-                },
-                p.uploadController.signal,
-              )
-              oldReceipt = receipt.duplicate === true
-            } catch (retryError) {
-              error = retryError
-            }
-            if (p.controller.signal.aborted) return
-            if (!p.history.materials.includes(item)) continue
-          }
-          if (!oldReceipt) {
-            if (key) waitingKeys.add(key)
-            item.error = item.frames?.length && error.status === 404
-              ? '当前后端尚未支持带图感知。已暂存，升级后将重试。'
-              : error.message
-            item.rejected =
-              [400, 409, 413, 415, 422].includes(error.status) ||
-              error.code === 'ENOENT'
-            item.attempts = (item.attempts || 0) + 1
-            item.retryAt =
-              Date.now() +
-              Math.min(300000, 2000 * 2 ** Math.min(item.attempts, 8))
-            p.materialIssue = item.label + ' · ' + item.error
-            this.persist(p)
-            continue
-          }
+          item.error = item.frames?.length && error.status === 404
+            ? '当前后端尚未支持带图感知。已暂存，升级后将重试。'
+            : error.message
+          item.rejected =
+            [400, 409, 413, 415, 422].includes(error.status) ||
+            error.code === 'ENOENT'
+          item.attempts = (item.attempts || 0) + 1
+          item.retryAt =
+            Date.now() +
+            Math.min(300000, 2000 * 2 ** Math.min(item.attempts, 8))
+          p.materialIssue = item.label + ' · ' + item.error
+          this.persist(p)
+          break
         }
         if (p.controller.signal.aborted) return
         p.history.materials = p.history.materials.filter(
@@ -963,7 +869,6 @@ class DesktopAgent {
         this.persist(p)
         removeMaterialFiles(p, item)
       }
-      await this.checkProcessing(p)
     } catch (error) {
       if (!p.controller.signal.aborted) {
         p.materialIssue = error.message
@@ -972,44 +877,6 @@ class DesktopAgent {
     } finally {
       p.flushing = false
       p.uploading = null
-    }
-  }
-
-  async checkProcessing(p) {
-    if ((p.nextStatusCheck || 0) > Date.now()) return
-    p.nextStatusCheck = Date.now() + 15000
-    let issue = ''
-    for (const entry of [...p.history.processing]) {
-      if (p.controller.signal.aborted) return
-      try {
-        const result = await request(
-          p,
-          '/v1/' + entry.kind + '/slices/' + encodeURIComponent(entry.id),
-          undefined,
-          p.controller.signal,
-        )
-        if (p.controller.signal.aborted) return
-        if (result.status === 'completed') {
-          p.history.processing = p.history.processing.filter(
-            (other) => other !== entry,
-          )
-          this.persist(p)
-        } else if (result.status === 'retrying')
-          issue = entry.label + ' · 后端处理失败，将自动重试'
-      } catch (error) {
-        if (p.controller.signal.aborted) return
-        issue = entry.label + ' · 处理状态暂时不可用'
-        if (error.status === 404) {
-          p.history.processing = p.history.processing.filter(
-            (other) => other !== entry,
-          )
-          this.persist(p)
-        }
-      }
-    }
-    if (p.processingIssue !== issue) {
-      p.processingIssue = issue
-      this.publish()
     }
   }
 
@@ -1032,79 +899,6 @@ class DesktopAgent {
       p.history.materials.find((entry) => entry.error)?.error || ''
     this.persist(p)
     if (retry === false) removeMaterialFiles(p, item)
-    void this.flushMaterials(p)
-  }
-
-  async restoreBridge(p) {
-    try {
-      const code = this.secure.decryptString(
-        Buffer.from(p.browserSecret, 'base64'),
-      )
-      await p.bridge.start(code)
-    } catch {
-      p.browserIssue = '浏览器连接未启动，请关闭后重新配对。'
-      if (p === this.profile) this.publish()
-    }
-  }
-
-  async setBrowser(enabled) {
-    const p = this.profile
-    if (!p.token || typeof enabled !== 'boolean')
-      throw new Error('请先连接终端')
-    if (p.browserChanging) throw new Error('正在更改浏览器连接')
-    p.browserChanging = true
-    try {
-      if (!enabled) {
-        p.browserSecret = null
-        this.dropAutomatic(p, 'browser')
-        this.savePreferences({ browserSecret: null })
-        await p.bridge.stop()
-      } else if (!p.browserSecret) {
-        const code = await p.bridge.start()
-        if (p !== this.profile) {
-          await p.bridge.stop()
-          return
-        }
-        p.browserSecret = this.secure.encryptString(code).toString('base64')
-        this.savePreferences({ browserSecret: p.browserSecret })
-      }
-      p.browserIssue = ''
-      if (p === this.profile) this.persist(p)
-    } finally {
-      p.browserChanging = false
-    }
-  }
-
-  pairingCode() {
-    const p = this.profile
-    if (!p.browserSecret) throw new Error('请先启用浏览器接入')
-    return this.secure.decryptString(Buffer.from(p.browserSecret, 'base64'))
-  }
-
-  browserCapture(p, event) {
-    if (!p.browserSecret || p !== this.profile) throw new Error('浏览器未连接')
-    if (p.history.browserReceipts.includes(event.event_id)) return
-    const auto = event.kind === 'page'
-    const body = auto
-      ? {
-          event_id: event.event_id,
-          occurred_at: event.occurred_at,
-          state_key: 'browser.page',
-          value: event.value,
-        }
-      : sliceBody(event.text, event.occurred_at, event.event_id)
-    this.addMaterial(p, {
-      id: body.event_id,
-      kind: auto ? 'perception' : 'slice',
-      body,
-      source: auto ? 'browser' : 'shared',
-      label: auto ? '浏览器页面' : '浏览器分享',
-    })
-    p.history.browserReceipts = [
-      ...p.history.browserReceipts.slice(-255),
-      body.event_id,
-    ]
-    this.persist(p)
     void this.flushMaterials(p)
   }
 
@@ -1229,40 +1023,45 @@ class DesktopAgent {
       !target ||
       target.pid === process.pid ||
       !span ||
-      span.pendingObject ||
       p.windowCandidate ||
       value.activity !== 'active' ||
-      !canSample(p, span)
+      !span.titleRun ||
+      Date.parse(span.lastSeen) < Math.max(nextFrameAt(span.titleRun), p.retryScreenshotAt || 0)
     )
       return
     const epoch = p.screenshotEpoch
     const valid = () =>
       !signal.aborted && p === this.profile && epoch === p.screenshotEpoch &&
       p.history.windowSpan?.id === span.id
-    // Probe at most once per regular poll. Budget is spent only on selected pictures.
-    p.nextScreenshot = Date.now() + 15000
     try {
       const occurredAt = span.lastSeen
-      const { jpegBase64, signature } = await this.screenshot(target)
+      const { jpegBase64 } = await this.screenshot(target)
       if (!valid()) return
       const after = await this.sample(true)
+      if (!valid()) return
       if (
-        !valid() ||
         after.activity !== 'active' ||
         after.target?.id !== target.id ||
         after.target?.pid !== target.pid ||
         after.foreground_app !== value.foreground_app ||
         after.window_title !== value.window_title
-      )
+      ) {
+        const { target: nextTarget, ...nextValue } = after
+        const finished = recordWindow(p, nextValue, new Date(), nextTarget)
+        if (finished) this.persist(p)
+        else save(p.file, p.history)
         return
-      const title = span.workObjects?.at(-1)?.window_title || value.window_title
-      observeFrame(p, span, { jpegBase64, signature, at: occurredAt, title },
-        () => save(p.file, p.history))
+      }
+      const discarded = saveSample(p, span, jpegBase64, occurredAt)
+      save(p.file, p.history)
+      discardSamples(p, discarded)
+      p.retryScreenshotAt = 0
       if (p.screenshotIssue) {
         p.screenshotIssue = ''
         this.publish()
       }
     } catch (error) {
+      if (valid()) p.retryScreenshotAt = Date.now() + 10_000
       if (valid() && p.screenshotIssue !== error.message) {
         p.screenshotIssue = error.message
         this.publish()
@@ -1277,19 +1076,22 @@ class DesktopAgent {
     p.capturing = true
     let observed = false
     try {
-      const due = p.screenshotsEnabled &&
-        (Date.now() >= p.nextScreenshot || !!p.windowCandidate || !!p.history.windowSpan?.pendingObject)
-      const { target, ...value } = due
+      p.nextActivityPoll = Date.now() + 15_000
+      const { target, ...value } = p.screenshotsEnabled
         ? await this.sample(true)
         : await this.sample()
       if (signal.aborted) return
       const now = new Date()
       const previous = p.history.windowSpan
-      const finished = recordWindow(p, value, now)
+      const finished = recordWindow(p, value, now, target)
       observed = true
       if (finished) this.persist(p)
-      else if (previous || p.history.windowSpan) save(p.file, p.history)
-      if (due) await this.captureScreenshot(p, target, value, signal)
+      else if ((previous || p.history.windowSpan) &&
+        (previous?.titleRun !== p.history.windowSpan?.titleRun || now >= (p.nextCheckpoint || 0))) {
+        save(p.file, p.history)
+        p.nextCheckpoint = now.getTime() + 15_000
+      }
+      if (p.screenshotsEnabled) await this.captureScreenshot(p, target, value, signal)
       if (p.sampleIssue) {
         p.sampleIssue = ''
         this.publish()
@@ -1331,7 +1133,6 @@ class DesktopAgent {
 
   close() {
     this.finishWindow()
-    void this.profile.bridge.stop()
     clearInterval(this.pollTimer)
     clearInterval(this.captureTimer)
     clearInterval(this.notificationTimer)

@@ -17,7 +17,6 @@ import {
 } from 'lucide-react'
 import { Dialog } from '@/components/ui/dialog'
 import { AgentSettings } from '@/components/agent-settings'
-import { SharePanel } from '@/components/share-panel'
 import { ScheduleCalendar } from '@/components/schedule-calendar'
 import { NotificationInbox } from '@/components/notification-inbox'
 import type { NoticeAlert } from '@/lib/desktop'
@@ -299,10 +298,6 @@ function Chat({
             }}
           />
           <div className="composer-tools">
-            <SharePanel
-              key={agent.url + '|' + agent.terminal}
-              configured={agent.configured}
-            />
             <span>
               <CornerDownLeft size={13} />
               发送 <i /> Shift + Enter 换行

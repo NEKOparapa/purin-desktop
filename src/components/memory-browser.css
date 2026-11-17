@@ -450,7 +450,6 @@
   background: var(--hover);
 }
 .perception-fields { margin: 8px 0 0; }
-.perception-legacy { min-height: 4rem; }
 .perception-fields div { display: grid; grid-template-columns: minmax(5em, 24%) 1fr; gap: 12px; padding: 3px 0; }
 .perception-fields dt { font-size: 13px; color: var(--muted); }
 .perception-fields dd { white-space: pre-wrap; font-size: 14px; }

@@ -58,15 +58,15 @@ test('connection settings are reachable from disconnected memory and chat', asyn
   await page.getByRole('button', { name: '信息采集' }).click()
   const settings = page.getByRole('dialog')
   await expect(
-    settings.getByRole('checkbox', { name: '分享桌面活动' }),
+    settings.getByRole('checkbox', { name: '采集桌面活动' }),
   ).toBeVisible()
   await expect(
     settings.getByRole('checkbox', { name: '浏览器接入' }),
-  ).toBeVisible()
+  ).toHaveCount(0)
   await expect(
     settings.getByRole('checkbox', { name: '自动截图（前台窗口）' }),
   ).toBeDisabled()
-  await expect(settings.getByRole('checkbox')).toHaveCount(3)
+  await expect(settings.getByRole('checkbox')).toHaveCount(2)
   await expect(settings).toContainText('窗口标题')
   await expect(settings).not.toContainText('日历')
   expect(errors).toEqual([])
@@ -177,6 +177,7 @@ test('compact window, IME composition and multiline input', async ({
   await page.setViewportSize({ width: 860, height: 680 })
   await page.goto('/')
   const input = page.getByRole('textbox', { name: '对话消息' })
+  await expect(page.getByRole('button', { name: '分享素材' })).toHaveCount(0)
   await input.fill('会议')
   await input.dispatchEvent('keydown', {
     key: 'Enter',

@@ -52,13 +52,12 @@ export function AgentSettings({
     setFeedback('')
     setEditing(true)
   }
-  async function change(action: () => Promise<void> | undefined, success = '') {
+  async function change(action: () => Promise<void> | undefined) {
     if (busy) return
     setBusy(true)
     setSourceFeedback('')
     try {
       await action()
-      setSourceFeedback(success)
     } catch (error) {
       setSourceFeedback(
         error instanceof Error
@@ -281,7 +280,7 @@ export function AgentSettings({
                     .catch(() => setSourceFeedback('无法保存采集设置'))
                 }}
               />{' '}
-              分享桌面活动
+              采集桌面活动
             </label>
             <p id="desktop-activity-description">
               同一应用停留满 5 秒，离开后才记一条，保留最后可读的窗口标题。切换标签页合并计时，可在「记忆 → 感知层」查看。
@@ -313,82 +312,22 @@ export function AgentSettings({
                 onChange={(e) => {
                   const enabled = e.target.checked
                   void change(() =>
-                    api?.setScreenshots({
-                      enabled,
-                      minutes: state.screenshotMinutes || 5,
-                    }),
+                    api?.setScreenshots({ enabled }),
                   )
                 }}
               />
               自动截图（前台窗口）
             </label>
             <p>
-              自动截图需要先开启「分享桌面活动」。停留期间按画面变化选取最多 4 张截图，离开应用后随本次停留上传。在「记忆 → 感知层 → 格式化信息」可查看截图和识别结果。
+              窗口标题稳定 10 秒后截第一张，此后每分钟截一张。每段标题最多保留开头、中间和最后三张，离开应用后一起上传。截图和识别结果可在「记忆 → 感知层 → 格式化信息」查看。
             </p>
-            {state.screenshotsEnabled && (
-              <label>
-                代表帧预算{' '}
-                <select
-                  value={state.screenshotMinutes}
-                  disabled={busy}
-                  onChange={(e) => {
-                    const minutes = Number(e.target.value)
-                    void change(() =>
-                      api?.setScreenshots({ enabled: true, minutes }),
-                    )
-                  }}
-                >
-                  {[1, 5, 15].map((minutes) => (
-                    <option key={minutes} value={minutes}>
-                      平均每 {minutes} 分钟 1 张
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
             {state.screenshotIssue && (
               <p role="status">{state.screenshotIssue}</p>
             )}
           </div>
-          <div className="activity-settings">
-            <label>
-              <input
-                type="checkbox"
-                disabled={!api || !state.configured || busy}
-                checked={state.browserEnabled}
-                onChange={(e) =>
-                  void change(() => api?.setBrowser(e.target.checked))
-                }
-              />
-              浏览器接入
-            </label>
-            <p>
-              在 Chrome 或 Edge
-              扩展管理页加载扩展文件夹，然后在扩展里粘贴配对码。自动采集的站点由你在浏览器中选择。
-            </p>
-            <div className="setting-actions">
-              <button
-                disabled={!api}
-                onClick={() => void change(() => api?.openExtension())}
-              >
-                打开扩展文件夹
-              </button>
-              <button
-                disabled={!state.browserEnabled || busy}
-                onClick={() =>
-                  void change(() => api?.copyPairing(), '浏览器配对码已复制')
-                }
-              >
-                复制配对码
-              </button>
-            </div>
-            {state.browserIssue && <p role="status">{state.browserIssue}</p>}
-          </div>
           {(state.lastMaterial ||
             state.pendingMaterials > 0 ||
-            state.materialIssue ||
-            state.processing > 0 ||
-            state.processingIssue) && (
+            state.materialIssue) && (
             <dl className="settings-facts" aria-label="材料传送状态">
               {state.lastMaterial && (
                 <div>
@@ -431,18 +370,6 @@ export function AgentSettings({
                       </div>
                     )}
                   </dd>
-                </div>
-              )}
-              {state.processing > 0 && (
-                <div>
-                  <dt>后台处理</dt>
-                  <dd>{state.processing} 项 · 生成材料摘要中</dd>
-                </div>
-              )}
-              {state.processingIssue && (
-                <div>
-                  <dt>处理状态</dt>
-                  <dd>{state.processingIssue}</dd>
                 </div>
               )}
             </dl>

@@ -16,44 +16,6 @@ function spanValue(app, title, start, end, seconds) {
   }
 }
 
-// v2 persisted completed spans only as this sentence. Retain the producer ID
-// both for offline retries and for screenshots already referencing the span.
-function migrateWindowSlice(item) {
-  if (typeof item.body?.text !== 'string') return item
-  const { text, ...capture } = item.body
-  const match =
-    /^桌面前台停留（采样估算）：(\S+) 至 (\S+)，约 (\d+) 秒。应用「(.*?)」(?:，窗口标题「(.*)」)?。$/su.exec(
-      text,
-    )
-  if (
-    !match ||
-    capture.event_id !== item.id ||
-    capture.occurred_at !== match[2]
-  )
-    return item
-  const duration = Math.round(
-    (Date.parse(match[2]) - Date.parse(match[1])) / 1000,
-  )
-  if (
-    !match[4] ||
-    !Number.isSafeInteger(duration) ||
-    duration <= 0 ||
-    duration !== Number(match[3])
-  )
-    return item
-  const value = spanValue(match[4], match[5], match[1], match[2], duration)
-  return {
-    ...item,
-    kind: 'perception',
-    body: { ...capture, state_key: stateKey, value },
-    legacyWindowText: text,
-    rejected: false,
-    attempts: 0,
-    retryAt: 0,
-    error: '',
-  }
-}
-
 function finishSpan(span, observedEnd) {
   if (!span) return null
   const end = span.awaySince || observedEnd
@@ -175,4 +137,4 @@ function advanceWindowSpan(previous, candidate, sample, at = new Date()) {
   }
 }
 
-module.exports = { advanceWindowSpan, migrateWindowSlice, minDwellMs }
+module.exports = { advanceWindowSpan, minDwellMs, maxSampleGap }

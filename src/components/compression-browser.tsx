@@ -180,8 +180,7 @@ export function OriginalData({
   id,
   layer,
   activity,
-  rawOnly = false,
-}: OriginalProps & { rawOnly?: boolean }) {
+}: OriginalProps) {
   const fetch = useCallback(
     (cursor?: string) =>
       client().compression({ kind: 'source', id, activity, cursor }),
@@ -213,7 +212,7 @@ export function OriginalData({
       {!result.busy && !result.error && !result.items.length && (
         <p>暂无原始资料</p>
       )}
-      {extraction && !rawOnly && (
+      {extraction && (
         <section>
           <h5>{layer === 'slice' ? '切片提取结果' : '感知活动文字'}</h5>
           {(extraction.strategy || extraction.source_count > 1) && (

@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import type { ShareMaterial } from './share-types'
 
 export type Appearance = 'system' | 'light' | 'dark'
 const browserAppearanceKey = 'wintermute.appearance'
@@ -156,14 +155,9 @@ export interface AgentState {
   connectionRevision?: number
   collecting: boolean
   screenshotsEnabled: boolean
-  screenshotMinutes: number
   screenshotIssue: string
-  browserEnabled: boolean
-  browserIssue: string
   pendingMaterials: number
   failedMaterial: string | null
-  processing: number
-  processingIssue: string
   materialIssue: string
   lastMaterial: { label: string; at: string } | null
   issue: string
@@ -236,14 +230,7 @@ declare global {
       setCollection(enabled: boolean): Promise<void>
       setScreenshots(options: {
         enabled: boolean
-        minutes: number
       }): Promise<void>
-      setBrowser(enabled: boolean): Promise<void>
-      copyPairing(): Promise<void>
-      openExtension(): Promise<void>
-      listShareWindows(): Promise<Array<{ id: string; name: string }>>
-      captureShareWindow(id: string): Promise<string>
-      shareMaterial(payload: ShareMaterial): Promise<void>
       manageFailed(id: string, retry: boolean): Promise<void>
       setAppearance(mode: Appearance): Promise<void>
       subscribe(callback: (state: AgentState) => void): () => void
@@ -257,14 +244,9 @@ const initial: AgentState = {
   configured: false,
   collecting: false,
   screenshotsEnabled: false,
-  screenshotMinutes: 5,
   screenshotIssue: '',
-  browserEnabled: false,
-  browserIssue: '',
   pendingMaterials: 0,
   failedMaterial: null,
-  processing: 0,
-  processingIssue: '',
   materialIssue: '',
   lastMaterial: null,
   issue: '',

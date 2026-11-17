@@ -39,14 +39,34 @@ export function useHistoryPages(view: HistoryView) {
       ]),
   )
   const pending = useRef(new Map<string | null, symbol>())
+  const loaded = useRef<HistoryItem[]>([])
+  useEffect(() => {
+    loaded.current = pages.get(null)?.items ?? []
+  }, [pages])
   const fetchPage = useCallback(
     (groupId: string | null, cursor: string | null, background = false) => {
       if (pending.current.has(groupId)) return
       const token = Symbol()
       pending.current.set(groupId, token)
       return historyPage(view, groupId, cursor)
-        .then((page) => {
+        .then(async (page) => {
           if (pending.current.get(groupId) !== token) return
+          if (view === 'perception' && background) {
+            // Recognition can complete on an older page while the user has it open.
+            const prior = loaded.current
+            const unfinished = new Set(prior.filter(item => {
+              const payload = item.raw?.payload as { image_recognition?: string } | undefined
+              return payload?.image_recognition && payload.image_recognition !== 'ready'
+            }).map(item => item.id))
+            let chunk = page
+            while (unfinished.size) {
+              for (const item of chunk.items) unfinished.delete(item.id)
+              if (!unfinished.size || !chunk.next_cursor || page.items.length >= prior.length) break
+              chunk = await historyPage(view, null, chunk.next_cursor)
+              if (pending.current.get(groupId) !== token) return
+              page = { items: [...page.items, ...chunk.items], next_cursor: chunk.next_cursor }
+            }
+          }
           const items =
             view === 'timeline'
               ? page.items
@@ -70,7 +90,7 @@ export function useHistoryPages(view: HistoryView) {
               const overlap = prior?.items.findIndex(
                 (row) =>
                   row.id === last.id &&
-                  row.text === last.text &&
+                  (view === 'perception' || row.text === last.text) &&
                   row.source === last.source &&
                   row.occurred_at === last.occurred_at,
               )
@@ -119,7 +139,7 @@ export function useHistoryPages(view: HistoryView) {
       if (document.visibilityState === 'visible')
         void fetchPage(null, null, true)
     }
-    if (view !== 'chat') return () => requests.clear()
+    if (view !== 'chat' && view !== 'perception') return () => requests.clear()
     const timer = window.setInterval(refreshVisible, 5000)
     window.addEventListener('focus', refreshVisible)
     document.addEventListener('visibilitychange', refreshVisible)

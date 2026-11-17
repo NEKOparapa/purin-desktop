@@ -1,4 +1,5 @@
-const { execFile } = require('node:child_process')
+const { execFile, spawn } = require('node:child_process')
+const { createInterface } = require('node:readline')
 const { promisify } = require('node:util')
 const { powerMonitor } = require('electron')
 const run = promisify(execFile)
@@ -13,6 +14,7 @@ public static extern uint GetWindowThreadProcessId(System.IntPtr window, out uin
 [System.Runtime.InteropServices.DllImport("user32.dll", CharSet=System.Runtime.InteropServices.CharSet.Unicode)]
 public static extern int GetWindowTextW(System.IntPtr window, System.Text.StringBuilder title, int capacity);
 '@
+function Read-Foreground {
 [uint32]$foregroundPid = 0
 $window = [Wintermute.Foreground]::GetForegroundWindow()
 [void][Wintermute.Foreground]::GetWindowThreadProcessId($window, [ref]$foregroundPid)
@@ -24,7 +26,58 @@ if ($foregroundPid) {
   }
   ConvertTo-Json -InputObject $result -Compress
 }
+}
 `
+
+// Keep the native declarations loaded between one-second title checks. The
+// helper only reads a window when asked and exits when the pipe closes.
+let probeProcess
+let outstanding
+let idleTimer
+function windowsObservation() {
+  clearTimeout(idleTimer)
+  if (outstanding) return outstanding.promise
+  if (!probeProcess) {
+    const script = windowsProbe + `
+while ($null -ne [Console]::ReadLine()) {
+  try { $line = Read-Foreground; [Console]::WriteLine([string]$line) }
+  catch { [Console]::WriteLine('{}') }
+}
+`
+    const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand',
+      Buffer.from(script, 'utf16le').toString('base64')], { windowsHide: true, stdio: ['pipe', 'pipe', 'ignore'] })
+    probeProcess = child
+    const stop = () => {
+      if (probeProcess !== child) return
+      probeProcess = undefined
+      outstanding?.finish('{}')
+    }
+    child.once('exit', stop)
+    child.once('error', stop)
+    child.stdin.on('error', stop)
+    createInterface({ input: child.stdout }).on('line', line => {
+      if (probeProcess === child) outstanding?.finish(line || '{}')
+    })
+  }
+  const child = probeProcess
+  let resolve
+  const promise = new Promise(done => { resolve = done })
+  const timeout = setTimeout(() => { child.kill() }, 5000)
+  outstanding = { promise, finish(stdout) {
+    clearTimeout(timeout)
+    outstanding = undefined
+    resolve({ stdout })
+    idleTimer = setTimeout(() => {
+      if (probeProcess === child) {
+        probeProcess = undefined
+        child.stdin.end()
+      }
+    }, 5000)
+    idleTimer.unref()
+  } }
+  child.stdin.write('\n')
+  return promise
+}
 
 const macProbe = `
 ObjC.import('AppKit')
@@ -61,7 +114,7 @@ async function sampleActivity(withTarget = false) {
       '-NoProfile',
       '-NonInteractive',
       '-EncodedCommand',
-      Buffer.from(windowsProbe, 'utf16le').toString('base64'),
+      Buffer.from(windowsProbe + '\nRead-Foreground', 'utf16le').toString('base64'),
     ]
   } else if (process.platform === 'darwin') {
     executable = '/usr/bin/osascript'
@@ -75,7 +128,9 @@ async function sampleActivity(withTarget = false) {
     return value
   }
   try {
-    const { stdout } = await run(executable, args, {
+    const { stdout } = process.platform === 'win32' && withTarget
+      ? await windowsObservation()
+      : await run(executable, args, {
       timeout: 5000,
       windowsHide: true,
       maxBuffer: 64 * 1024,

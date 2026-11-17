@@ -238,11 +238,11 @@ test('groups screen captures and previews visible frames automatically', async (
           items: [
             {
               ...item('run', '对方询问开通会员。'),
-              source: '切片 · desktop',
+              source: '切片 · android',
               group,
             },
-            item('manual', '主动分享的截图', [
-              { id: 'shared', name: '用户分享.jpg' },
+            item('manual', '移动端截图', [
+              { id: 'shared', name: '移动端.jpg' },
             ]),
           ],
           next_cursor: null,
@@ -270,7 +270,7 @@ test('groups screen captures and previews visible frames automatically', async (
   await expect(toggle).toHaveAttribute('aria-expanded', 'false')
   await expect(page.getByText('3 张截图')).toBeVisible()
   await expect(
-    page.getByRole('img', { name: '用户分享.jpg', exact: true }),
+    page.getByRole('img', { name: '移动端.jpg', exact: true }),
   ).toBeVisible()
   expect(reads.filter((q) => q.groupId)).toHaveLength(0)
   await toggle.click()
@@ -289,7 +289,7 @@ test('groups screen captures and previews visible frames automatically', async (
   await toggle.click()
   await expect(firstFile).toHaveCount(0)
   await page.getByRole('textbox', { name: '筛选已加载记录' }).fill('capture-1')
-  await expect(page.getByText('主动分享的截图')).toHaveCount(0)
+  await expect(page.getByText('移动端截图')).toHaveCount(0)
   await toggle.click()
   await expect(firstFile).toBeVisible()
   await expect(page.getByText('邀请已发出。')).toHaveCount(0)
@@ -434,7 +434,7 @@ test('perception shows the complete event, ordered observations with inline fram
     payload: {state_key: 'desktop.window_span', value: {
       foreground_app: 'Editor', started_at: start, ended_at: second, duration_seconds: 90,
       work_objects: [{occurred_at: first, window_title: '议程文档'}],
-      visual_observations: [{occurred_at: second, text: '风险清单出现两个待办。'}],
+      visual_observations: [{frame_index: 1, occurred_at: second, text: '风险清单出现两个待办。'}],
     }},
   }
   const previews: string[] = []
@@ -478,6 +478,35 @@ test('perception shows the complete event, ordered observations with inline fram
   await expect(page.getByRole('img')).toHaveCount(0)
   expect(previews).toContain('evt_a:frame:0')
   expect(previews).toContain('evt_a:frame:1')
+})
+
+test('a pending visit on an older page gains its description in capture order', async ({page}) => {
+  const shot = '2026-11-17T09:01:00Z'
+  const end = '2026-11-17T09:02:00Z'
+  const file = {id:'visit:frame:0', name:'meeting.jpg', occurred_at:shot, content_type:'image/jpeg'}
+  let ready = false
+  await openMemory(page, ({view, cursor}) => {
+    if (view !== 'perception') return {items:[], next_cursor:null}
+    if (!cursor) return {items:[item('newer','另一条感知')],next_cursor:'older'}
+    return {items:[{...item('visit','桌面停留',[file]),raw:{payload:{
+      state_key:'desktop.window_span',image_recognition:ready?'ready':'pending',frames:[file],
+      value:{foreground_app:'编辑器',started_at:'2026-11-17T09:00:00Z',ended_at:end,
+        work_objects:[{occurred_at:end,window_title:'风险清单'}],
+        visual_observations:ready?[{frame_index:0,occurred_at:shot,text:'议程里写着部署评审'}]:[]},
+    }}}],next_cursor:null}
+  })
+  await page.getByRole('button',{name:'感知层',exact:true}).click()
+  await page.getByRole('button',{name:'加载更早记录'}).click()
+  await expect(page.getByText(/正在识别截图/)).toBeVisible()
+  ready = true
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+  const entries = page.locator('.perception-details > ol > li')
+  await expect(entries).toHaveCount(2)
+  await expect(entries.nth(0)).toContainText('议程里写着部署评审')
+  await expect(entries.nth(1)).toContainText('风险清单')
+  await expect(page.getByText(/正在识别截图/)).toHaveCount(0)
+  await page.getByRole('button',{name:'原始信息'}).click()
+  await expect(page.locator('.perception-json')).toContainText('议程里写着部署评审')
 })
 
 test('screenshot reads follow the viewport and release image URLs when leaving memory', async ({ page }) => {

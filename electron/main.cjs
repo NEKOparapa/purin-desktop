@@ -7,19 +7,15 @@ const {
   ipcMain,
   safeStorage,
   nativeTheme,
-  clipboard,
   dialog,
-  shell,
 } = require('electron')
 const path = require('node:path')
 const { DesktopAgent } = require('./agent.cjs')
 const { sampleActivity } = require('./activity.cjs')
 const {
-  listShareWindows,
-  captureShareWindow,
   captureForegroundWindow,
   enableWindowCapture,
-} = require('./share.cjs')
+} = require('./foreground-capture.cjs')
 let agent, appWindow
 
 function windowBackground() {
@@ -133,15 +129,6 @@ function start() {
       }
       agent.setScreenshots(options)
     },
-    copyPairing: () => clipboard.writeText(agent.pairingCode()),
-    async extensionFolder() {
-      const dir = app.isPackaged
-        ? path.join(process.resourcesPath, 'browser-extension')
-        : path.join(__dirname, '../browser-extension')
-      if (await shell.openPath(dir)) throw new Error('无法打开扩展文件夹')
-    },
-    listShareWindows,
-    captureShareWindow,
   }
   for (const [channel, method] of Object.entries({
     state: 'state',
@@ -160,8 +147,6 @@ function start() {
     retry: 'retry',
     collection: 'setCollection',
     appearance: 'setAppearance',
-    browser: 'setBrowser',
-    shareMaterial: 'shareMaterial',
     manageFailed: 'manageFailed',
     ...Object.fromEntries(Object.keys(actions).map((key) => [key, key])),
   })) {
@@ -177,30 +162,8 @@ function start() {
         : agent[method](arg)
     })
   }
-  const ownFrame = (contents, details) =>
-    contents &&
-    contents === appWindow?.webContents &&
-    details.isMainFrame &&
-    details.requestingUrl === contents.getURL()
-  session.defaultSession.setPermissionCheckHandler(
-    (contents, permission, _origin, details) =>
-      !!(
-        permission === 'media' &&
-        ownFrame(contents, details) &&
-        details.mediaType === 'audio'
-      ),
-  )
-  session.defaultSession.setPermissionRequestHandler(
-    (contents, permission, callback, details) =>
-      callback(
-        !!(
-          permission === 'media' &&
-          ownFrame(contents, details) &&
-          details.mediaTypes?.length === 1 &&
-          details.mediaTypes[0] === 'audio'
-        ),
-      ),
-  )
+  session.defaultSession.setPermissionCheckHandler(() => false)
+  session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
   Menu.setApplicationMenu(
     process.platform === 'darwin'
       ? Menu.buildFromTemplate([

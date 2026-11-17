@@ -1,13 +1,8 @@
 import type { HistoryItem, HistoryFile } from '@/lib/desktop'
 import { Files } from './history-files'
-import { useNearViewport } from './history-viewport'
-import { OriginalData } from './compression-browser'
-
 export type PerceptionMode = 'formatted' | 'raw' | 'compressed'
 
 const labels: Record<string, string> = {
-  'browser.page': '浏览页面',
-  'desktop.activity': '桌面活动',
   'mobile.location': '地点',
   'mobile.app_activity': '移动端活动',
   domain: '网站',
@@ -59,27 +54,16 @@ function duration(seconds: number) {
     .join(' ')
 }
 
-function frameIndex(
-  files: HistoryFile[],
-  observation: Record<string, unknown>,
-) {
-  return files.findIndex(
-    (file) =>
-      file.occurred_at &&
-      Date.parse(file.occurred_at) ===
-        Date.parse(text(observation.occurred_at)) &&
-      (!file.window_title ||
-        !observation.window_title ||
-        file.window_title === observation.window_title),
-  )
-}
-
 function DesktopSpan({
   value,
   files,
+  status,
+  total,
 }: {
   value: Record<string, unknown>
   files: HistoryFile[]
+  status: string
+  total: number
 }) {
   const objects = Array.isArray(value.work_objects)
     ? value.work_objects.map(record)
@@ -89,7 +73,7 @@ function DesktopSpan({
     : []
   const remaining = [...files]
   const frames = visual.map((entry) => {
-    const index = frameIndex(remaining, entry)
+    const index = remaining.findIndex(file => file.id.endsWith(':frame:' + entry.frame_index))
     return {
       entry,
       file: index < 0 ? undefined : remaining.splice(index, 1)[0],
@@ -101,11 +85,10 @@ function DesktopSpan({
       file,
     })
   }
-  frames.sort(
-    (a, b) =>
-      (Date.parse(text(a.entry.occurred_at)) || Infinity) -
-      (Date.parse(text(b.entry.occurred_at)) || Infinity),
-  )
+  const timeline = [
+    ...objects.map(entry => ({ kind: 'object', entry, file: undefined })),
+    ...frames.map(frame => ({ kind: 'frame', ...frame })),
+  ].sort((a, b) => Date.parse(text(a.entry.occurred_at)) - Date.parse(text(b.entry.occurred_at)))
   const start = text(value.started_at),
     end = text(value.ended_at)
   const crossesDay =
@@ -126,16 +109,27 @@ function DesktopSpan({
           .join(' – ')}
       </div>
       {!!value.window_title && <p>{text(value.window_title)}</p>}
-      {objects.length > 0 && (
+      {!!timeline.length && (
         <section className="perception-details">
-          <h4>工作对象</h4>
+          <h4>采集时间线</h4>
+          {status === 'pending' && <small role="status">正在识别截图 · {visual.length}/{total}</small>}
+          {status === 'retrying' && <small role="status">部分截图等待重试 · 已识别 {visual.length}/{total}</small>}
+          {status === 'awaiting_model' && <small role="status">截图已保存，等待配置视觉模型</small>}
           <ol>
-            {objects.map((obj, index) => (
-              <li key={index}>
-                <time dateTime={text(obj.occurred_at)}>
-                  {time(obj.occurred_at)}
+            {timeline.map(({ kind, entry, file }, index) => (
+              <li key={file?.id ?? kind + ':' + index}>
+                <time dateTime={text(entry.occurred_at)}>
+                  {time(entry.occurred_at)}
                 </time>
-                <span>{text(obj.window_title)}</span>
+                {kind === 'object' ? (
+                  <span>切换到「{text(entry.window_title)}」</span>
+                ) : <div>
+                  {!!entry.window_title && (
+                    <strong>{text(entry.window_title)}</strong>
+                  )}
+                  {!!entry.text && <p>{text(entry.text)}</p>}
+                  {file && <Files files={[file]} />}
+                </div>}
               </li>
             ))}
           </ol>
@@ -144,40 +138,7 @@ function DesktopSpan({
           )}
         </section>
       )}
-      {!!frames.length && (
-        <section className="perception-details">
-          <h4>画面记录</h4>
-          <ol>
-            {frames.map(({ entry, file }, index) => (
-              <li key={index}>
-                <time dateTime={text(entry.occurred_at)}>
-                  {time(entry.occurred_at)}
-                </time>
-                <div>
-                  {!!entry.window_title && (
-                    <strong>{text(entry.window_title)}</strong>
-                  )}
-                  {!!entry.text && <p>{text(entry.text)}</p>}
-                  {file && <Files files={[file]} />}
-                </div>
-              </li>
-            ))}
-          </ol>
-          {visual.length > 0 && !files.length && (
-            <small>该记录只保存了画面描述。</small>
-          )}
-        </section>
-      )}
     </>
-  )
-}
-
-function LegacyOriginal({ id }: { id: string }) {
-  const { element, near } = useNearViewport<HTMLDivElement>(true)
-  return (
-    <div ref={element} className="perception-legacy">
-      {near && <OriginalData id={id} layer="perception" rawOnly />}
-    </div>
   )
 }
 
@@ -186,7 +147,8 @@ function FormattedRecord({ item }: { item: HistoryItem }) {
   const kind = text(payload.state_key)
   const value = record(payload.value)
   if (kind === 'desktop.window_span' && Object.keys(value).length) {
-    return <DesktopSpan value={value} files={item.files} />
+    return <DesktopSpan value={value} files={item.files} status={text(payload.image_recognition)}
+      total={Array.isArray(payload.frames) ? payload.frames.length : item.files.length} />
   }
   return (
     <>
@@ -234,7 +196,7 @@ export function PerceptionRecord({
         <Files files={item.files} />
       </>
     )
-  else content = <LegacyOriginal id={item.id} />
+  else content = <p>缺少原始事件数据</p>
   return (
     <article className="history-entry perception-entry">
       <header>

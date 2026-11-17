@@ -199,7 +199,7 @@ async function main() {
       })
     }
     await win.getByRole('button', { name: '信息采集' }).click()
-    const collecting = win.getByLabel('分享桌面活动')
+    const collecting = win.getByLabel('采集桌面活动')
     await expect(
       win.getByRole('checkbox', { name: /窗口标题|停留时段/ }),
     ).toHaveCount(0)
@@ -208,7 +208,7 @@ async function main() {
     ).toHaveCount(0)
     await expect(
       win.getByRole('checkbox', { name: '浏览器接入' }),
-    ).toBeVisible()
+    ).toHaveCount(0)
     await expect(collecting).not.toBeChecked()
     if (api) {
       // Drive the Electron main process with known windows and real elapsed time.
@@ -226,6 +226,8 @@ async function main() {
             window_title: title,
           })
           globalThis.confirmedMeetingApp = () => this.profile.history.windowSpan?.app
+          globalThis.confirmedMeetingTitle = () =>
+            this.profile.history.windowSpan?.workObjects?.at(-1)?.window_title
           globalThis.sampleMeetingWindow = async ([app, nextTitle]) => {
             appName = app
             title = nextTitle
@@ -247,20 +249,16 @@ async function main() {
       await sample('邮件', '误切的窗口')
       await sample('Chrome', '会议纪要')
       assert.equal(api.events.size, 0)
+      await expect
+        .poll(() => app.evaluate(() => globalThis.confirmedMeetingTitle()), { timeout: 12000 })
+        .toBe('会议纪要')
       await sample('Wintermute', '记忆')
     }
     if (api) {
       const screenshots = win.getByLabel('自动截图（前台窗口）')
       await screenshots.click()
       await expect(screenshots).toBeChecked()
-      await win.getByLabel('代表帧预算').selectOption('1')
-      await expect
-        .poll(() =>
-          win.evaluate(() =>
-            window.wintermute.state().then((s) => s.screenshotMinutes),
-          ),
-        )
-        .toBe(1)
+      await expect(win.getByText(/窗口标题稳定 10 秒/)).toBeVisible()
       const spans = () =>
         [...api.events.values()].filter(
           (event) => event.state_key === 'desktop.window_span',

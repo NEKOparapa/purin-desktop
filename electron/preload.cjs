@@ -30,14 +30,6 @@ contextBridge.exposeInMainWorld('wintermute', {
   setCollection: (enabled) => ipcRenderer.invoke('agent:collection', enabled),
   setScreenshots: (options) => ipcRenderer.invoke('agent:screenshots', options),
   setAppearance: (mode) => ipcRenderer.invoke('agent:appearance', mode),
-  setBrowser: (enabled) => ipcRenderer.invoke('agent:browser', enabled),
-  copyPairing: () => ipcRenderer.invoke('agent:copyPairing'),
-  openExtension: () => ipcRenderer.invoke('agent:extensionFolder'),
-  listShareWindows: () => ipcRenderer.invoke('agent:listShareWindows'),
-  captureShareWindow: (id) =>
-    ipcRenderer.invoke('agent:captureShareWindow', id),
-  shareMaterial: (payload) =>
-    ipcRenderer.invoke('agent:shareMaterial', payload),
   manageFailed: (id, retry) =>
     ipcRenderer.invoke('agent:manageFailed', { id, retry }),
   subscribe: (callback) => {
