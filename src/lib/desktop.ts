@@ -58,6 +58,9 @@ export interface HistoryItem {
   files: HistoryFile[]
   raw?: Record<string, unknown>
   filter_result?: 'filtered' | 'partial' | 'kept' | 'unprojected'
+  context_messages?: ContextMessageRef[]
+  pending_context?: boolean
+  summary_round?: SummaryRoundRef
   group?: ScreenshotGroup | null
 }
 export interface HistoryPage {
@@ -134,14 +137,40 @@ export interface OriginalDetail extends ResultsPage<OriginalRecord> {
 }
 
 export interface PerceptionStages {
+  record?: HistoryItem
+  context_messages?: ContextMessageRef[]
   dwell_threshold_seconds?: number
   decisions: { kind: 'application' | 'title'; label: string; seconds: number; kept: boolean }[]
   retained: unknown
   parts: { kind: 'observation' | 'visual'; text: string; delivered: boolean; round_id: string | null }[]
-  rounds: { id: string; status: 'pending' | 'ready' | 'retrying' | 'disabled'; input: string; summary: string | null }[]
+  rounds: { id: string; status: 'pending' | 'ready' | 'retrying' | 'disabled'; input: string; summary: string | null; timeline_entry?: SummaryRoundRef | null }[]
   ai_enabled: boolean
   budget: number
   pending_size: number
+}
+
+export interface ContextMessageRef {
+  id: string
+  written_at: string | null
+  activity_at?: string | null
+  parts?: ('observation' | 'visual')[]
+}
+export interface SummaryRoundRef {
+  id: string
+  occurred_at: string
+  generated_at: string | null
+}
+export interface TraceMember {
+  id: string
+  event_id: string | null
+  title: string
+  terminal: string
+  occurred_at: string
+}
+export interface TracePage extends ResultsPage<TraceMember> {
+  round?: { input: string; summary: string | null }
+  text: string | null
+  written_at: string | null
 }
 
 export interface ScheduleEntry {
@@ -234,7 +263,8 @@ declare global {
         cursor?: string
         groupId?: string
       }): Promise<HistoryPage>
-      compression(options: { kind: 'stages'; id: string }): Promise<PerceptionStages>
+      compression(options: { kind: 'stages'; id: string; record?: boolean }): Promise<PerceptionStages>
+      compression(options: { kind: 'trace'; id: string; cursor?: string }): Promise<TracePage>
       compression(options: {
         kind: 'list'
         layer: ActivityLayer

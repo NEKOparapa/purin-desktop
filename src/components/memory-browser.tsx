@@ -218,11 +218,9 @@ function HistoryRecords({
 function HistoryList({
   view,
   label,
-  openTimeline,
 }: {
   view: HistoryView
   label: string
-  openTimeline?: () => void
 }) {
   const { pages, read } = useHistoryPages(view)
   const page = pages.get(null) ?? emptyPage
@@ -261,8 +259,8 @@ function HistoryList({
           <RotateCw size={14} aria-hidden="true" /> 刷新
         </button>
       </div>
-      {view === 'perception' && openTimeline ? visible.length > 0 && <PerceptionBrowser
-        items={visible} openTimeline={openTimeline} revision={revision}
+      {view === 'perception' ? visible.length > 0 && <PerceptionBrowser
+        key={term} items={visible} revision={revision}
       /> : <HistoryRecords
         items={visible}
         pages={pages}
@@ -296,7 +294,7 @@ function ActivityHistory({
 }) {
   const [compare, setCompare] = useState(false)
   if (layer === 'perception')
-    return <HistoryList view={layer} label={label} openTimeline={openTimeline} />
+    return <HistoryList view={layer} label={label} />
   return (
     <>
       <div

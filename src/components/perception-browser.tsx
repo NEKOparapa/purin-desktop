@@ -1,12 +1,16 @@
-import { Fragment, useEffect, useState } from 'react'
-import { ArrowUpRight, ChevronRight } from 'lucide-react'
-import type { HistoryItem, PerceptionStages } from '@/lib/desktop'
-import { perceptionLabel } from '@/lib/perception'
+import { useEffect, useRef, useState } from 'react'
+import { ChevronRight, MessageSquareText, NotebookText } from 'lucide-react'
+import type {
+  ContextMessageRef,
+  HistoryItem,
+  PerceptionStages,
+  SummaryRoundRef,
+  TraceMember,
+} from '@/lib/desktop'
+import { perceptionLabel, record, text } from '@/lib/perception'
 import { PerceptionRecord } from './perception-record'
-import { CompressionBrowser } from './compression-browser'
+import { PerceptionLinks, type TraceNavigation } from './perception-links'
 
-const stages = ['原始信息', '过滤筛选', '规则压缩', '格式排版', 'AI 压缩'] as const
-type Stage = (typeof stages)[number]
 const date = new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium' })
 const clock = new Intl.DateTimeFormat('zh-CN', {
   timeStyle: 'medium',
@@ -22,7 +26,7 @@ const outcomes = {
   unprojected: '未形成活动',
 } as const
 
-function RuleResult({ data, filterStage }: { data: PerceptionStages; filterStage: boolean }) {
+function RuleResult({ data }: { data: PerceptionStages }) {
   if (!data.parts.length)
     return <p className="stage-note">这次上报没有在本会话形成新的活动记录。</p>
   // Servers predating per-record thresholds used three seconds.
@@ -37,18 +41,11 @@ function RuleResult({ data, filterStage }: { data: PerceptionStages; filterStage
             ? `已过滤 ${removed} 个短停留标题`
             : '保留这条观测'}
       </h3>
-      {filterStage && (
-        <p className="stage-note">
-          {data.retained === null
-            ? `应用停留未超过 ${threshold} 秒，整条记录仅保存在原始信息中。`
-            : removed
-              ? '应用停留已保留，以下短标题从后续的时间线文字中移除。'
-              : data.decisions.length ? '本次采集未触发短停留规则。' : '此观测不含需要筛选的应用停留。'}
-        </p>
-      )}
-      {data.decisions.length > 0 && (!filterStage || removed > 0) && (
+      {data.decisions.length > 0 && (
         <>
-          {!filterStage && <p className="stage-note">应用或窗口标题停留 {threshold} 秒及以内会被过滤。</p>}
+          <p className="stage-note">
+            应用或窗口标题停留 {threshold} 秒及以内会被过滤。
+          </p>
           <table className="rule-decisions">
             <thead>
               <tr>
@@ -58,7 +55,7 @@ function RuleResult({ data, filterStage }: { data: PerceptionStages; filterStage
               </tr>
             </thead>
             <tbody>
-              {data.decisions.filter(row => !filterStage || !row.kept).map((row, index) => (
+              {data.decisions.map((row, index) => (
                 <tr key={index} data-kept={row.kept}>
                   <td>
                     <small>
@@ -72,15 +69,19 @@ function RuleResult({ data, filterStage }: { data: PerceptionStages; filterStage
                     })}{' '}
                     秒
                   </td>
-                  <td>{row.kept ? `保留（超过 ${threshold} 秒）` : `过滤（${threshold} 秒及以内）`}</td>
+                  <td>
+                    {row.kept
+                      ? `保留（超过 ${threshold} 秒）`
+                      : `过滤（${threshold} 秒及以内）`}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </>
       )}
-      {!filterStage && data.retained !== null && (
-        <details className="stage-disclosure" open={!data.decisions.length}>
+      {data.retained !== null && (
+        <details className="stage-disclosure">
           <summary>规则处理后的字段</summary>
           <pre className="perception-json">
             {JSON.stringify(data.retained, null, 2)}
@@ -125,10 +126,12 @@ const roundStatus = {
 
 function AIResult({
   data,
-  openTimeline,
+  eventId,
+  navigation,
 }: {
   data: PerceptionStages
-  openTimeline: () => void
+  eventId: string
+  navigation: TraceNavigation
 }) {
   const remaining = data.parts.filter(
     (part) => part.text && part.round_id === null,
@@ -142,14 +145,39 @@ function AIResult({
             <h3>本轮滚动摘要</h3>
             <small>{roundStatus[round.status]}</small>
           </div>
-          {data.parts.length > 1 && <p className="stage-note">本轮纳入{data.parts
-            .filter(part => part.round_id === round.id)
-            .map(part => part.kind === 'visual' ? '截图识别补充' : '观测记录').join('、')}</p>}
+          {data.parts.length > 1 && (
+            <p className="stage-note">
+              本轮纳入
+              {data.parts
+                .filter((part) => part.round_id === round.id)
+                .map((part) =>
+                  part.kind === 'visual' ? '截图识别补充' : '观测记录',
+                )
+                .join('、')}
+            </p>
+          )}
           {round.summary && <p className="stage-summary">{round.summary}</p>}
+          {round.timeline_entry && round.summary && (
+            <button
+              className="history-inline"
+              onClick={() =>
+                navigation.openSummary(round.timeline_entry!, round.summary!)
+              }
+            >
+              在时间轴查看这次摘要 ↗
+            </button>
+          )}
           <p className="stage-note">
             本轮输入 {size(round.input)}
             {round.summary ? ` → 输出 ${size(round.summary)}` : ''} 估算单位
           </p>
+          {data.context_messages && (
+            <PerceptionLinks
+              target={'round-' + round.id}
+              eventId={eventId}
+              {...navigation}
+            />
+          )}
           <details className="stage-disclosure">
             <summary>查看本轮完整输入</summary>
             <pre className="stage-text">{round.input}</pre>
@@ -183,195 +211,362 @@ function AIResult({
             : '本会话没有可用于压缩的新观测。'}
         </p>
       )}
-      <button className="history-inline stage-link" onClick={openTimeline}>
-        查看已投递的时间线 <ArrowUpRight size={14} aria-hidden />
-      </button>
     </>
   )
 }
 
-function Processing({
+function VisitDetails({
   id,
-  stage,
-  openTimeline,
+  item,
   revision,
+  navigation,
 }: {
   id: string
-  stage: Exclude<Stage, '原始信息'>
-  openTimeline: () => void
+  item?: HistoryItem
   revision: number
+  navigation: TraceNavigation
 }) {
   const [data, setData] = useState<PerceptionStages>()
   const [error, setError] = useState('')
   const [retry, setRetry] = useState(0)
-  const [browseBatches, setBrowseBatches] = useState(false)
+  const needsRecord = !item
   useEffect(() => {
-    let current = true
-    let pending = false
-    const api = window.wintermute
+    let mounted = true
+    let reading = false
     async function read() {
-      if (pending || document.visibilityState === 'hidden') return
-      pending = true
+      if (reading || document.visibilityState === 'hidden') return
+      reading = true
       try {
-        if (!api?.compression) throw new Error('当前终端无法读取压缩过程。')
-        const result = await api.compression({ kind: 'stages', id })
-        if (current) {
-          setData(result)
+        if (!window.wintermute?.compression)
+          throw new Error('当前终端无法读取处理记录。')
+        const next = await window.wintermute.compression({
+          kind: 'stages',
+          id,
+          ...(needsRecord && { record: true }),
+        })
+        if (mounted) {
+          setData(next)
           setError('')
         }
       } catch (e) {
-        if (current)
+        if (mounted)
           setError(
             e instanceof Error
               ? e.message.replace(/^.*?Error: /, '')
-              : '读取压缩过程失败。',
+              : '读取失败。',
           )
       } finally {
-        pending = false
+        reading = false
       }
     }
     void read()
     const timer = window.setInterval(read, 5000)
     window.addEventListener('focus', read)
     return () => {
-      current = false
+      mounted = false
       clearInterval(timer)
       window.removeEventListener('focus', read)
     }
-  }, [id, retry, revision])
-  if (error)
-    return (
-      <>
-        <p role="alert" className="history-error">
-          {error}
-        </p>
-        <div className="history-actions">
-          <button
-            onClick={() => {
-              setError('')
-              setRetry((n) => n + 1)
-            }}
-          >
-            重试
-          </button>
-          <button
-            aria-expanded={browseBatches}
-            onClick={() => setBrowseBatches(!browseBatches)}
-          >
-            浏览后端压缩批次
-          </button>
+  }, [id, needsRecord, revision, retry])
+  const raw = item ?? data?.record
+  const messages = data?.context_messages ?? raw?.context_messages
+  const nonempty = data?.parts.filter((part) => part.text)
+  const pending = nonempty?.some((part) => !part.delivered)
+  return (
+    <div className="perception-stage">
+      {raw && (
+        <section>
+          <h3>采到了什么</h3>
+          <PerceptionRecord item={raw} />
+        </section>
+      )}
+      {error && (
+        <div role="alert" className="history-error">
+          {error} <button onClick={() => setRetry((n) => n + 1)}>重试</button>
         </div>
-        {browseBatches && (
-          <CompressionBrowser layer="perception" openTimeline={openTimeline} />
-        )}
-      </>
-    )
-  if (!data)
-    return (
-      <p className="stage-note" role="status">
-        正在读取处理记录…
-      </p>
-    )
-  if (stage === '过滤筛选' || stage === '规则压缩')
-    return <RuleResult data={data} filterStage={stage === '过滤筛选'} />
-  if (stage === '格式排版') return <Formatted data={data} />
-  return <AIResult data={data} openTimeline={openTimeline} />
+      )}
+      {!data && !error && <p role="status">正在读取处理记录…</p>}
+      {data && (
+        <>
+          <section>
+            <h3>哪些信息被过滤</h3>
+            <RuleResult data={data} />
+          </section>
+          {nonempty && nonempty.length > 0 && (
+            <details className="stage-disclosure">
+              <summary>查看规则处理后的活动文字</summary>
+              <Formatted data={data} />
+            </details>
+          )}
+          {!!data.rounds.length && (
+            <section>
+              <h3>摘要合并</h3>
+              <AIResult data={data} eventId={id} navigation={navigation} />
+            </section>
+          )}
+          <section>
+            <h3>最终进入上下文</h3>
+            {messages?.map((message) => (
+              <div key={message.id}>
+                {message.parts?.length && data.parts.length > 1 && (
+                  <p className="stage-note">
+                    {message.parts
+                      .map((part) =>
+                        part === 'visual' ? '截图识别补充' : '停留记录',
+                      )
+                      .join('、')}
+                  </p>
+                )}
+                <PerceptionLinks
+                  target={message.id}
+                  eventId={id}
+                  message={message}
+                  {...navigation}
+                />
+              </div>
+            ))}
+            {pending && (
+              <p className="stage-note">
+                {messages?.length
+                  ? '另有活动文字等待写入会话。'
+                  : '活动文字已生成，等待写入会话。'}
+              </p>
+            )}
+            {!messages?.length && !pending && (
+              <p className="stage-note">
+                {!data.parts.length
+                  ? '本会话没有由这次采集生成的活动文字。'
+                  : !nonempty?.length
+                    ? '整条被过滤，没有上下文原文。'
+                    : '已有处理回执，无法定位当时的上下文原文。'}
+              </p>
+            )}
+            {!data.rounds.length && pending && (
+              <details className="stage-disclosure">
+                <summary>查看压缩进度</summary>
+                <AIResult data={data} eventId={id} navigation={navigation} />
+              </details>
+            )}
+          </section>
+        </>
+      )}
+    </div>
+  )
 }
+
+type TimelineRow = {
+  id: string
+  at: string | null
+  title: string
+  subtitle: string
+  status: string
+  kind: 'visit' | 'summary' | 'message'
+  item?: HistoryItem
+}
+
+function visitRow(item: HistoryItem): TimelineRow {
+  const info = perceptionLabel(item)
+  const value = record(record(item.raw?.payload).value)
+  return {
+    kind: 'visit',
+    id: item.id,
+    at: text(value.started_at) || item.occurred_at,
+    title: info.title,
+    subtitle: [info.duration, info.subject, info.source]
+      .filter(Boolean)
+      .join(' · '),
+    status: item.context_messages?.length
+      ? item.pending_context
+        ? '部分已写入'
+        : '已关联上下文'
+      : item.pending_context
+        ? '等待写入'
+        : item.filter_result
+          ? outcomes[item.filter_result]
+          : '',
+    item,
+  }
+}
+function messageRow(message: ContextMessageRef): TimelineRow {
+  return {
+    id: message.id,
+    at: message.written_at ?? message.activity_at ?? null,
+    title: '时间线消息写入上下文',
+    subtitle: message.written_at
+      ? '会话原文'
+      : message.activity_at
+        ? '按消息内的活动时间排列 · 写入时刻未记录'
+        : '写入时刻未记录',
+    status: '已写入',
+    kind: 'message',
+  }
+}
+
+function summaryRow(ref: SummaryRoundRef, summary: string): TimelineRow {
+  return {
+    kind: 'summary',
+    id: ref.id,
+    at: ref.occurred_at,
+    title: 'AI 摘要',
+    status: '已生成',
+    subtitle: ref.generated_at
+      ? summary
+      : '按本轮开始时间排列 · 生成时刻未记录',
+  }
+}
+
+const atSameTime = { visit: 0, summary: 1, message: 2 }
 
 export function PerceptionBrowser({
   items,
-  openTimeline,
   revision,
 }: {
   items: HistoryItem[]
-  openTimeline: () => void
   revision: number
 }) {
-  const [selected, setSelected] = useState(items[0]?.id)
-  const [stage, setStage] = useState<Stage>('原始信息')
+  const [selected, setSelected] = useState<string | null>(null)
+  const [linked, setLinked] = useState<TimelineRow[]>([])
   const [outcome, setOutcome] = useState('all')
-  const hasOutcomes = items.some(item => item.filter_result)
-  const matches = !hasOutcomes || outcome === 'all' ? items : items.filter(item => item.filter_result === outcome)
-  const active = matches.find(item => item.id === selected) ?? matches[0]
-  const info = active && perceptionLabel(active)
-  const records = matches.map((item) => {
-    const instant = item.occurred_at ? new Date(item.occurred_at) : null
-    const ts = instant && Number.isFinite(+instant) ? instant : null
-    return { item, ts, day: ts ? date.format(ts) : '时间未记录' }
-  })
+  const focusTarget = useRef<string | null>(null)
+  const rows = new Map<string, TimelineRow>()
+  for (const row of linked) rows.set(row.id, row)
+  for (const item of items) {
+    if (outcome !== 'all' && item.filter_result !== outcome) continue
+    rows.set(
+      item.id,
+      item.summary_round
+        ? summaryRow(item.summary_round, item.text)
+        : visitRow(item),
+    )
+    for (const ref of item.context_messages ?? [])
+      rows.set(ref.id, messageRow(ref))
+  }
+  const ordered = [...rows.values()].sort(
+    (a, b) =>
+      (Date.parse(a.at ?? '') || Infinity) -
+        (Date.parse(b.at ?? '') || Infinity) ||
+      atSameTime[a.kind] - atSameTime[b.kind],
+  )
+  function jump(row: TimelineRow) {
+    setOutcome('all')
+    if (!rows.has(row.id)) setLinked((prior) => [...prior, row])
+    setSelected(row.id)
+    focusTarget.current = row.id
+  }
+  const navigation: TraceNavigation = {
+    openMember: (member: TraceMember) => {
+      if (member.event_id)
+        jump({
+          kind: 'visit',
+          id: member.event_id,
+          at: member.occurred_at,
+          title: member.title,
+          subtitle: member.terminal,
+          status: '关联记录',
+        })
+    },
+    openMessage: (message) => jump(messageRow(message)),
+    openSummary: (ref, summary) => jump(summaryRow(ref, summary)),
+  }
+  useEffect(() => {
+    if (!selected || focusTarget.current !== selected) return
+    const button = document.getElementById('perception-row-' + selected)
+    button?.focus({ preventScroll: true })
+    button?.scrollIntoView({ block: 'start' })
+    focusTarget.current = null
+  }, [selected])
   return (
-    <div className="perception-workspace">
-      <nav className="perception-index" aria-label="采集记录">
-        <label className="perception-outcome">
-          过滤结果（已加载记录）
-          <select aria-label="按过滤结果筛选" value={hasOutcomes ? outcome : 'all'} disabled={!hasOutcomes} onChange={event => setOutcome(event.target.value)}>
-            <option value="all">全部记录</option>
-            {Object.entries(outcomes).map(([key, label]) =>
-              <option key={key} value={key}>{label}</option>)}
-          </select>
-          {!hasOutcomes && <small>更新后端后可按结果筛选</small>}
-        </label>
-        {records.map(({ item, ts, day }, index) => {
-          const heading = day !== records[index - 1]?.day
-          const label = perceptionLabel(item)
+    <div className="perception-timeline">
+      <div className="trace-heading">
+        <h2>活动时间轴</h2>
+        {items.some((i) => i.filter_result) && (
+          <label className="perception-outcome">
+            过滤结果
+            <select
+              aria-label="按过滤结果筛选"
+              value={outcome}
+              onChange={(e) => {
+                setOutcome(e.target.value)
+                setLinked([])
+                setSelected(null)
+              }}
+            >
+              <option value="all">全部记录</option>
+              {Object.entries(outcomes).map(([key, label]) => (
+                <option key={key} value={key}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+      </div>
+      <ol className="trace-axis" aria-label="采集记录">
+        {ordered.map((row, i) => {
+          const at = row.at ? new Date(row.at) : null
+          const stamp = at && Number.isFinite(+at) ? at : null
+          const day = stamp ? date.format(stamp) : '时间未记录'
+          const previous =
+            i && ordered[i - 1].at ? new Date(ordered[i - 1].at!) : null
+          const open = selected === row.id
           return (
-            <Fragment key={item.id}>
-              {heading && <h2>{day}</h2>}
+            <li key={row.id}>
+              {(!previous ||
+                !Number.isFinite(+previous) ||
+                day !== date.format(previous)) && (
+                <h3 className="trace-day">{day}</h3>
+              )}
               <button
-                className="perception-choice"
-                aria-pressed={item.id === active?.id}
-                onClick={() => setSelected(item.id)}
+                id={'perception-row-' + row.id}
+                className="trace-toggle"
+                data-kind={row.kind}
+                aria-expanded={open}
+                aria-controls={open ? 'perception-detail-' + row.id : undefined}
+                onClick={() => {
+                  focusTarget.current = open ? null : row.id
+                  setSelected(open ? null : row.id)
+                }}
               >
-                <span>
-                  <strong>{label.title}</strong>
-                  <time dateTime={item.occurred_at ?? undefined}>
-                    {ts ? clock.format(ts) : ''}
-                  </time>
+                <time dateTime={row.at ?? undefined}>
+                  {stamp ? clock.format(stamp) : '—'}
+                </time>
+                <span className="trace-point" aria-hidden>
+                  {row.kind === 'message' && <MessageSquareText size={13} />}
+                  {row.kind === 'summary' && <NotebookText size={14} />}
                 </span>
-                <small>
-                  {[label.subject || label.source, label.duration, item.filter_result && outcomes[item.filter_result]]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </small>
+                <span className="trace-title">
+                  <strong>{row.title}</strong>
+                  <small>{row.subtitle}</small>
+                </span>
+                <span className="trace-status">{row.status}</span>
+                <ChevronRight size={14} className="trace-chevron" aria-hidden />
               </button>
-            </Fragment>
+              {open && (
+                <div
+                  className="trace-detail"
+                  id={'perception-detail-' + row.id}
+                >
+                  {row.kind !== 'visit' ? (
+                    <PerceptionLinks target={row.id} {...navigation} />
+                  ) : (
+                    <VisitDetails
+                      id={row.id}
+                      item={row.item}
+                      revision={revision}
+                      navigation={navigation}
+                    />
+                  )}
+                </div>
+              )}
+            </li>
           )
         })}
-      </nav>
-      {active && info ? <article
-        className="perception-inspect"
-        aria-label={info.title + '的压缩过程'}
-      >
-        <header>
-          <small>{info.source}</small>
-          <h2>{info.title}</h2>
-        </header>
-        <div className="perception-steps" role="group" aria-label="压缩过程">
-          {stages.map((name, i) => (
-            <Fragment key={name}>
-              {i > 0 && <ChevronRight size={13} aria-hidden />}
-              <button
-                aria-pressed={name === stage}
-                onClick={() => setStage(name)}
-              >
-                {name}
-              </button>
-            </Fragment>
-          ))}
-        </div>
-        <div className="perception-stage" key={active.id}>
-          {stage === '原始信息' ? (
-            <PerceptionRecord item={active} />
-          ) : (
-            <Processing
-              id={active.id}
-              revision={revision}
-              stage={stage}
-              openTimeline={openTimeline}
-            />
-          )}
-        </div>
-      </article> : <p className="stage-note" role="status">已加载的记录中没有符合此筛选条件的停留。</p>}
+      </ol>
+      {!ordered.length && (
+        <p className="stage-note" role="status">
+          已加载的记录中没有符合此筛选条件的停留。
+        </p>
+      )}
     </div>
   )
 }

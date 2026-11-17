@@ -182,8 +182,9 @@ test('six history views, paginated filtering and audio downloads', async ({
     ['切片层', 'slice'],
   ]) {
     await page.getByRole('button', { name: label, exact: true }).click()
+    if (view === 'perception') await page.locator('.trace-toggle').click()
     await expect(page.getByText('后端记录 ' + view)).toBeVisible()
-    await expect(page.getByRole('article')).toHaveCount(1)
+    if (view !== 'perception') await expect(page.getByRole('article')).toHaveCount(1)
     if (view === 'timeline') await expect(attachment).toHaveCount(0)
   }
 })
@@ -510,9 +511,7 @@ test('perception shows the complete event, ordered observations with inline fram
     }})
   })
   await page.getByRole('button', {name:'感知层',exact:true}).click()
-  await expect(page.getByRole('group',{name:'压缩过程'}).getByRole('button')).toHaveText(['原始信息','过滤筛选','规则压缩','格式排版','AI 压缩'])
-  await expect(page.getByRole('button', {name:'原始信息'})).toHaveAttribute('aria-pressed','true')
-  await expect(page.getByRole('heading', {name:'Editor'})).toBeVisible()
+  await page.getByRole('button',{name:/Editor/}).click()
   await expect(page.getByText('停留 1 分钟 30 秒')).toBeVisible()
   await expect(page.getByText('切换到「议程文档」',{exact:true})).toBeVisible()
   await expect(page.getByText('截图读取失败')).toBeVisible()
@@ -523,19 +522,15 @@ test('perception shows the complete event, ordered observations with inline fram
   await description.getByText('second.jpg').scrollIntoViewIfNeeded()
   await expect(description.getByRole('img',{name:'second.jpg'})).toBeVisible()
   await page.getByText('完整上报 JSON').click()
-  await expect(page.locator('.perception-json')).toHaveText(JSON.stringify(raw,null,2))
+  await expect(page.locator('.perception-json:visible')).toHaveText(JSON.stringify(raw,null,2))
   await page.getByText('first.jpg', {exact: true}).scrollIntoViewIfNeeded()
   await expect(page.getByRole('img',{name:'first.jpg'})).toBeVisible()
-  await page.getByRole('button',{name:'规则压缩'}).click()
   await expect(page.getByRole('row').filter({hasText:'闪现标题'})).toContainText('过滤')
-  await page.getByRole('button',{name:'格式排版'}).click()
+  await page.getByText('查看规则处理后的活动文字').click()
   await expect(page.getByText('会议电脑 · 议程文档')).toBeVisible()
-  await expect(page.getByText('闪现标题')).toHaveCount(0)
-  await page.getByRole('button',{name:'AI 压缩'}).click()
   await expect(page.getByText('已保存的模型摘要')).toBeVisible()
   await page.getByText('查看本轮完整输入').click()
   await expect(page.getByText('来自上一轮的摘要和本轮新增记录')).toBeVisible()
-  await expect(page.getByRole('img')).toHaveCount(0)
   expect(previews).toContain('evt_a:frame:0')
   expect(previews).toContain('evt_a:frame:1')
 })
@@ -557,31 +552,108 @@ test('stage selection follows the record and ignores late responses for another 
   })
   await page.evaluate(()=>Object.assign(window.wintermute!,{compression:(window as unknown as {readStages:unknown}).readStages}))
   await page.getByRole('button',{name:'感知层',exact:true}).click()
-  await page.getByRole('button',{name:'规则压缩'}).click()
+  await page.getByRole('button',{name:/Editor/}).click()
   await expect(page.getByText('正在读取处理记录…')).toBeVisible()
-  const list=page.getByRole('navigation',{name:'采集记录'})
+  const list=page.getByRole('list',{name:'采集记录'})
   await list.getByRole('button',{name:/QQ/}).click()
   await expect(page.getByText('整次停留已过滤')).toBeVisible()
   const filter=page.getByRole('combobox',{name:'按过滤结果筛选'})
   await filter.selectOption('filtered')
-  await expect(list.getByRole('button')).toHaveCount(1)
-  await page.getByRole('button',{name:'过滤筛选',exact:true}).click()
+  await expect(list.locator('.trace-toggle')).toHaveCount(1)
+  await list.getByRole('button',{name:/QQ/}).click()
   await expect(page.getByRole('row').filter({hasText:'QQ'})).toContainText('过滤（5 秒及以内）')
   await filter.selectOption('partial')
   await expect(page.getByRole('status')).toContainText('没有符合此筛选条件')
   await filter.selectOption('filtered')
   release()
-  await page.getByRole('button',{name:'格式排版'}).click()
-  await expect(page.getByText(/没有生成时间线文字/)).toBeVisible()
-  await page.getByRole('button',{name:'AI 压缩'}).click()
-  await expect(page.getByText(/无需 AI 压缩/)).toBeVisible()
+  await list.getByRole('button',{name:/QQ/}).click()
+  await expect(page.getByText('整条被过滤，没有上下文原文。')).toBeVisible()
   await filter.selectOption('all')
   await list.getByRole('button',{name:/Editor/}).click()
+  await page.getByText('查看压缩进度').click()
   await expect(page.getByText('尚未超过压缩预算')).toBeVisible()
   await expect(page.getByText(/75 \/ 800/)).toBeVisible()
   finished=true
   await page.evaluate(()=>window.dispatchEvent(new Event('focus')))
   await expect(page.getByText('本轮完成')).toBeVisible()
+})
+
+test('a visit opens the stored message and follows a peer outside the loaded page', async ({page}) => {
+  const ref = {id:'history-4-1',written_at:'2026-11-17T10:00:00Z'}
+  const visit = (app:string,at:string) => ({
+    ...item(app,app), occurred_at:at, context_messages:[ref], raw:{payload:{state_key:'desktop.window_span',
+      value:{foreground_app:app,started_at:at,duration_seconds:60,window_title:app+'.md'}}}
+  })
+  const first = visit('Editor','2026-11-17T09:30:00Z')
+  const peer = visit('Chrome','2026-11-17T08:45:00Z')
+  const original = '…\n只节选了最近的工作对象。\n\n---\n来源：活动时间线\n时间：2026-11-17T09:31:00Z'
+  await openMemory(page,({view})=>({items:view==='perception'?[first]:[],next_cursor:null}))
+  const lookup:string[]=[]
+  await page.exposeFunction('traceFixture',({kind,id,record}:{kind:string;id:string;record?:boolean})=>{
+    if(kind==='trace'){
+      expect(id).toBe(ref.id)
+      return {text:original,written_at:ref.written_at,next_cursor:null,items:[first,peer].map(v=>({
+        id:v.id,event_id:v.id,occurred_at:v.occurred_at,terminal:'desktop',title:v.id
+      }))}
+    }
+    if(record) lookup.push(id)
+    return {record:record?peer:undefined,context_messages:[ref],decisions:[],retained:{},
+      parts:[{kind:'observation',text:'保留的规则文字',delivered:true,round_id:null}],
+      rounds:[],ai_enabled:true,budget:800,pending_size:0}
+  })
+  await page.evaluate(()=>Object.assign(window.wintermute!,{compression:(window as unknown as {traceFixture:unknown}).traceFixture}))
+  await page.getByRole('button',{name:'感知层',exact:true}).click()
+  await expect(page.locator('.trace-title strong')).toHaveText(['Editor','时间线消息写入上下文'])
+  await page.locator('.trace-toggle').first().click()
+  await expect(page.locator('.trace-group pre')).toHaveText(original)
+  await page.getByRole('button',{name:/Chrome ↗/}).click()
+  await expect(page.locator('.trace-toggle[aria-expanded=true]')).toContainText('Chrome')
+  await expect(page.getByText('Chrome.md',{exact:true})).toBeVisible()
+  await expect(page.locator('.trace-title strong')).toHaveText(['Chrome','Editor','时间线消息写入上下文'])
+  expect(lookup).toContain(peer.id)
+  await page.getByRole('button',{name:/定位这条时间线消息/}).click()
+  await expect(page.locator('.trace-toggle[aria-expanded=true]')).toContainText('时间线消息写入上下文')
+  await expect(page.locator('.trace-group pre')).toHaveText(original)
+  await page.getByRole('button',{name:/Editor ↗/}).click()
+  await expect(page.locator('.trace-toggle[aria-expanded=true]')).toContainText('Editor')
+})
+
+test('a completed AI round appears on refresh and links back to its source before context delivery', async ({page}) => {
+  const time = '2026-11-17T09:15:00Z'
+  const ref = {id:'round-8',occurred_at:time,generated_at:time}
+  const summary = '先查看清单，随后打开部署文档。'
+  const input = '09:10 清单；09:12 部署文档。'
+  const visit = {...item('evt_a','清单'),occurred_at:'2026-11-17T09:10:00Z',
+    raw:{payload:{state_key:'desktop.window_span',value:{foreground_app:'Editor',duration_seconds:15}}}}
+  const marker = {...item(ref.id,summary),occurred_at:time,source:'AI 摘要',summary_round:ref}
+  let ready = false
+  await openMemory(page,({view})=>({items:view==='perception'?(ready?[marker,visit]:[visit]):[],next_cursor:null}))
+  await page.exposeFunction('summaryFixture',({kind,id}:{kind:string;id:string})=>{
+    if(kind==='trace'){
+      expect(id).toBe(ref.id)
+      return {round:{input,summary},text:null,written_at:null,next_cursor:null,
+        items:[{id:visit.id,event_id:visit.id,title:'Editor',occurred_at:visit.occurred_at,terminal:'pc'}]}
+    }
+    expect(id).toBe(visit.id)
+    return {context_messages:[],parts:[{kind:'observation',text:input,round_id:'8',delivered:false}],
+      retained:{},decisions:[],ai_enabled:true,pending_size:0,budget:800,
+      rounds:[{id:'8',status:'ready',input,summary,timeline_entry:ref}]}
+  })
+  await page.evaluate(()=>Object.assign(window.wintermute!,{compression:(window as unknown as {summaryFixture:unknown}).summaryFixture}))
+  await page.getByRole('button',{name:'感知层',exact:true}).click()
+  await expect(page.locator('.trace-title strong')).toHaveText(['Editor'])
+  ready = true
+  await page.evaluate(()=>window.dispatchEvent(new Event('focus')))
+  await expect(page.locator('.trace-title strong')).toHaveText(['Editor','AI 摘要'])
+  await page.locator('.trace-toggle[data-kind="summary"]').click()
+  await expect(page.locator('.trace-detail').getByText(summary,{exact:true})).toBeVisible()
+  await page.getByText('查看本轮完整输入',{exact:true}).click()
+  await expect(page.getByText(input,{exact:true})).toBeVisible()
+  await page.getByRole('button',{name:/Editor ↗/}).click()
+  await expect(page.locator('.trace-toggle[aria-expanded=true]')).toContainText('Editor')
+  await page.getByRole('button',{name:/在时间轴查看这次摘要/}).click()
+  await expect(page.locator('.trace-toggle[aria-expanded=true]')).toContainText('AI 摘要')
+  await expect(page.locator('.trace-toggle[data-kind="message"]')).toHaveCount(0)
 })
 
 test('a pending visit on an older page gains its description in capture order', async ({page}) => {
@@ -601,7 +673,7 @@ test('a pending visit on an older page gains its description in capture order', 
   })
   await page.getByRole('button',{name:'感知层',exact:true}).click()
   await page.getByRole('button',{name:'加载更早记录'}).click()
-  await page.getByRole('navigation',{name:'采集记录'}).getByRole('button',{name:/编辑器/}).click()
+  await page.getByRole('list',{name:'采集记录'}).getByRole('button',{name:/编辑器/}).click()
   await expect(page.getByText(/正在识别截图/)).toBeVisible()
   ready = true
   await page.evaluate(() => window.dispatchEvent(new Event('focus')))
@@ -632,11 +704,12 @@ test('screenshot reads follow the viewport and release image URLs when leaving m
     }
   })
   await page.getByRole('button',{name:'感知层',exact:true}).click()
+  await page.locator('.trace-toggle').first().click()
   const first = page.getByRole('img',{name:'窗口-0.jpg',exact:true})
   await expect(first).toBeVisible()
   const url = await first.getAttribute('src')
   expect(reads).not.toContain('frame-19')
-  await page.getByRole('navigation',{name:'采集记录'}).getByRole('button').last().click()
+  await page.locator('.trace-toggle').last().click()
   await expect(page.getByRole('img',{name:'窗口-19.jpg',exact:true})).toBeVisible()
   await expect(first).toHaveCount(0)
   await expect.poll(() => released).toContain(url)

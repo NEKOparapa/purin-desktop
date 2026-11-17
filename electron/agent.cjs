@@ -629,6 +629,15 @@ class DesktopAgent {
       )
     }
     query.set('view', view)
+    if (view === 'perception' && !cursor?.startsWith('perception:')) {
+      query.set('view', 'perceptiontimeline')
+      try {
+        return await get('/v1/history?' + query)
+      } catch (error) {
+        if (cursor || error.status !== 400 || error.code !== 'invalid_query') throw error
+        query.set('view', 'perception')
+      }
+    }
     if (view === 'slice') {
       query.set('grouped', '1')
       try {
@@ -641,7 +650,7 @@ class DesktopAgent {
     return get('/v1/history?' + query)
   }
 
-  async compression({ kind, layer, id, activity, cursor }) {
+  async compression({ kind, layer, id, activity, cursor, record }) {
     const p = this.profile
     if (!p.token) throw new Error('请先连接终端')
     const query = new URLSearchParams({ limit: '40' })
@@ -653,6 +662,10 @@ class DesktopAgent {
     let path = '/v1/history/compression'
     if (kind === 'list' && ['perception', 'slice'].includes(layer)) {
       query.set('layer', layer)
+    } else if (kind === 'trace') {
+      if (typeof id !== 'string' || !/^(?:round-\d{1,19}|history-\d{1,19}-\d{1,10})$/.test(id))
+        throw new Error('无效的时间轴记录')
+      path = '/v1/history/traces/' + id
     } else if (kind === 'source' || kind === 'batch' || kind === 'stages') {
       if (
         typeof id !== 'string' ||
@@ -666,6 +679,7 @@ class DesktopAgent {
         throw new Error('无效的记录编号')
       if (kind === 'stages') {
         path = '/v1/history/perceptions/' + encodeURIComponent(id) + '/stages'
+        if (record === true) path += '?record=1'
       } else if (kind === 'source') {
         path += '/sources'
         if (activity === true) query.set('activity', '1')
