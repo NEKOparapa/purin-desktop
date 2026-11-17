@@ -85,7 +85,18 @@ async function setup(t, handle) {
   return { launch, dir, url }
 }
 
-test('closed window and selected frames travel as one perception and retry together after restart', async (t) => {
+// Advance the wall clock while continuing to observe the foreground. A single
+// ten-minute jump would model a sleeping computer instead of an active visit.
+async function observeFor(t, client, seconds) {
+  while (seconds > 0) {
+    const step = Math.min(seconds, 15)
+    t.mock.timers.tick(step * 1000)
+    await client.capture()
+    seconds -= step
+  }
+}
+
+test('one screenshot travels with the completed visit and retries unchanged after restart', async (t) => {
   t.mock.timers.enable({ apis: ['Date'], now: Date.UTC(2026, 10, 14, 1) })
   const uploads = []
   let online = false
@@ -99,20 +110,17 @@ test('closed window and selected frames travel as one perception and retry toget
   }
   let sample = window
   const jpeg = Buffer.from([255, 216, 255, 217]).toString('base64')
-  const screenshot = () => ({ jpegBase64: jpeg, signature: Buffer.alloc(64 * 48, 90) })
+  const screenshot = () => ({ jpegBase64: jpeg })
   let client = launch(() => sample, screenshot)
   await client.configure({ url, terminal: 'desktop-A', token: 'fixture' })
   client.setCollection(true)
   await until(() => !client.profile.capturing)
-  client.setScreenshots({ enabled: true, minutes: 1 })
+  client.setScreenshots({ enabled: true })
   await client.capture()
-  t.mock.timers.tick(5000)
-  await client.capture()
-  t.mock.timers.tick(15000)
-  await client.capture()
+  await observeFor(t, client, 600)
   const span = client.profile.history.windowSpan
-  const [firstFrame] = span.titleRun.samples
-  assert.equal(span.titleRun.samples.length, 1)
+  const [firstFrame] = span.frames
+  assert.equal(span.frames.length, 1)
   const file = path.join(client.profile.mediaDirectory, 'periodic', firstFrame.id)
   assert.ok(fs.existsSync(file))
   assert.equal(uploads.length, 0)
@@ -128,7 +136,7 @@ test('closed window and selected frames travel as one perception and retry toget
   assert.equal(request.body.event_id, span.id)
   assert.equal(request.body.state_key, 'desktop.window_span')
   assert.equal(request.body.value.foreground_app, '编辑器')
-  assert.equal(request.body.value.duration_seconds, 20)
+  assert.equal(request.body.value.duration_seconds, 600)
   assert.deepEqual(request.body.frames, [{
     occurred_at: firstFrame.occurred_at, window_title: '周会议程', jpeg_base64: jpeg,
   }])
@@ -143,24 +151,19 @@ test('closed window and selected frames travel as one perception and retry toget
   assert.deepEqual(uploads.map((item) => item.route), Array(2).fill('/v1/perceptions/desktop-window'))
 })
 
-test('one visit with two long titles uploads first, middle and last of each, skipping a short tab', async t => {
+test('browser tabs and windows share one screenshot after ten minutes; a later visit starts over', async t => {
   const start = Date.UTC(2026, 10, 17, 9)
   t.mock.timers.enable({ apis: ['Date'], now: start })
   const uploads = []
-  const { launch, url } = await setup(t, item => {
-    uploads.push(item)
-    assert.equal(item.route, '/v1/perceptions/desktop-window/batches')
-    const { offset, frames, total_frames } = item.body
-    return { status: 202, json: offset + frames.length === total_frames
-      ? { event_id: 'visit' } : { next_offset: offset + frames.length } }
+  const { launch, url } = await setup(t, item => { uploads.push(item); return 202 })
+  const browser = (title, id) => ({
+    activity: 'active', foreground_app: 'Chrome', window_title: title,
+    target: { id, pid: 123456 },
   })
-  let title = '周会议程'
+  let sample = browser('议程', '77')
   const shots = []
-  const target = { id: '77', pid: 123456 }
-  const client = launch(() => title
-    ? { activity: 'active', foreground_app: 'Editor', window_title: title, target }
-    : { activity: 'locked' }, () => {
-    shots.push([title, (Date.now() - start) / 1000])
+  const client = launch(() => sample, target => {
+    shots.push([target.id, sample.window_title, (Date.now() - start) / 1000])
     return { jpegBase64: '/9j/2Q==' }
   })
   await client.configure({ url, terminal: 'workstation', token: 'fixture' })
@@ -168,25 +171,97 @@ test('one visit with two long titles uploads first, middle and last of each, ski
   await until(() => !client.profile.capturing)
   client.setScreenshots({ enabled: true })
   await client.capture()
-  for (let s = 1; s <= 738; s++) {
-    t.mock.timers.tick(1000)
-    if (s === 525) title = '邮箱'
-    if (s === 529) title = '风险清单'
-    if (s === 738) title = ''
-    await client.capture()
-  }
-  assert.deepEqual(shots.filter(([name]) => name === '周会议程').map(([, s]) => s),
-    [10, 70, 130, 190, 250, 310, 370, 430, 490])
-  assert.ok(shots.every(([name]) => name !== '邮箱'))
+  await observeFor(t, client, 299)
+  sample = browser('设计文档', '88')
+  await observeFor(t, client, 300)
+  assert.deepEqual(shots, [])
+  await observeFor(t, client, 1)
+  sample = browser('项目进度', '77')
+  await observeFor(t, client, 1200)
+  assert.deepEqual(shots, [['88', '设计文档', 600]])
+  assert.equal(uploads.length, 0)
+
+  sample = { ...browser('草稿', '99'), foreground_app: 'Editor' }
+  await client.capture()
+  await observeFor(t, client, 599)
+  sample = browser('复盘', '77')
+  await client.capture()
+  await observeFor(t, client, 600)
+  assert.deepEqual(shots, [['88', '设计文档', 600], ['77', '复盘', 2999]])
+  sample = { activity: 'locked' }
+  await client.capture()
   await client.flushMaterials()
   await until(() => !client.profile.flushing && !client.state().pendingMaterials)
-  const parts = uploads.map(item => item.body)
-  assert.deepEqual(parts.map(p => p.offset), [0, 3])
-  assert.equal(new Set(parts.map(p => p.manifest)).size, 1)
-  assert.equal(new Set(parts.map(p => p.event_id)).size, 1)
-  assert.deepEqual(parts.flatMap(p => p.frames.map(f => (Date.parse(f.occurred_at) - start) / 1000)),
-    [10, 250, 490, 539, 659, 719])
+  assert.deepEqual(uploads.map(u => u.body.frames?.length || 0), [1, 0, 1])
+  assert.deepEqual(uploads[0].body.value.work_objects.map(o => o.window_title), ['议程', '设计文档', '项目进度'])
+  assert.equal(uploads[0].body.frames[0].window_title, '设计文档')
+  assert.equal(uploads[1].body.value.duration_seconds, 599)
   assert.deepEqual(fs.readdirSync(path.join(client.profile.mediaDirectory, 'periodic')), [])
+})
+
+test('briefly leaving, sleeping, or turning screenshots off breaks continuous screenshot dwell', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: Date.UTC(2026, 10, 17, 9) })
+  const { launch, url } = await setup(t, () => 202)
+  const chrome = { activity: 'active', foreground_app: 'Chrome', target: { id: '77', pid: 123456 } }
+  let sample = chrome
+  let shots = 0
+  const client = launch(() => sample, () => { shots++; return { jpegBase64: '/9j/2Q==' } })
+  await client.configure({ url, terminal: 'desktop', token: 'test' })
+  client.setCollection(true)
+  await until(() => !client.profile.capturing)
+  client.setScreenshots({ enabled: true })
+  await client.capture()
+  await observeFor(t, client, 599)
+  sample = { ...chrome, foreground_app: 'Editor' }
+  await client.capture()
+  await observeFor(t, client, 2)
+  sample = chrome
+  await client.capture()
+  await observeFor(t, client, 599)
+  t.mock.timers.tick(3600000)
+  await client.capture()
+  await observeFor(t, client, 599)
+  client.setScreenshots({ enabled: false })
+  await observeFor(t, client, 20)
+  client.setScreenshots({ enabled: true })
+  await client.capture()
+  await observeFor(t, client, 599)
+  assert.equal(shots, 0)
+  await observeFor(t, client, 1)
+  assert.equal(shots, 1)
+  client.setScreenshots({ enabled: false })
+  client.setScreenshots({ enabled: true })
+  await observeFor(t, client, 601)
+  assert.equal(shots, 1)
+})
+
+test('switching apps while the native screenshot is being taken discards the image', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: Date.UTC(2026, 10, 17, 9) })
+  const uploads = []
+  const { launch, url } = await setup(t, item => { uploads.push(item); return 202 })
+  const browser = { activity: 'active', foreground_app: 'Chrome', target: { id: '77', pid: 123456 } }
+  let sample = browser
+  let shots = 0
+  const client = launch(() => sample, () => {
+    shots++
+    sample = { ...browser, foreground_app: 'Editor', target: { id: '88', pid: 654321 } }
+    return { jpegBase64: '/9j/2Q==' }
+  })
+  await client.configure({ url, terminal: 'desktop', token: 'test' })
+  client.setCollection(true)
+  await until(() => !client.profile.capturing)
+  client.setScreenshots({ enabled: true })
+  await client.capture()
+  await observeFor(t, client, 600)
+  sample = browser
+  await observeFor(t, client, 2)
+  await observeFor(t, client, 610)
+  sample = { activity: 'locked' }
+  await client.capture()
+  await client.flushMaterials()
+  await until(() => !client.profile.flushing && !client.state().pendingMaterials)
+  assert.equal(shots, 1)
+  assert.deepEqual(uploads.map(item => item.route), ['/v1/perceptions'])
 })
 
 test('screenshot opt-out strips queued frames while retaining the dwell', async (t) => {
@@ -205,11 +280,40 @@ test('screenshot opt-out strips queued frames while retaining the dwell', async 
   const file = path.join(directory, item.frames[0].id)
   fs.writeFileSync(file, Buffer.from([255,216,255,217]))
   p.history.materials.push(item)
-  client.setScreenshots({ enabled: false, minutes: 5 })
+  client.setScreenshots({ enabled: false })
   assert.ok(!fs.existsSync(file))
   const pending = p.history.materials.find(m => m.id === item.id)
   assert.ok(pending && !pending.frames?.length)
   assert.equal(p.history.materials.length, 1)
+})
+
+test('upgrade recovers one eligible frame from an interrupted legacy visit and preserves queued deliveries', async t => {
+  const uploads = []
+  const { dir, launch, url } = await setup(t, item => { uploads.push(item.body); return 202 })
+  const terminal = 'desktop'
+  const key = createHash('sha256').update(url + '\n' + terminal).digest('hex')
+  const directory = path.join(dir, 'media-' + key, 'periodic')
+  fs.mkdirSync(directory, { recursive: true })
+  const at = s => new Date(Date.UTC(2026, 10, 17, 1) + s * 1000).toISOString()
+  function frame(s) {
+    const id = randomUUID()
+    fs.writeFileSync(path.join(directory, id), Buffer.from([255, 216, 255, 217]))
+    return { id, bytes: 4, occurred_at: at(s), segment: at(0) }
+  }
+  const queued = randomUUID(), interrupted = randomUUID()
+  fs.writeFileSync(path.join(dir, 'agent-settings.json'), JSON.stringify({ url, terminal,
+    secret: Buffer.from('test').toString('base64'), collecting: true, screenshotsEnabled: true, captureVersion: 6 }))
+  fs.writeFileSync(path.join(dir, 'terminal-' + key + '.json'), JSON.stringify({
+    materials: [{ id: queued, source: 'window', kind: 'perception', frames: [frame(10), frame(70)],
+      body: { event_id: queued, state_key: 'desktop.window_span' } }],
+    windowSpan: { id: interrupted, app: 'Chrome', start: at(0), lastSeen: at(750),
+      frames: [frame(10)], titleRun: { samples: [frame(550), frame(610), frame(730)] } },
+  }))
+  const client = launch()
+  await until(() => !client.profile.flushing && uploads.length === 2)
+  assert.deepEqual(uploads.map(u => [u.event_id, u.frames.map(f => f.occurred_at)]),
+    [[queued, [at(10), at(70)]], [interrupted, [at(610)]]])
+  assert.deepEqual(fs.readdirSync(directory), [])
 })
 
 test('startup discards retired captures from every profile before any upload', async t => {

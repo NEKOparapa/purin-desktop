@@ -10,9 +10,8 @@ const {
 const {
   advanceWindowSpan,
   minDwellMs,
-  maxSampleGap,
 } = require('./window-spans.cjs')
-const { newTitleRun, sameTitle, nextFrameAt, saveSample, finishTitle, discardSamples } = require('./representative-frames.cjs')
+const { screenshotDwellMs, saveVisitScreenshot } = require('./visit-screenshot.cjs')
 const { saveHistoryFile, readHistoryImage } = require('./history.cjs')
 const { ChatHistory } = require('./chat-history.cjs')
 const { availableTools, secureTransport, TerminalToolClient } = require('./terminal-tools.cjs')
@@ -37,16 +36,6 @@ function save(file, value) {
 function recordWindow(profile, sample, at, target) {
   const history = profile.history
   const previous = history.windowSpan
-  const title = sample?.window_title || ''
-  const eligible = profile.screenshotsEnabled && sample?.activity === 'active' &&
-    target && target.pid !== process.pid
-  const gap = at.getTime() - Date.parse(previous?.lastSeen)
-  const interrupted = gap > maxSampleGap || gap < 0
-  let discarded = []
-  if (previous?.titleRun && (interrupted || !eligible || previous.app !== sample.foreground_app ||
-    !sameTitle(previous.titleRun, title, target))) {
-    discarded = finishTitle(previous, interrupted ? previous.lastSeen : at.toISOString())
-  }
   const { active, candidate, finished } = advanceWindowSpan(
     previous,
     profile.windowCandidate,
@@ -66,13 +55,14 @@ function recordWindow(profile, sample, at, target) {
   }
   history.windowSpan = active
   profile.windowCandidate = candidate
+  // Even a brief switch breaks continuous screenshot dwell. Activity history
+  // can still merge an accidental switch into the same visit.
+  if (candidate && active) delete active.screenshotDueAt
   const current = candidate ?? active
-  if (current && eligible && !sameTitle(current.titleRun, title, target))
-    current.titleRun = newTitleRun(title, target, at.toISOString())
-  if (candidate && !eligible) delete candidate.titleRun
-  if (discarded.length) {
-    save(profile.file, history)
-    discardSamples(profile, discarded)
+  if (current) {
+    if (profile.screenshotsEnabled && target && target.pid !== process.pid && !current.screenshotAttempted)
+      current.screenshotDueAt ??= at.getTime() + screenshotDwellMs
+    else delete current.screenshotDueAt
   }
   return finished
 }
@@ -272,7 +262,18 @@ class DesktopAgent {
     p.history.materials ??= []
     p.screenshotsEnabled = !!(p.collecting && p.screenshotsEnabled)
     p.screenshotEpoch = 0
-    if (!p.screenshotsEnabled && (p.history.windowSpan?.titleRun || p.history.windowSpan?.frames?.length ||
+    // An interrupted visit from the former title sampler may hold provisional frames.
+    // Keep at most one eligible image; already queued requests retain their original payload.
+    const recovered = p.history.windowSpan
+    if (recovered?.titleRun || recovered?.frames?.some(frame => frame.segment)) {
+      const due = Date.parse(recovered.start) + (recovered.awayMs || 0) + screenshotDwellMs
+      const frame = [...(recovered.frames || []), ...(recovered.titleRun?.samples || [])]
+        .find(item => Date.parse(item.occurred_at) >= due)
+      recovered.frames = frame ? [frame] : []
+      delete recovered.titleRun
+      save(file, p.history)
+    }
+    if (!p.screenshotsEnabled && (p.history.windowSpan?.frames?.length ||
         p.history.materials.some(item => item.frames?.length))) {
       this.dropAutomatic(p, 'screenshot')
       save(p.file, p.history)
@@ -281,7 +282,6 @@ class DesktopAgent {
     const directory = path.join(p.mediaDirectory, 'periodic')
     if (fs.existsSync(directory)) {
       const queued = new Set((p.history.windowSpan?.frames || []).map(frame => frame.id))
-      for (const frame of p.history.windowSpan?.titleRun?.samples || []) queued.add(frame.id)
       for (const item of p.history.materials) {
         for (const frame of item.frames || []) queued.add(frame.id)
       }
@@ -669,7 +669,7 @@ class DesktopAgent {
     let path = '/v1/history/compression'
     if (kind === 'list' && ['perception', 'slice'].includes(layer)) {
       query.set('layer', layer)
-    } else if (kind === 'source' || kind === 'batch') {
+    } else if (kind === 'source' || kind === 'batch' || kind === 'stages') {
       if (
         typeof id !== 'string' ||
         !id ||
@@ -680,25 +680,27 @@ class DesktopAgent {
         id === '.'
       )
         throw new Error('无效的记录编号')
-      if (kind === 'source') {
+      if (kind === 'stages') {
+        path = '/v1/history/perceptions/' + encodeURIComponent(id) + '/stages'
+      } else if (kind === 'source') {
         path += '/sources'
         if (activity === true) query.set('activity', '1')
       }
-      path += '/' + encodeURIComponent(id)
+      if (kind !== 'stages') path += '/' + encodeURIComponent(id)
     } else {
       throw new Error('未知的压缩记录类型')
     }
     try {
       return await request(
         p,
-        path + '?' + query,
+        kind === 'stages' ? path : path + '?' + query,
         undefined,
         p.controller.signal,
       )
     } catch (error) {
       if (error.status === 404)
         throw new Error(
-          kind === 'list'
+          kind === 'stages' ? '后端未提供这条记录的压缩过程。请确认后端已更新，再刷新记录。' : kind === 'list'
             ? '当前后端未提供压缩对照，请升级后端后刷新。'
             : '找不到这条记录。如使用旧后端，请升级后再查看详情。',
         )
@@ -841,11 +843,8 @@ class DesktopAgent {
     if (p.uploading?.source === source) p.uploadController?.abort()
     const removed = []
     if (source === 'screenshot') {
-      if (p.windowCandidate) delete p.windowCandidate.titleRun
-      if (p.history.windowSpan?.titleRun) {
-        removed.push(...p.history.windowSpan.titleRun.samples)
-        delete p.history.windowSpan.titleRun
-      }
+      if (p.windowCandidate) delete p.windowCandidate.screenshotDueAt
+      if (p.history.windowSpan) delete p.history.windowSpan.screenshotDueAt
       if (p.history.windowSpan?.frames) {
         removed.push(...p.history.windowSpan.frames)
         delete p.history.windowSpan.frames
@@ -1085,10 +1084,13 @@ class DesktopAgent {
       !span ||
       p.windowCandidate ||
       value.activity !== 'active' ||
-      !span.titleRun ||
-      Date.parse(span.lastSeen) < Math.max(nextFrameAt(span.titleRun), p.retryScreenshotAt || 0)
+      span.screenshotAttempted ||
+      span.screenshotDueAt == null ||
+      Date.parse(span.lastSeen) < span.screenshotDueAt
     )
       return
+    span.screenshotAttempted = true
+    delete span.screenshotDueAt
     const epoch = p.screenshotEpoch
     const valid = () =>
       !signal.aborted && p === this.profile && epoch === p.screenshotEpoch &&
@@ -1103,8 +1105,7 @@ class DesktopAgent {
         after.activity !== 'active' ||
         after.target?.id !== target.id ||
         after.target?.pid !== target.pid ||
-        after.foreground_app !== value.foreground_app ||
-        after.window_title !== value.window_title
+        after.foreground_app !== value.foreground_app
       ) {
         const { target: nextTarget, ...nextValue } = after
         const finished = recordWindow(p, nextValue, new Date(), nextTarget)
@@ -1112,16 +1113,14 @@ class DesktopAgent {
         else save(p.file, p.history)
         return
       }
-      const discarded = saveSample(p, span, jpegBase64, occurredAt)
+      const title = after.window_title === value.window_title ? value.window_title : undefined
+      span.frames = [saveVisitScreenshot(p, jpegBase64, occurredAt, title)]
       save(p.file, p.history)
-      discardSamples(p, discarded)
-      p.retryScreenshotAt = 0
       if (p.screenshotIssue) {
         p.screenshotIssue = ''
         this.publish()
       }
     } catch (error) {
-      if (valid()) p.retryScreenshotAt = Date.now() + 10_000
       if (valid() && p.screenshotIssue !== error.message) {
         p.screenshotIssue = error.message
         this.publish()
@@ -1147,7 +1146,7 @@ class DesktopAgent {
       observed = true
       if (finished) this.persist(p)
       else if ((previous || p.history.windowSpan) &&
-        (previous?.titleRun !== p.history.windowSpan?.titleRun || now >= (p.nextCheckpoint || 0))) {
+        (previous?.id !== p.history.windowSpan?.id || now >= (p.nextCheckpoint || 0))) {
         save(p.file, p.history)
         p.nextCheckpoint = now.getTime() + 15_000
       }

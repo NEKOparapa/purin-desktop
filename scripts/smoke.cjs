@@ -258,7 +258,7 @@ async function main() {
       const screenshots = win.getByLabel('自动截图（前台窗口）')
       await screenshots.click()
       await expect(screenshots).toBeChecked()
-      await expect(win.getByText(/窗口标题稳定 10 秒/)).toBeVisible()
+      await expect(win.getByText(/同一应用连续在前台停留满 10 分钟时截一张/)).toBeVisible()
       const spans = () =>
         [...api.events.values()].filter(
           (event) => event.state_key === 'desktop.window_span',

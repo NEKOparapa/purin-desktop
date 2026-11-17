@@ -33,7 +33,7 @@ async function enableWindowCapture() {
   }
   if (systemPreferences.getMediaAccessStatus('screen') !== 'granted')
     throw new Error(
-      '请在 macOS 系统设置的“隐私与安全性 → 录屏”中允许 Wintermute，然后重新开启代表帧采集',
+      '请在 macOS 系统设置的“隐私与安全性 → 录屏”中允许 Wintermute，然后重新开启自动截图',
     )
 }
 
@@ -45,8 +45,7 @@ async function captureForegroundWindow(target) {
     : await captureWindow('window:' + target.id + ':0')
   const image = nativeImage.createFromBuffer(Buffer.from(jpegBase64, 'base64'))
   if (image.isEmpty()) throw new Error('前台截图无法解码')
-  // One window observation can carry four JPEGs. Keep their base64 JSON
-  // under the service's 8 MiB reverse-proxy limit, including dense photos.
+  // Bound the size of the queued JPEG and its base64 upload.
   if (Buffer.byteLength(jpegBase64, 'base64') > 1024 * 1024) {
     let width = image.getSize().width
     let bytes

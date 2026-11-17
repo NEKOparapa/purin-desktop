@@ -4,7 +4,7 @@ import type { ActivityLayer, HistoryItem, HistoryView } from '@/lib/desktop'
 import { emptyPage, useHistoryPages, type PageState } from '@/lib/history-pages'
 import { Files } from './history-files'
 import { HistoryConnection } from './history-viewport'
-import { PerceptionRecord, type PerceptionMode } from './perception-record'
+import { PerceptionBrowser } from './perception-browser'
 import { CompressionBrowser, OriginalDisclosure } from './compression-browser'
 import { UserProfile } from './user-profile'
 import { TerminalToolHistory } from './terminal-tool-history'
@@ -168,12 +168,10 @@ function HistoryRecords({
   read,
   term,
   layer,
-  raw,
 }: {
   items: HistoryItem[]
   term: string
   layer?: ActivityLayer
-  raw: boolean
 } & ReturnType<typeof useHistoryPages>) {
   const rows = []
   let previousDay: string | null = null
@@ -189,9 +187,7 @@ function HistoryRecords({
       {rows.map(({ item, date, heading }) => (
         <li key={item.id}>
           {heading && <h2>{heading}</h2>}
-          {layer === 'perception' ? (
-            <PerceptionRecord item={item} raw={raw} />
-          ) : item.group ? (
+          {item.group ? (
             <GroupRecord item={item} pages={pages} read={read} term={term} />
           ) : (
             <article className="history-entry">
@@ -222,15 +218,16 @@ function HistoryRecords({
 function HistoryList({
   view,
   label,
-  raw = false,
+  openTimeline,
 }: {
   view: HistoryView
   label: string
-  raw?: boolean
+  openTimeline?: () => void
 }) {
   const { pages, read } = useHistoryPages(view)
   const page = pages.get(null) ?? emptyPage
   const [query, setQuery] = useState('')
+  const [revision, setRevision] = useState(0)
   const term = query.trim().toLowerCase()
   const visible = page.items.filter(
     (item) =>
@@ -258,20 +255,21 @@ function HistoryList({
         </label>
         <button
           className="history-refresh"
-          onClick={() => void read(null, null)}
+          onClick={() => { setRevision(n=>n+1); void read(null, null) }}
           disabled={page.loading}
         >
           <RotateCw size={14} aria-hidden="true" /> 刷新
         </button>
       </div>
-      <HistoryRecords
+      {view === 'perception' && openTimeline ? visible.length > 0 && <PerceptionBrowser
+        items={visible} openTimeline={openTimeline} revision={revision}
+      /> : <HistoryRecords
         items={visible}
         pages={pages}
         read={read}
         term={term}
-        layer={view === 'slice' || view === 'perception' ? view : undefined}
-        raw={raw}
-      />
+        layer={view === 'slice' ? view : undefined}
+      />}
       {!page.loading && !page.error && !visible.length && (
         <div className="history-empty" role="status">
           <BookOpen size={22} aria-hidden="true" />
@@ -297,34 +295,8 @@ function ActivityHistory({
   openTimeline: () => void
 }) {
   const [compare, setCompare] = useState(false)
-  const [mode, setMode] = useState<PerceptionMode>('formatted')
   if (layer === 'perception')
-    return (
-      <>
-        <div className="history-modes" role="group" aria-label="感知层显示方式">
-          {(
-            [
-              ['formatted', '格式化信息'],
-              ['raw', '原始信息'],
-              ['compressed', '压缩信息'],
-            ] as const
-          ).map(([id, title]) => (
-            <button
-              key={id}
-              aria-pressed={mode === id}
-              onClick={() => setMode(id)}
-            >
-              {title}
-            </button>
-          ))}
-        </div>
-        {mode === 'compressed' ? (
-          <CompressionBrowser layer={layer} openTimeline={openTimeline} />
-        ) : (
-          <HistoryList view={layer} label={label} raw={mode === 'raw'} />
-        )}
-      </>
-    )
+    return <HistoryList view={layer} label={label} openTimeline={openTimeline} />
   return (
     <>
       <div
@@ -362,7 +334,7 @@ export function MemoryBrowser({
   const [view, setView] = useState(views[0])
   return (
     <HistoryConnection.Provider value={connectionRevision}>
-      <section className="browse-page history-browser">
+      <section className="browse-page history-browser" data-view={view.id}>
         <div className="page-heading">
           <h1>记忆</h1>
         </div>

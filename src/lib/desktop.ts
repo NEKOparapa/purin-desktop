@@ -132,6 +132,16 @@ export interface OriginalDetail extends ResultsPage<OriginalRecord> {
   }
 }
 
+export interface PerceptionStages {
+  decisions: { kind: 'application' | 'title'; label: string; seconds: number; kept: boolean }[]
+  retained: unknown
+  parts: { kind: 'observation' | 'visual'; text: string; delivered: boolean; round_id: string | null }[]
+  rounds: { id: string; status: 'pending' | 'ready' | 'retrying' | 'disabled'; input: string; summary: string | null }[]
+  ai_enabled: boolean
+  budget: number
+  pending_size: number
+}
+
 export interface ScheduleEntry {
   id: string
   title: string
@@ -222,6 +232,7 @@ declare global {
         cursor?: string
         groupId?: string
       }): Promise<HistoryPage>
+      compression(options: { kind: 'stages'; id: string }): Promise<PerceptionStages>
       compression(options: {
         kind: 'list'
         layer: ActivityLayer

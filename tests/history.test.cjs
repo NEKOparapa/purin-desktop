@@ -72,6 +72,8 @@ test('history uses the bound terminal and fetches an attachment only after Save'
     }
     if (url.pathname === '/v1/history/screenshot-groups/evt_run')
       return res.end(JSON.stringify({ items: [], next_cursor: null }))
+    if (url.pathname === '/v1/history/perceptions/evt%3Aunique/stages' && !url.search)
+      return res.end(JSON.stringify({ budget: 800, parts: [] }))
     if (
       url.pathname.startsWith('/v1/history/compression') &&
       url.searchParams.get('cursor') !== 'legacy'
@@ -172,6 +174,7 @@ test('history uses the bound terminal and fetches an attachment only after Save'
   assert.equal(batch.pathname, '/v1/history/compression/17')
   assert.equal(source.pathname, '/v1/history/compression/sources/evt%3Aunique')
   assert.equal(source.searchParams.get('activity'), '1')
+  assert.equal((await agent.compression({ kind: 'stages', id: 'evt:unique' })).budget, 800)
   await assert.rejects(
     agent.compression({ kind: 'list', layer: 'slice', cursor: 'legacy' }),
     /升级后端/,

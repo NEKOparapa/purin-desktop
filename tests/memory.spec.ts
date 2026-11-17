@@ -500,17 +500,21 @@ test('perception shows the complete event, ordered observations with inline fram
   })
   await page.evaluate(() => {
     const api = window.wintermute!
-    Object.assign(api,{compression: async ({kind}: {kind:string}) => {
-      const batch = {id:'1', terminal_id:'会议电脑', started_at:'2026-11-15T09:00:00Z', ended_at:'2026-11-15T09:02:00Z', perception_count:1,slice_count:0,status:'ready',partial:false}
-      return kind === 'list' ? {items:[batch],next_cursor:null}
-        : {batch,items:[],next_cursor:null,rule_text:'规则结果',ai_text:'已保存的模型摘要',rollup:null}
+    Object.assign(api,{compression: async ({kind,id}: {kind:string;id:string}) => {
+      if(kind!=='stages' || id!=='evt_a') throw Error('请求了其他记录')
+      return { decisions:[{kind:'title',label:'闪现标题',seconds:2,kept:false}],
+        retained:{work_objects:['议程文档']},
+        parts:[{kind:'observation',text:'会议电脑 · 议程文档',round_id:'1',delivered:false}],
+        rounds:[{id:'1',status:'ready',input:'来自上一轮的摘要和本轮新增记录',summary:'已保存的模型摘要'}],
+        ai_enabled:true, pending_size:50,budget:800 }
     }})
   })
   await page.getByRole('button', {name:'感知层',exact:true}).click()
-  await expect(page.getByRole('button', {name:'格式化信息'})).toHaveAttribute('aria-pressed','true')
+  await expect(page.getByRole('group',{name:'压缩过程'}).getByRole('button')).toHaveText(['原始信息','规则压缩','格式排版','AI 压缩'])
+  await expect(page.getByRole('button', {name:'原始信息'})).toHaveAttribute('aria-pressed','true')
   await expect(page.getByRole('heading', {name:'Editor'})).toBeVisible()
   await expect(page.getByText('停留 1 分钟 30 秒')).toBeVisible()
-  await expect(page.getByText('议程文档')).toBeVisible()
+  await expect(page.getByText('切换到「议程文档」',{exact:true})).toBeVisible()
   await expect(page.getByText('截图读取失败')).toBeVisible()
   failPreview = false
   await page.getByRole('button',{name:'重新加载截图'}).click()
@@ -518,17 +522,57 @@ test('perception shows the complete event, ordered observations with inline fram
   const description=page.locator('li').filter({has:page.getByText('风险清单出现两个待办。',{exact:true})}).last()
   await description.getByText('second.jpg').scrollIntoViewIfNeeded()
   await expect(description.getByRole('img',{name:'second.jpg'})).toBeVisible()
-  await page.getByRole('button',{name:'原始信息'}).click()
+  await page.getByText('完整上报 JSON').click()
   await expect(page.locator('.perception-json')).toHaveText(JSON.stringify(raw,null,2))
   await page.getByText('first.jpg', {exact: true}).scrollIntoViewIfNeeded()
   await expect(page.getByRole('img',{name:'first.jpg'})).toBeVisible()
-  await page.getByRole('button',{name:'压缩信息'}).click()
-  await page.getByRole('button',{name:/会议电脑/}).click()
-  await expect(page.getByText('规则结果')).toBeVisible()
+  await page.getByRole('button',{name:'规则压缩'}).click()
+  await expect(page.getByRole('row').filter({hasText:'闪现标题'})).toContainText('过滤')
+  await page.getByRole('button',{name:'格式排版'}).click()
+  await expect(page.getByText('会议电脑 · 议程文档')).toBeVisible()
+  await expect(page.getByText('闪现标题')).toHaveCount(0)
+  await page.getByRole('button',{name:'AI 压缩'}).click()
   await expect(page.getByText('已保存的模型摘要')).toBeVisible()
+  await page.getByText('查看本轮完整输入').click()
+  await expect(page.getByText('来自上一轮的摘要和本轮新增记录')).toBeVisible()
   await expect(page.getByRole('img')).toHaveCount(0)
   expect(previews).toContain('evt_a:frame:0')
   expect(previews).toContain('evt_a:frame:1')
+})
+
+test('stage selection follows the record and ignores late responses for another visit', async ({page}) => {
+  const rows = ['Editor','QQ'].map((app,i)=>({...item(app,app),raw:{payload:{
+    state_key:'desktop.window_span',value:{foreground_app:app,duration_seconds:i?3:30}}}}))
+  await openMemory(page,()=>({items:rows,next_cursor:null}))
+  let release!: () => void
+  const gate = new Promise<void>(resolve=> { release=resolve })
+  let finished=false
+  await page.exposeFunction('readStages',async ({id}:{id:string})=>{
+    if(id==='Editor') await gate
+    const kept=id==='Editor'
+    return { decisions:[{kind:'application',label:id,seconds:kept?30:3,kept}],retained:kept?{app:id}:null,
+      parts:[{kind:'observation',text:kept?'编辑记录':'',delivered:false,round_id:kept&&finished?'9':null}],
+      rounds:kept&&finished?[{id:'9',status:'ready',summary:'本轮完成',input:'编辑记录'}]:[],
+      ai_enabled:true,pending_size:75,budget:800 }
+  })
+  await page.evaluate(()=>Object.assign(window.wintermute!,{compression:(window as unknown as {readStages:unknown}).readStages}))
+  await page.getByRole('button',{name:'感知层',exact:true}).click()
+  await page.getByRole('button',{name:'规则压缩'}).click()
+  await expect(page.getByText('正在读取处理记录…')).toBeVisible()
+  const list=page.getByRole('navigation',{name:'采集记录'})
+  await list.getByRole('button',{name:/QQ/}).click()
+  await expect(page.getByText('整次停留已过滤')).toBeVisible()
+  release()
+  await page.getByRole('button',{name:'格式排版'}).click()
+  await expect(page.getByText(/没有生成时间线文字/)).toBeVisible()
+  await page.getByRole('button',{name:'AI 压缩'}).click()
+  await expect(page.getByText(/无需 AI 压缩/)).toBeVisible()
+  await list.getByRole('button',{name:/Editor/}).click()
+  await expect(page.getByText('尚未超过压缩预算')).toBeVisible()
+  await expect(page.getByText(/75 \/ 800/)).toBeVisible()
+  finished=true
+  await page.evaluate(()=>window.dispatchEvent(new Event('focus')))
+  await expect(page.getByText('本轮完成')).toBeVisible()
 })
 
 test('a pending visit on an older page gains its description in capture order', async ({page}) => {
@@ -548,6 +592,7 @@ test('a pending visit on an older page gains its description in capture order', 
   })
   await page.getByRole('button',{name:'感知层',exact:true}).click()
   await page.getByRole('button',{name:'加载更早记录'}).click()
+  await page.getByRole('navigation',{name:'采集记录'}).getByRole('button',{name:/编辑器/}).click()
   await expect(page.getByText(/正在识别截图/)).toBeVisible()
   ready = true
   await page.evaluate(() => window.dispatchEvent(new Event('focus')))
@@ -556,7 +601,7 @@ test('a pending visit on an older page gains its description in capture order', 
   await expect(entries.nth(0)).toContainText('议程里写着部署评审')
   await expect(entries.nth(1)).toContainText('风险清单')
   await expect(page.getByText(/正在识别截图/)).toHaveCount(0)
-  await page.getByRole('button',{name:'原始信息'}).click()
+  await page.getByText('完整上报 JSON').click()
   await expect(page.locator('.perception-json')).toContainText('议程里写着部署评审')
 })
 
@@ -582,7 +627,7 @@ test('screenshot reads follow the viewport and release image URLs when leaving m
   await expect(first).toBeVisible()
   const url = await first.getAttribute('src')
   expect(reads).not.toContain('frame-19')
-  await page.getByText('窗口-19.jpg',{exact:true}).scrollIntoViewIfNeeded()
+  await page.getByRole('navigation',{name:'采集记录'}).getByRole('button').last().click()
   await expect(page.getByRole('img',{name:'窗口-19.jpg',exact:true})).toBeVisible()
   await expect(first).toHaveCount(0)
   await expect.poll(() => released).toContain(url)

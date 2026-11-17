@@ -1,29 +1,7 @@
 import type { HistoryItem, HistoryFile } from '@/lib/desktop'
 import { Files } from './history-files'
-export type PerceptionMode = 'formatted' | 'raw' | 'compressed'
 
-const labels: Record<string, string> = {
-  'mobile.location': '地点',
-  'mobile.app_activity': '移动端活动',
-  domain: '网站',
-  title: '标题',
-  window_title: '窗口',
-  foreground_app: '应用',
-  activity: '活动',
-  duration_seconds: '停留秒数',
-  started_at: '开始时间',
-  ended_at: '结束时间',
-}
-
-function record(value: unknown): Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {}
-}
-
-function text(value: unknown) {
-  return typeof value === 'string' ? value : ''
-}
+import { record, text, duration, labels } from '@/lib/perception'
 
 const clock = new Intl.DateTimeFormat('zh-CN', {
   timeStyle: 'medium',
@@ -39,19 +17,6 @@ function time(value: unknown, date = false) {
   const ts = text(value)
   if (!ts || !Number.isFinite(Date.parse(ts))) return ts
   return (date ? dateTime : clock).format(new Date(ts))
-}
-
-function duration(seconds: number) {
-  const hours = Math.floor(seconds / 3600)
-  const minutes = Math.floor(seconds / 60) % 60
-  const rest = seconds % 60
-  return [
-    hours && hours + ' 小时',
-    minutes && minutes + ' 分钟',
-    (rest || !seconds) && rest + ' 秒',
-  ]
-    .filter(Boolean)
-    .join(' ')
 }
 
 function DesktopSpan({
@@ -98,7 +63,6 @@ function DesktopSpan({
   return (
     <>
       <div className="perception-title">
-        <h3>{text(value.foreground_app) || '桌面应用'}</h3>
         {typeof value.duration_seconds === 'number' && (
           <span>停留 {duration(value.duration_seconds)}</span>
         )}
@@ -142,7 +106,7 @@ function DesktopSpan({
   )
 }
 
-function FormattedRecord({ item }: { item: HistoryItem }) {
+function Observation({ item }: { item: HistoryItem }) {
   const payload = record(item.raw?.payload)
   const kind = text(payload.state_key)
   const value = record(payload.value)
@@ -152,7 +116,6 @@ function FormattedRecord({ item }: { item: HistoryItem }) {
   }
   return (
     <>
-      {kind && <h3>{labels[kind] ?? kind}</h3>}
       {Object.keys(value).length ? (
         <dl className="perception-fields">
           {Object.entries(value).map(([key, field]) => (
@@ -178,34 +141,14 @@ function FormattedRecord({ item }: { item: HistoryItem }) {
   )
 }
 
-export function PerceptionRecord({
-  item,
-  raw,
-}: {
-  item: HistoryItem
-  raw: boolean
-}) {
-  let content
-  if (!raw) content = <FormattedRecord item={item} />
-  else if (item.raw)
-    content = (
-      <>
-        <pre className="perception-json">
-          {JSON.stringify(item.raw, null, 2)}
-        </pre>
-        <Files files={item.files} />
-      </>
-    )
-  else content = <p>缺少原始事件数据</p>
+export function PerceptionRecord({ item }: { item: HistoryItem }) {
   return (
-    <article className="history-entry perception-entry">
-      <header>
-        <span>{text(item.raw?.terminal_id) || item.source}</span>
-        <time dateTime={item.occurred_at ?? undefined}>
-          {time(item.occurred_at) || '时间未记录'}
-        </time>
-      </header>
-      {content}
-    </article>
+    <>
+      <Observation item={item} />
+      {item.raw && <details className="stage-disclosure">
+        <summary>完整上报 JSON</summary>
+        <pre className="perception-json">{JSON.stringify(item.raw, null, 2)}</pre>
+      </details>}
+    </>
   )
 }

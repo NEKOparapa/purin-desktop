@@ -428,7 +428,6 @@
   container-type: inline-size;
 }
 
-.perception-entry > header,
 .perception-interval,
 .perception-title span,
 .perception-details small,
@@ -436,10 +435,98 @@
   color: var(--muted);
   font-size: 12px;
 }
-.perception-entry h3 {
-  margin: 5px 0 2px;
-  font-size: 17px;
-  font-weight: 600;
+.history-browser[data-view='perception'] {
+  padding-inline: max(24px, calc((100% - 980px) / 2));
+}
+
+.perception-workspace {
+  display: grid;
+  grid-template-columns: minmax(155px, 30%) minmax(0, 1fr);
+  align-items: start;
+  gap: clamp(14px, 3cqw, 32px);
+}
+.perception-index {
+  max-height: min(68vh, 48rem);
+  overflow: auto;
+  scrollbar-width: thin;
+  border-right: 1px solid var(--line);
+  padding-right: 12px;
+}
+.perception-index h2, .perception-choice small, .perception-choice time,
+.perception-inspect > header small, .stage-caption small {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.perception-index h2 { margin: 16px 7px 6px; font-weight: 550; }
+.perception-index h2:first-child { margin-top: 0; }
+.perception-choice {
+  width: 100%;
+  text-align: left;
+  display: grid;
+  gap: 3px;
+  padding: 9px 8px;
+  border-radius: 6px;
+}
+.perception-choice > span, .stage-caption {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 12px;
+}
+.perception-choice strong, .perception-choice small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.perception-choice strong { font-weight: 550; font-size: 14px; }
+.perception-choice:hover, .perception-steps button:hover { background: var(--hover); }
+.perception-choice[aria-pressed='true'], .perception-steps button[aria-pressed='true'] {
+  background: var(--active);
+  color: var(--ink);
+}
+.perception-inspect { min-width: 0; overflow-wrap: anywhere; }
+.perception-inspect > header h2 { margin: 2px 0 12px; font: 500 23px/1.35 var(--serif); }
+.perception-steps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+  color: var(--quiet);
+}
+.perception-steps button {
+  padding: 5px 8px;
+  border-radius: 5px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.perception-steps button[aria-pressed='true'] { font-weight: 600; }
+.perception-stage { padding: 16px 0; font-size: 14px; line-height: 1.65; }
+.perception-stage h3 { font-size: 15px; font-weight: 600; }
+.stage-note, .stage-disclosure summary { color: var(--muted); font-size: 13px; }
+.stage-note { margin: 5px 0; }
+.stage-text, .stage-summary { margin-top: 8px; white-space: pre-wrap; }
+.stage-text {
+  padding: 12px 14px;
+  border-left: 2px solid var(--line);
+  font: inherit;
+  background: var(--hover);
+}
+.stage-caption { flex-wrap: wrap; }
+.stage-section + .stage-section { margin-top: 20px; }
+.stage-link, .stage-disclosure { margin-top: 15px; }
+.stage-disclosure summary { width: fit-content; cursor: pointer; }
+.stage-disclosure pre { max-height: 32rem; overflow: auto; }
+.rule-decisions { width: 100%; margin: 13px 0; border-collapse: collapse; font-size: 13px; }
+.rule-decisions th, .rule-decisions td { padding: 6px 3px; text-align: left; border-bottom: 1px solid var(--line); }
+.rule-decisions th, .rule-decisions small { font-size: 12px; font-weight: 450; color: var(--muted); }
+.rule-decisions td small { display: block; }
+.rule-decisions td:not(:first-child) { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.rule-decisions tr[data-kept='false'] td:first-child { color: var(--muted); text-decoration: line-through; }
+.rule-decisions tr[data-kept='false'] td small { text-decoration: none; }
+@container (max-width: 630px) {
+  .perception-workspace { grid-template-columns: minmax(0, 1fr); }
+  .perception-index { max-height: 12rem; padding: 0 0 10px; border-right: 0; border-bottom: 1px solid var(--line); }
+  .perception-steps { gap: 2px; }
+  .perception-steps button { padding-inline: 6px; }
 }
 .perception-title {
   display: flex;
