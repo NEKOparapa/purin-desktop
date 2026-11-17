@@ -75,6 +75,38 @@
   font-weight: 550;
   margin: 24px 0 2px;
 }
+.terminal-call-tools,
+.terminal-call-pages {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.terminal-call header code,
+.terminal-call .call-status,
+.terminal-call details,
+.terminal-call h3 {
+  color: var(--muted);
+  font-size: 12px;
+}
+.terminal-call .call-status:is([data-status='failed'], [data-status='timed_out']) {
+  color: var(--error);
+}
+.terminal-call pre {
+  margin: 8px 0;
+  padding: 9px 12px;
+  border-radius: 6px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 18rem;
+  overflow-y: auto;
+  font: 13px/1.6 var(--mono, monospace);
+  color: var(--ink);
+  background: var(--hover);
+}
+.terminal-call summary { width: fit-content; cursor: pointer; }
+.terminal-call dl { display: grid; gap: 3px; margin: 9px 0; }
+.terminal-call dl div { display: flex; align-items: baseline; gap: 12px; }
+.terminal-call dd { margin: 0; color: var(--ink); }
 .history-entry {
   padding: 15px 0;
   border-bottom: 1px solid var(--line);

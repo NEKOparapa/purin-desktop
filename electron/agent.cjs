@@ -15,6 +15,7 @@ const {
 const { newTitleRun, sameTitle, nextFrameAt, saveSample, finishTitle, discardSamples } = require('./representative-frames.cjs')
 const { saveHistoryFile, readHistoryImage } = require('./history.cjs')
 const { ChatHistory } = require('./chat-history.cjs')
+const { availableTools, secureTransport, TerminalToolClient } = require('./terminal-tools.cjs')
 const { notificationPath, pageRoute, validatePage, deliverPending } = require('./notifications.cjs')
 const initialProfileMarkdown = require('./profile-template.json')
 const captureVersion = 6
@@ -214,6 +215,7 @@ class DesktopAgent {
       /* The system keyring may have changed. Ask for the token again. */
     }
     this.open(settings, token)
+    this.remoteTimer = setInterval(() => this.profile.remote?.poll(), 2000)
     this.pollTimer = setInterval(() => this.sync(), 2200)
     if (presentNotifications) this.notificationTimer = setInterval(() => this.pollNotifications(), 5000)
     this.captureTimer = setInterval(() => {
@@ -226,6 +228,7 @@ class DesktopAgent {
 
   open(settings, token) {
     this.finishWindow()
+    this.profile?.remote?.close()
     this.profile?.controller.abort()
     this.profile?.captureController.abort()
     const key = createHash('sha256')
@@ -246,6 +249,17 @@ class DesktopAgent {
       chat: new ChatHistory(),
     }
     const p = this.profile
+    if (token && secureTransport(p.url)) {
+      const scope = createHash('sha256').update(JSON.stringify([p.url, p.terminal, token])).digest('hex')
+      p.remote = new TerminalToolClient({
+        file: path.join(this.dir, 'remote-tools-' + scope + '.json'),
+        enabled: p.remoteCommandsEnabled === true,
+        tools: availableTools(),
+        post: (route, body) => request(p, route, body, p.controller.signal),
+        read, save, onIssue: () => this.publish(),
+      })
+      void p.remote.poll()
+    }
     // Old clients persisted a complete local transcript. Keep outstanding sends
     // so they can still be retried; committed history is loaded from the server.
     if (Array.isArray(p.history.messages)) {
@@ -299,6 +313,9 @@ class DesktopAgent {
       connectionRevision: p.revision,
       appearance: this.appearance,
       configured: !!p.token,
+      remoteCommandsEnabled: !!p.remote?.enabled,
+      remoteTools: p.remote?.tools || [],
+      remoteIssue: p.remote?.issue || '',
       collecting: !!p.collecting,
       screenshotsEnabled: !!p.screenshotsEnabled,
       screenshotIssue: p.screenshotIssue || '',
@@ -360,6 +377,7 @@ class DesktopAgent {
       ...dest,
       captureVersion,
       secret,
+      remoteCommandsEnabled: same && old.token === credential && !!old.remote?.enabled,
       collecting: same && !!old.collecting,
       appearance: this.appearance,
     }
@@ -421,10 +439,7 @@ class DesktopAgent {
   async requestApiKeys(body) {
     const p = this.profile
     if (!p.token) throw new Error('请先连接终端')
-    const { protocol, hostname } = new URL(p.url)
-    const local = hostname === 'localhost' || hostname === '[::1]' ||
-      /^127(?:\.\d{1,3}){3}$/.test(hostname)
-    if (protocol !== 'https:' && !(protocol === 'http:' && local))
+    if (!secureTransport(p.url))
       throw new Error('管理接口密钥需要 HTTPS 或本机连接')
 
     let page
@@ -559,6 +574,39 @@ class DesktopAgent {
         throw new Error('当前后端未提供日历，请升级后端后刷新。')
       throw error
     }
+  }
+
+  async terminalToolHistory(cursor) {
+    const p = this.profile
+    if (!p.token) throw new Error('请先连接终端')
+    const query = new URLSearchParams({ limit: '20' })
+    if (cursor !== undefined) {
+      if (typeof cursor !== 'string' || !cursor || cursor.length > 2048)
+        throw new Error('无效的调用记录分页位置')
+      query.set('cursor', cursor)
+    }
+    const page = await request(p, '/v1/terminal-tools/history?' + query, undefined, p.controller.signal)
+    if (p !== this.profile) throw new Error('连接已更改')
+    const invalid = '后端返回的终端工具调用记录格式有误'
+    if (!Array.isArray(page?.items) ||
+        !(page.next_cursor === null || (typeof page.next_cursor === 'string' && page.next_cursor)))
+      throw new Error(invalid)
+    const items = page.items.map(item => {
+      if (!item || typeof item.id !== 'string' || typeof item.terminal_id !== 'string' ||
+          typeof item.tool !== 'string' || !item.arguments || typeof item.arguments !== 'object' ||
+          Array.isArray(item.arguments) ||
+          !['queued', 'running', 'succeeded', 'failed', 'timed_out', 'expired'].includes(item.status) ||
+          !Number.isInteger(item.timeout_seconds) || !Number.isFinite(Date.parse(item.created_at)) ||
+          ![item.started_at, item.completed_at].every(at => at === null || Number.isFinite(Date.parse(at))) ||
+          typeof item.stdout !== 'string' || typeof item.stderr !== 'string' ||
+          (item.exit_code !== null && !Number.isInteger(item.exit_code)) || typeof item.truncated !== 'boolean')
+        throw new Error(invalid)
+      const { id, terminal_id, tool, timeout_seconds, status, created_at, started_at,
+        completed_at, stdout, stderr, exit_code, truncated } = item
+      return { id, terminal_id, tool, arguments: item.arguments, timeout_seconds,
+        status, created_at, started_at, completed_at, stdout, stderr, exit_code, truncated }
+    })
+    return { items, next_cursor: page.next_cursor }
   }
 
   async history({ view, cursor, groupId }) {
@@ -697,6 +745,7 @@ class DesktopAgent {
 
   settings(p = this.profile) {
     return {
+      remoteCommandsEnabled: !!p.remote?.enabled,
       url: p.url,
       terminal: p.terminal,
       secret: p.secret,
@@ -716,6 +765,17 @@ class DesktopAgent {
       throw new Error('无效的外观选项')
     this.savePreferences({ appearance })
     this.appearance = appearance
+    this.publish()
+  }
+
+  setRemoteCommands({ enabled, connectionRevision }) {
+    const p = this.profile
+    if (!p.token || p.revision !== connectionRevision || typeof enabled !== 'boolean')
+      throw new Error('连接已更改，请重新打开终端设置')
+    if (!p.remote) throw new Error('远程命令需要 HTTPS 或本机连接')
+    if (enabled && !p.remote.tools.length) throw new Error('本机没有可用的命令行工具')
+    this.savePreferences({ remoteCommandsEnabled: enabled })
+    p.remote.setEnabled(enabled)
     this.publish()
   }
 
@@ -1133,6 +1193,8 @@ class DesktopAgent {
 
   close() {
     this.finishWindow()
+    clearInterval(this.remoteTimer)
+    this.profile.remote?.close()
     clearInterval(this.pollTimer)
     clearInterval(this.captureTimer)
     clearInterval(this.notificationTimer)

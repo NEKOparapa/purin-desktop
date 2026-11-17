@@ -23,6 +23,18 @@ test('history uses the bound terminal and fetches an attachment only after Save'
     if (url.pathname === '/v1/outputs') return res.end('{"outputs":[]}')
     if (url.searchParams.get('view') === 'dialogue') return res.end(JSON.stringify({ items: [], next_cursor: null }))
     requests.push(url)
+    if (url.pathname === '/v1/terminal-tools/history') {
+      return res.end(JSON.stringify({ items: [{
+        id: 'cmd-1', terminal_id: 'workstation', tool: 'shell', arguments: { command: 'hostname' },
+        status: 'running', timeout_seconds: 12, created_at: '2026-11-17T08:00:00Z',
+        started_at: '2026-11-17T08:00:01Z', completed_at: null,
+        stdout: '', stderr: '', exit_code: null, truncated: false, claim_token: 'server-only',
+      }, {
+        id: 'status-2', terminal_id: 'phone', tool: 'device_status', arguments: {},
+        status: 'queued', timeout_seconds: 12, created_at: '2026-11-17T08:00:02Z',
+        started_at: null, completed_at: null, stdout: '', stderr: '', exit_code: null, truncated: false,
+      }], next_cursor: null }))
+    }
     if (
       url.pathname === '/v1/schedule' &&
       url.searchParams.get('cursor') !== 'legacy'
@@ -139,6 +151,13 @@ test('history uses the bound terminal and fetches an attachment only after Save'
   assert.equal(forbidden.searchParams.get('grouped'), '1')
   assert.equal(detail.pathname, '/v1/history/screenshot-groups/evt_run')
   assert.equal(detail.searchParams.get('cursor'), 'page+=2')
+  const calls = await agent.terminalToolHistory('other+page=')
+  assert.equal(requests.at(-1).searchParams.get('cursor'), 'other+page=')
+  assert.equal(calls.items[0].terminal_id, 'workstation')
+  assert.equal(calls.items[0].arguments.command, 'hostname')
+  assert.deepEqual(calls.items[1].arguments, {})
+  assert.ok(!Object.hasOwn(calls.items[0], 'claim_token'))
+  await assert.rejects(agent.terminalToolHistory({ cursor: 'invalid' }), /无效/)
   await agent.compression({
     kind: 'list',
     layer: 'perception',

@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
-import type { HistoryFile, HistoryPage, HistoryView } from '../src/lib/desktop'
+import type { HistoryFile, HistoryPage, HistoryView, TerminalToolCall } from '../src/lib/desktop'
 
 type Query = { view: HistoryView; cursor?: string; groupId?: string }
 
@@ -57,6 +57,57 @@ function item(id: string, text: string, files: HistoryFile[] = []) {
     source: '用户原话 · 桌面',
   }
 }
+
+test('terminal call history shows paginated, live results from all targets', async ({ page }) => {
+  const current: TerminalToolCall = {
+    id: 'a', terminal_id: '会议电脑', tool: 'shell', arguments: { command: 'hostname' },
+    timeout_seconds: 15, status: 'running', created_at: '2026-11-17T08:00:00Z',
+    started_at: '2026-11-17T08:00:01Z', completed_at: null,
+    stdout: '', stderr: '', exit_code: null, truncated: false,
+  }
+  const past: TerminalToolCall = {
+    ...current, id: 'b', terminal_id: '另一台电脑', arguments: { command: 'missing-command' },
+    status: 'failed', completed_at: '2026-11-17T08:00:02Z',
+    stderr: '<img src=x onerror=alert(1)>', exit_code: 127, truncated: true,
+  }
+  let offline = true
+  await page.exposeFunction('readToolCalls', (cursor?: string) => {
+    if (cursor) {
+      expect(cursor).toBe('older+page')
+      if (offline) throw new Error('连接暂时中断')
+      return { items: [past], next_cursor: null }
+    }
+    return { items: [current], next_cursor: 'older+page' }
+  })
+  await openMemory(page, () => ({ items: [], next_cursor: null }))
+  await page.evaluate(() => Object.assign(window.wintermute!, {
+    terminalToolHistory: (window as unknown as { readToolCalls: unknown }).readToolCalls,
+  }))
+  await page.getByRole('button', { name: '终端工具调用', exact: true }).click()
+  const row = page.getByRole('article')
+  await expect(row).toContainText('会议电脑')
+  await expect(row).toContainText('shell')
+  await expect(row).toContainText('hostname')
+  await expect(row).toContainText('执行中')
+  await row.getByText('执行详情').click()
+  Object.assign(current, { status: 'succeeded', stdout: 'meeting-pc', exit_code: 0, completed_at: '2026-11-17T08:00:03Z' })
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+  await expect(row).toContainText('已成功')
+  await expect(row.getByText('meeting-pc')).toBeVisible()
+  await expect(row.locator('time').last()).toHaveAttribute('datetime', current.completed_at!)
+  await page.getByRole('button', { name: '较早记录' }).click()
+  await expect(page.getByRole('alert')).toContainText('连接暂时中断')
+  offline = false
+  await page.getByRole('button', { name: '刷新', exact: true }).click()
+  await expect(row).toContainText('另一台电脑')
+  await row.getByText('执行详情').click()
+  await expect(row.getByText('127')).toBeVisible()
+  await expect(row.getByText(past.stderr)).toBeVisible()
+  await expect(row.getByText('输出已截断')).toBeVisible()
+  await expect(row.locator('img')).toHaveCount(0)
+  await page.getByRole('button', { name: '较新记录' }).click()
+  await expect(row).toContainText('meeting-pc')
+})
 
 test('six history views, paginated filtering and audio downloads', async ({
   page,

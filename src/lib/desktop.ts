@@ -64,6 +64,22 @@ export interface HistoryPage {
   next_cursor: string | null
 }
 
+export interface TerminalToolCall {
+  id: string
+  terminal_id: string
+  tool: string
+  arguments: Record<string, unknown>
+  timeout_seconds: number
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'timed_out' | 'expired'
+  created_at: string
+  started_at: string | null
+  completed_at: string | null
+  stdout: string
+  stderr: string
+  exit_code: number | null
+  truncated: boolean
+}
+
 export type ActivityLayer = 'perception' | 'slice'
 export type CompressionStatus =
   'open' | 'rules' | 'pending' | 'ready' | 'retrying' | 'disabled'
@@ -154,6 +170,9 @@ export interface AgentState {
   configured: boolean
   connectionRevision?: number
   collecting: boolean
+  remoteCommandsEnabled: boolean
+  remoteTools: string[]
+  remoteIssue: string
   screenshotsEnabled: boolean
   screenshotIssue: string
   pendingMaterials: number
@@ -197,6 +216,7 @@ declare global {
       updateApiKey(update: ApiKeyUpdate): Promise<ApiKeySetting[]>
       schedule(range: ScheduleRange): Promise<ResultsPage<ScheduleEntry>>
       userProfile(): Promise<UserProfileDocument>
+      terminalToolHistory(cursor?: string): Promise<ResultsPage<TerminalToolCall>>
       history(options: {
         view: HistoryView
         cursor?: string
@@ -228,6 +248,7 @@ declare global {
       send(text: string): Promise<void>
       retry(id: string): Promise<void>
       setCollection(enabled: boolean): Promise<void>
+      setRemoteCommands(options: { enabled: boolean; connectionRevision?: number }): Promise<void>
       setScreenshots(options: {
         enabled: boolean
       }): Promise<void>
@@ -243,6 +264,9 @@ const initial: AgentState = {
   terminal: 'http-desktop',
   configured: false,
   collecting: false,
+  remoteCommandsEnabled: false,
+  remoteTools: [],
+  remoteIssue: '',
   screenshotsEnabled: false,
   screenshotIssue: '',
   pendingMaterials: 0,

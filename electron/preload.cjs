@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('wintermute', {
     return () => ipcRenderer.removeListener('agent:notice', listener)
   },
   history: (options) => ipcRenderer.invoke('agent:history', options),
+  terminalToolHistory: (cursor) => ipcRenderer.invoke('agent:terminalToolHistory', cursor),
   previewHistoryImage: (options) => ipcRenderer.invoke('agent:previewHistoryImage', options),
   compression: (options) => ipcRenderer.invoke('agent:compression', options),
   downloadHistoryFile: (file) =>
@@ -28,6 +29,7 @@ contextBridge.exposeInMainWorld('wintermute', {
   send: (text) => ipcRenderer.invoke('agent:send', text),
   retry: (id) => ipcRenderer.invoke('agent:retry', id),
   setCollection: (enabled) => ipcRenderer.invoke('agent:collection', enabled),
+  setRemoteCommands: (options) => ipcRenderer.invoke('agent:remoteCommands', options),
   setScreenshots: (options) => ipcRenderer.invoke('agent:screenshots', options),
   setAppearance: (mode) => ipcRenderer.invoke('agent:appearance', mode),
   manageFailed: (id, retry) =>

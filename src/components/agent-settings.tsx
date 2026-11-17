@@ -263,6 +263,30 @@ export function AgentSettings({
               {feedback}
             </p>
           )}
+          {state.configured && !editing && (
+            <div className="activity-settings">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={!!state.remoteCommandsEnabled}
+                  disabled={!api || busy || !state.remoteTools?.length}
+                  onChange={e => {
+                    const enabled = e.target.checked
+                    void change(() => api?.setRemoteCommands({
+                      enabled, connectionRevision: state.connectionRevision,
+                    }))
+                  }}
+                />
+                允许主 Agent 在本机执行命令
+              </label>
+              <p>{state.remoteTools?.length
+                ? `主 Agent 可通过 ${state.remoteTools.join('、')} 以当前用户权限运行命令。命令和输出会记录在「记忆」中。`
+                : '通过 HTTPS 或本机地址连接，并确保本机安装了命令行工具。'}</p>
+              {(state.remoteIssue || sourceFeedback) && (
+                <p role="status">{state.remoteIssue || sourceFeedback}</p>
+              )}
+            </div>
+          )}
         </>
       )}
       {tab === 'capture' && (
