@@ -579,6 +579,26 @@ test('stage selection follows the record and ignores late responses for another 
   await expect(page.getByText('截图识别返回的规则文本')).toBeVisible()
 })
 
+test('fixed Wintermute exclusions show zero tokens and undated observations sort after older days', async ({page}) => {
+  const events = [
+    {...item('undated',''),occurred_at:null,raw:{payload:{state_key:'undated'}}},
+    {...item('epoch',''),occurred_at:'1970-01-01T00:00:00Z',raw:{payload:{state_key:'epoch'}}},
+    {...item('self',''),filter_result:'filtered' as const,
+      usage:{tokens:0,budget:800,devices:['pc'],duration_seconds:120},
+      raw:{payload:{state_key:'desktop.window_span',value:{foreground_app:'Wintermute'}}}},
+  ]
+  await openMemory(page,()=>({items:events,next_cursor:null}))
+  await page.evaluate(()=>Object.assign(window.wintermute!,{compression:async()=>({
+    filter_reason:'wintermute_app',decisions:[],parts:[],rounds:[],retained:null
+  })}))
+  await page.getByRole('button',{name:'感知层',exact:true}).click()
+  await expect(page.locator('.trace-title strong')).toHaveText(['Wintermute','epoch','undated'])
+  await expect(page.locator('.trace-budget').first()).toHaveText('约 0 tokens')
+  await page.locator('.trace-toggle').first().click()
+  await expect(page.getByText('Wintermute 自身活动固定整条过滤。')).toBeVisible()
+  await expect(page.getByText('整条记录已过滤，没有生成压缩文本。')).toBeVisible()
+})
+
 test('a visit opens the stored message and follows a peer outside the loaded page', async ({page}) => {
   const ref = {id:'history-4-1',written_at:'2026-11-17T10:00:00Z',
     usage:{tokens:119,budget:800,devices:['desktop'],duration_seconds:120}}
@@ -605,10 +625,10 @@ test('a visit opens the stored message and follows a peer outside the loaded pag
   })
   await page.evaluate(()=>Object.assign(window.wintermute!,{compression:(window as unknown as {traceFixture:unknown}).traceFixture}))
   await page.getByRole('button',{name:'感知层',exact:true}).click()
-  await expect(page.locator('.trace-title strong')).toHaveText(['Editor','时间线消息写入上下文'])
-  await expect(page.locator('.trace-toggle[data-kind="message"] .trace-budget')).toHaveText('约 119 / 800 tokens')
+  await expect(page.locator('.trace-title strong')).toHaveText(['时间线消息写入上下文','Editor'])
+  await expect(page.locator('.trace-toggle[data-kind="message"] .trace-budget')).toHaveText('约 119 tokens')
   await expect(page.locator('.trace-toggle[data-kind="message"] small')).toHaveText('来源设备 desktop · 使用时长 2 分钟')
-  await page.locator('.trace-toggle').first().click()
+  await page.locator('.trace-toggle[data-kind="visit"]').click()
   await expect(page.locator('.perception-stage pre.stage-text')).toHaveText('保留的规则文字')
   await expect(page.locator('.perception-stage .trace-group')).toHaveCount(0)
   await page.getByRole('button',{name:/查看上下文原文/}).click()
@@ -617,7 +637,7 @@ test('a visit opens the stored message and follows a peer outside the loaded pag
   await expect(page.locator('.trace-toggle[aria-expanded=true]')).toContainText('Chrome')
   await page.getByText('原始 JSON',{exact:true}).click()
   await expect(page.locator('.perception-json:visible')).toContainText('Chrome.md')
-  await expect(page.locator('.trace-title strong')).toHaveText(['Chrome','Editor','时间线消息写入上下文'])
+  await expect(page.locator('.trace-title strong')).toHaveText(['时间线消息写入上下文','Editor','Chrome'])
   expect(lookup).toContain(peer.id)
   await page.getByRole('button',{name:/查看上下文原文/}).click()
   await expect(page.locator('.trace-toggle[aria-expanded=true]')).toContainText('时间线消息写入上下文')
@@ -658,10 +678,10 @@ test('a completed AI round appears on refresh and links back to its source befor
   await expect(page.locator('.trace-title strong')).toHaveText(['Editor'])
   ready = true
   await page.evaluate(()=>window.dispatchEvent(new Event('focus')))
-  await expect(page.locator('.trace-title strong')).toHaveText(['Editor','AI 摘要'])
-  await expect(page.locator('.trace-budget')).toHaveText(['约 37 / 800 tokens','约 45 / 300 tokens'])
+  await expect(page.locator('.trace-title strong')).toHaveText(['AI 摘要','Editor'])
+  await expect(page.locator('.trace-budget')).toHaveText(['约 45 tokens','约 37 tokens'])
   await expect(page.locator('.trace-title small')).toHaveText([
-    '来源设备 pc · 使用时长 15 秒','来源设备 pc、mobile · 使用时长 1 分钟 6 秒'])
+    '来源设备 pc、mobile · 使用时长 1 分钟 6 秒','来源设备 pc · 使用时长 15 秒'])
   await page.locator('.trace-toggle[data-kind="summary"]').click()
   await expect(page.locator('.trace-detail').getByText(summary,{exact:true})).toBeVisible()
   await page.getByText('查看本轮完整输入',{exact:true}).click()

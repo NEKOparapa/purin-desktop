@@ -141,6 +141,7 @@ export interface PerceptionStages {
   record?: HistoryItem
   context_messages?: ContextMessageRef[]
   dwell_threshold_seconds?: number
+  filter_reason?: 'wintermute_app' | null
   decisions: { kind: 'application' | 'title'; label: string; seconds: number; kept: boolean }[]
   retained: unknown
   parts: { kind: 'observation' | 'visual'; text: string; delivered: boolean; round_id: string | null }[]

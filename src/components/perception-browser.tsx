@@ -28,6 +28,8 @@ const outcomes = {
 } as const
 
 function RuleResult({ data }: { data: PerceptionStages }) {
+  if (data.filter_reason === 'wintermute_app')
+    return <p>Wintermute 自身活动固定整条过滤。</p>
   if (!data.parts.length)
     return <p className="stage-note">这次上报没有在本会话形成新的活动记录。</p>
   // Servers predating per-record thresholds used three seconds.
@@ -98,7 +100,7 @@ function Formatted({ data }: { data: PerceptionStages }) {
   if (!parts.length)
     return (
       <p className="stage-note">
-        {data.parts.length
+        {data.parts.length || data.filter_reason === 'wintermute_app'
           ? '整条记录已过滤，没有生成压缩文本。'
           : '这条记录没有生成压缩文本。'}
       </p>
@@ -287,6 +289,11 @@ function summaryRow(ref: SummaryRoundRef): TimelineRow {
 
 const atSameTime = { visit: 0, summary: 1, message: 2 }
 
+function timelineTime(row: TimelineRow) {
+  const time = Date.parse(row.at ?? '')
+  return Number.isFinite(time) ? time : -Infinity
+}
+
 export function PerceptionBrowser({
   items,
   revision,
@@ -313,9 +320,7 @@ export function PerceptionBrowser({
   }
   const ordered = [...rows.values()].sort(
     (a, b) =>
-      (Date.parse(a.at ?? '') || Infinity) -
-        (Date.parse(b.at ?? '') || Infinity) ||
-      atSameTime[a.kind] - atSameTime[b.kind],
+      timelineTime(b) - timelineTime(a) || atSameTime[b.kind] - atSameTime[a.kind],
   )
   function jump(row: TimelineRow) {
     setOutcome('all')
@@ -385,12 +390,10 @@ export function PerceptionBrowser({
           const elapsed = usage?.duration_seconds != null
             ? duration(usage.duration_seconds)
             : row.duration || '未记录'
-          const budgetKind = row.kind === 'summary' ? '摘要输出' : '上下文投递'
+          const previousDay = previous && Number.isFinite(+previous) ? date.format(previous) : '时间未记录'
           return (
             <li key={row.id}>
-              {(!previous ||
-                !Number.isFinite(+previous) ||
-                day !== date.format(previous)) && (
+              {(i === 0 || day !== previousDay) && (
                 <h3 className="trace-day">{day}</h3>
               )}
               <button
@@ -415,10 +418,10 @@ export function PerceptionBrowser({
                   <span className="trace-title-line">
                     <strong>{row.title}</strong>
                     <span className="trace-budget"
-                      title={`按 UTF-8 字节估算的文本用量 / 当前${budgetKind}预算`}>
+                      title="按 UTF-8 字节估算的文本用量">
                       {usage
-                        ? `约 ${usage.tokens.toLocaleString('zh-CN')} / ${usage.budget.toLocaleString('zh-CN')} tokens`
-                        : 'token 预算未记录'}
+                        ? `约 ${usage.tokens.toLocaleString('zh-CN')} tokens`
+                        : 'token 数未记录'}
                     </span>
                   </span>
                   <small title={`来源设备 ${devices} · 使用时长 ${elapsed}`}>
