@@ -47,6 +47,7 @@ async function openCalendar(
           messages: [],
         }),
         subscribe: () => () => {},
+        notificationPage: async () => ({ items: [], next_cursor: null }),
         schedule: fixture.readSchedule,
       },
     })
@@ -54,7 +55,7 @@ async function openCalendar(
   await page.goto('/')
   await page
     .getByRole('navigation')
-    .getByRole('button', { name: '日历' })
+    .getByRole('button', { name: '日程', exact: true })
     .click()
 }
 

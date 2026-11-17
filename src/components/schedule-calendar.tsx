@@ -132,25 +132,15 @@ function useMonthEntries(start: string, end: string) {
 }
 
 export function ScheduleCalendar({ connected, settings }: CalendarProps) {
+  if (connected) return <CalendarMonth />
   return (
-    <section className="schedule-page" aria-label="日历">
-      <div className="schedule-inner">
-        <header className="page-heading">
-          <h1>日历</h1>
-        </header>
-        {connected ? (
-          <CalendarMonth />
-        ) : (
-          <div className="calendar-connect">
-            <CalendarDays size={28} strokeWidth={1.4} />
-            <p>连接后可查看主 Agent 的安排。</p>
-            <button className="calendar-control" onClick={settings}>
-              打开连接设置
-            </button>
-          </div>
-        )}
-      </div>
-    </section>
+    <div className="calendar-connect">
+      <CalendarDays size={28} strokeWidth={1.4} />
+      <p>连接后可查看主 Agent 的安排。</p>
+      <button className="calendar-control" onClick={settings}>
+        打开连接设置
+      </button>
+    </div>
   )
 }
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChevronDown, Download, Paperclip, RotateCw } from 'lucide-react'
-import type { DeviceFile, DeviceNotice } from '@/lib/desktop'
+import type { DeviceFile, DeviceNotice, NoticeAlert } from '@/lib/desktop'
 import './notification-inbox.css'
 
 const stamp = new Intl.DateTimeFormat('zh-CN', {
@@ -23,20 +23,26 @@ function message(e: unknown) {
 
 export function NotificationInbox({
   connected,
-  settings,
-  focusId,
+  focusNotice,
 }: {
   connected: boolean
-  settings: () => void
-  focusId: string | null
+  focusNotice: NoticeAlert | null
 }) {
   const [items, setItems] = useState<DeviceNotice[]>([])
   const [cursor, setCursor] = useState<string | null>(null)
-  const [expanded, setExpanded] = useState<string | null>(focusId)
+  const [selection, setSelection] = useState<{
+    id: string | null
+    request: NoticeAlert | null
+  } | null>(null)
+  const expanded =
+    selection?.request === focusNotice ? selection.id : focusNotice?.id
   const [loading, setLoading] = useState(true)
   const [issue, setIssue] = useState('')
   const [working, setWorking] = useState('')
-  const [fileStatus, setFileStatus] = useState('')
+  const [fileStatus, setFileStatus] = useState<{
+    noticeId: string
+    text: string
+  } | null>(null)
   const live = useRef(false)
   const cache = useRef<{ items: DeviceNotice[]; next: string | null }>({
     items: [],
@@ -120,34 +126,42 @@ export function NotificationInbox({
     },
     [api],
   )
-  const requested = useRef<string | null>(null)
   useEffect(() => {
-    if (!focusId || requested.current === focusId) return
-    const item = items.find((n) => n.id === focusId)
+    if (
+      focusNotice &&
+      !cache.current.items.some((item) => item.id === focusNotice.id)
+    )
+      load.current()
+  }, [focusNotice])
+  const requested = useRef<NoticeAlert | null>(null)
+  useEffect(() => {
+    if (!focusNotice || requested.current === focusNotice) return
+    const item = items.find((n) => n.id === focusNotice.id)
     if (!item) return
-    requested.current = focusId
+    requested.current = focusNotice
     void markRead(item)
     document
       .getElementById('notice-' + item.id)
       ?.scrollIntoView({ block: 'nearest' })
-  }, [focusId, items, markRead])
+  }, [focusNotice, items, markRead])
   async function saveFile(id: string, file: DeviceFile) {
     if (!api || working) return
     setWorking(file.id)
-    setFileStatus('')
+    setFileStatus(null)
     try {
       const r = await api.downloadNotificationFile({ notificationId: id, file })
-      if (live.current && r.saved) setFileStatus('已保存 ' + file.name)
+      if (live.current && r.saved)
+        setFileStatus({ noticeId: id, text: '已保存 ' + file.name })
     } catch (e) {
-      if (live.current) setFileStatus(message(e))
+      if (live.current) setFileStatus({ noticeId: id, text: message(e) })
     } finally {
       if (live.current) setWorking('')
     }
   }
   return (
-    <section className="notice-page" aria-label="设备通知">
-      <header className="page-heading">
-        <h1>通知</h1>
+    <section className="notice-page" aria-labelledby="notices-heading">
+      <header className="notice-toolbar">
+        <h2 id="notices-heading">通知</h2>
         {connected && (
           <button
             className="notice-refresh"
@@ -159,10 +173,7 @@ export function NotificationInbox({
         )}
       </header>
       {!connected ? (
-        <div className="notice-empty">
-          连接后可查看发给这台设备的通知。
-          <button onClick={settings}>打开连接设置</button>
-        </div>
+        <p className="notice-empty">连接后可查看发给这台设备的通知。</p>
       ) : (
         <>
           {issue && (
@@ -190,17 +201,25 @@ export function NotificationInbox({
                     className="notice-summary"
                     aria-expanded={open}
                     onClick={() => {
-                      setExpanded(open ? null : n.id)
-                      setFileStatus('')
+                      setSelection({
+                        id: open ? null : n.id,
+                        request: focusNotice,
+                      })
+                      setFileStatus(null)
                       if (!open) void markRead(n)
                     }}
                   >
                     <span className="notice-heading">
-                      <strong>{n.title}</strong>
-                      {late ? (
-                        <small>已过期</small>
-                      ) : (
-                        !n.read_at && <small>未读</small>
+                      <span className="notice-title">
+                        <strong>{n.title}</strong>
+                        {late ? (
+                          <small>已过期</small>
+                        ) : (
+                          !n.read_at && <small>未读</small>
+                        )}
+                      </span>
+                      {!open && n.body && (
+                        <span className="notice-preview">{n.body}</span>
                       )}
                     </span>
                     <span className="notice-meta">
@@ -242,7 +261,9 @@ export function NotificationInbox({
                           ))}
                         </ul>
                       )}
-                      {fileStatus && <small role="status">{fileStatus}</small>}
+                      {fileStatus?.noticeId === n.id && (
+                        <small role="status">{fileStatus.text}</small>
+                      )}
                     </div>
                   )}
                 </article>

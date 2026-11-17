@@ -27,8 +27,7 @@ import './App.css'
 const pages = [
   { id: 'chat', label: '对话', icon: MessageCircle },
   { id: 'memory', label: '记忆', icon: BookOpen },
-  { id: 'calendar', label: '日历', icon: CalendarDays },
-  { id: 'notices', label: '通知', icon: Bell },
+  { id: 'schedule', label: '日程', icon: CalendarDays },
 ] as const
 type Page = (typeof pages)[number]['id']
 const sidebarPreference = 'wintermute.sidebarCollapsed'
@@ -351,10 +350,10 @@ export default function App() {
   const agent = useAgent()
   const [lastAlert,setNotice]=useState<(NoticeAlert & {version:number})|null>(null)
   const notice=lastAlert?.url===agent.url && lastAlert.terminal===agent.terminal && lastAlert.version===connectionVersion ? lastAlert : null
-  const [focusNotice,setFocusNotice]=useState<string|null>(null)
-  function openNotice(id:string) {
-    setFocusNotice(id)
-    setPage('notices')
+  const [focusNotice, setFocusNotice] = useState<NoticeAlert | null>(null)
+  function openNotice(alert: NoticeAlert) {
+    setFocusNotice(alert)
+    setPage('schedule')
     setSettingsOpen(false)
     setNotice(null)
   }
@@ -363,7 +362,7 @@ export default function App() {
     const stop=window.wintermute?.onNotice?.(alert=>{
       if (alert.url!==agent.url || alert.terminal!==agent.terminal) return
       clearTimeout(timer)
-      if (alert.open) openNotice(alert.id)
+      if (alert.open) openNotice(alert)
       else {
         setNotice({...alert,version:connectionVersion})
         timer=setTimeout(()=>setNotice(null),10000)
@@ -408,7 +407,12 @@ export default function App() {
               aria-label={p.label}
               aria-current={page === p.id ? 'page' : undefined}
               title={p.label}
-              onClick={() => { setPage(p.id);setFocusNotice(null) }}
+              onClick={() => {
+                if (page !== p.id) {
+                  setPage(p.id)
+                  setFocusNotice(null)
+                }
+              }}
             >
               <p.icon size={18} aria-hidden="true" />
               {!collapsed && <span>{p.label}</span>}
@@ -433,19 +437,38 @@ export default function App() {
             visible={page === 'chat'}
           />
         </div>
-        {page === 'calendar' && (
-          <ScheduleCalendar
+        {page === 'schedule' && (
+          <section
+            aria-labelledby="schedule-heading"
+            className="schedule-page"
             key={JSON.stringify([
               agent.url,
               agent.terminal,
               connectionVersion,
               agent.configured,
             ])}
-            connected={agent.configured}
-            settings={showSettings}
-          />
+          >
+            <div className="schedule-inner">
+              <header className="page-heading">
+                <h1 id="schedule-heading">日程</h1>
+              </header>
+              <NotificationInbox
+                connected={agent.configured}
+                focusNotice={
+                  focusNotice?.url === agent.url && focusNotice.terminal === agent.terminal
+                    ? focusNotice
+                    : null
+                }
+              />
+              <section aria-label="日历">
+                <ScheduleCalendar
+                  connected={agent.configured}
+                  settings={showSettings}
+                />
+              </section>
+            </div>
+          </section>
         )}
-        {page === 'notices' && <NotificationInbox key={JSON.stringify([agent.url,agent.terminal,connectionVersion,agent.configured,focusNotice])} connected={agent.configured} settings={showSettings} focusId={focusNotice}/>}
         {page === 'memory' && (
           <MemoryBrowser
             connectionRevision={agent.connectionRevision}
@@ -456,7 +479,7 @@ export default function App() {
         )}
       </main>
       {notice && <aside className="notice-banner" aria-label="新通知" role="status">
-        <button onClick={()=>openNotice(notice.id)}><strong>{notice.title}</strong><span>{notice.body}</span></button>
+        <button onClick={()=>openNotice(notice)}><strong>{notice.title}</strong><span>{notice.body}</span></button>
         <button aria-label="关闭提醒" onClick={()=>setNotice(null)}><X size={15}/></button>
       </aside>}
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>

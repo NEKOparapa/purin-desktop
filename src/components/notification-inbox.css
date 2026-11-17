@@ -1,26 +1,26 @@
 .notice-page {
-  flex: 1;
-  min-width: 0;
-  overflow: auto;
-  padding: clamp(26px, 4vw, 64px);
-  color: var(--ink);
+  margin-top: 20px;
+  border-bottom: 1px solid var(--line);
 }
-.notice-page .page-heading,
-.notice-list,
-.notice-error,
-.notice-empty {
-  max-width: 960px;
-  margin-inline: auto;
-}
-.notice-page .page-heading {
+.notice-toolbar {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  margin-bottom: 28px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.notice-toolbar h2 {
+  font-size: 20px;
+  font-weight: 550;
+}
+.notice-list {
+  max-height: clamp(180px, 30vh, 340px);
+  overflow-y: auto;
+}
+.notice-list button:focus-visible {
+  outline-offset: -2px;
 }
 .notice-refresh,
 .notice-more,
-.notice-empty button,
 .notice-banner button,
 .notice-details button {
   border: 1px solid var(--line);
@@ -37,12 +37,7 @@
 .notice-empty {
   font-size: 14px;
   color: var(--muted);
-  padding-block: 20px;
-}
-.notice-empty button {
-  display: block;
-  margin-top: 14px;
-  padding: 6px 12px;
+  padding: 4px 0 18px;
 }
 .notice-error {
   color: var(--error);
@@ -61,9 +56,9 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 18px 3px;
+  padding: 12px 4px;
 }
-.notice-heading,
+.notice-title,
 .notice-meta,
 .notice-meta span {
   display: flex;
@@ -72,6 +67,18 @@
 }
 .notice-heading {
   min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+.notice-preview {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 13px;
+}
+.notice-title small {
+  flex: none;
 }
 .notice-heading strong {
   overflow-wrap: anywhere;
