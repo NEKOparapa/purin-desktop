@@ -12,13 +12,13 @@ import './memory-browser.css'
 
 const views: { id: HistoryView | 'profile' | 'terminal-tools'; label: string }[] = [
   { id: 'chat', label: '对话历史' },
-  { id: 'timeline', label: '时间线历史' },
   { id: 'conversation', label: '交流层' },
   { id: 'notification', label: '通知层' },
   { id: 'perception', label: '感知层' },
   { id: 'slice', label: '切片层' },
+  { id: 'timeline', label: '合并线' },
   { id: 'profile', label: '用户档案' },
-  { id: 'terminal-tools', label: '终端工具调用' },
+  { id: 'terminal-tools', label: '终端调用' },
 ]
 const dateFormat = new Intl.DateTimeFormat('zh-CN', { dateStyle: 'long' })
 const timeFormat = new Intl.DateTimeFormat('zh-CN', {

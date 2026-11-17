@@ -571,7 +571,7 @@ class DesktopAgent {
     }
     const page = await request(p, '/v1/terminal-tools/history?' + query, undefined, p.controller.signal)
     if (p !== this.profile) throw new Error('连接已更改')
-    const invalid = '后端返回的终端工具调用记录格式有误'
+    const invalid = '后端返回的终端调用记录格式有误'
     if (!Array.isArray(page?.items) ||
         !(page.next_cursor === null || (typeof page.next_cursor === 'string' && page.next_cursor)))
       throw new Error(invalid)

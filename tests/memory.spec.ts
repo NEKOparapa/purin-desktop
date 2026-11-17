@@ -83,7 +83,7 @@ test('terminal call history shows paginated, live results from all targets', asy
   await page.evaluate(() => Object.assign(window.wintermute!, {
     terminalToolHistory: (window as unknown as { readToolCalls: unknown }).readToolCalls,
   }))
-  await page.getByRole('button', { name: '终端工具调用', exact: true }).click()
+  await page.getByRole('button', { name: '终端调用', exact: true }).click()
   const row = page.getByRole('article')
   await expect(row).toContainText('会议电脑')
   await expect(row).toContainText('shell')
@@ -175,7 +175,7 @@ test('six history views, paginated filtering and audio downloads', async ({
   )
   expect(reads).toContainEqual({ view: 'chat', cursor: 'older-page' })
   for (const [label, view] of [
-    ['时间线历史', 'timeline'],
+    ['合并线', 'timeline'],
     ['交流层', 'conversation'],
     ['通知层', 'notification'],
     ['感知层', 'perception'],
@@ -217,7 +217,7 @@ test('keeps newer view on a late page and retries failed reads without losing ol
   })
   await page.getByRole('button', { name: '加载更早记录' }).click()
   await expect.poll(() => !!finishOldPage).toBe(true)
-  await page.getByRole('button', { name: '时间线历史', exact: true }).click()
+  await page.getByRole('button', { name: '合并线', exact: true }).click()
   await expect(page.getByText('会议进行中')).toBeVisible()
   finishOldPage({ items: [item('stale', '其他视图的记录')], next_cursor: null })
   await page.getByRole('button', { name: '加载更早记录' }).click()
@@ -472,7 +472,7 @@ test('compares the same batch with its persisted summaries and opens scoped orig
   await expect(page.getByText('跨批次汇总')).toHaveCount(0)
   await page.getByRole('button', { name: '查看已投递的时间线' }).click()
   await expect(
-    page.getByRole('button', { name: '时间线历史', exact: true }),
+    page.getByRole('button', { name: '合并线', exact: true }),
   ).toHaveAttribute('aria-pressed', 'true')
 })
 

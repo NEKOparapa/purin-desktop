@@ -66,7 +66,7 @@ function CallPage({ cursor, older, newer }: {
       if (interactive) setLoading(true)
       try {
         const api = window.wintermute
-        if (!api?.terminalToolHistory) throw new Error('当前客户端未提供终端工具调用记录。')
+        if (!api?.terminalToolHistory) throw new Error('当前客户端未提供终端调用记录。')
         const result = await api.terminalToolHistory(cursor)
         if (active) {
           setPage(result)
@@ -94,7 +94,7 @@ function CallPage({ cursor, older, newer }: {
     }
   }, [cursor, revision])
   return (
-    <section aria-label="终端工具调用记录">
+    <section aria-label="终端调用记录">
       <div className="history-tools terminal-call-tools">
         <button className="history-refresh" onClick={() => setRevision(n => n + 1)} disabled={loading}>
           <RotateCw size={14} aria-hidden="true" /> 刷新
@@ -103,7 +103,7 @@ function CallPage({ cursor, older, newer }: {
       {error && <p className="history-error history-status" role="alert">{error}</p>}
       {loading && !page && <p className="history-status" role="status">正在读取调用记录…</p>}
       {page && !page.items.length && !error && (
-        <div className="history-empty" role="status"><Terminal size={22} aria-hidden="true" />暂无终端工具调用</div>
+        <div className="history-empty" role="status"><Terminal size={22} aria-hidden="true" />暂无终端调用</div>
       )}
       <ol className="history-records">
         {page?.items.map(call => <li key={call.id}><CallRecord call={call} /></li>)}
