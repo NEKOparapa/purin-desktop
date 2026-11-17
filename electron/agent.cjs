@@ -593,7 +593,7 @@ class DesktopAgent {
     return { items, next_cursor: page.next_cursor }
   }
 
-  async history({ view, cursor, groupId }) {
+  async history({ view, cursor, groupId, destination, from, to }) {
     const p = this.profile
     if (!p.token) throw new Error('请先连接终端')
     if (
@@ -629,6 +629,37 @@ class DesktopAgent {
       )
     }
     query.set('view', view)
+    if (view === 'perception') {
+      const hasExtra = Boolean(destination || from || to)
+      if (destination) {
+        if (
+          ![
+            'filtered',
+            'partial',
+            'kept',
+            'buffered',
+            'summarized',
+            'delivered',
+            'acknowledged',
+            'unprojected',
+          ].includes(destination)
+        )
+          throw new Error('无效的去向筛选条件')
+        query.set('destination', destination)
+      }
+      if (from) query.set('from', String(from))
+      if (to) query.set('to', String(to))
+      if (hasExtra) {
+        try {
+          return await get('/v1/history?' + query)
+        } catch (error) {
+          if (error.status !== 400 || error.code !== 'invalid_query') throw error
+          query.delete('destination')
+          query.delete('from')
+          query.delete('to')
+        }
+      }
+    }
     if (view === 'slice') {
       query.set('grouped', '1')
       try {
@@ -639,6 +670,41 @@ class DesktopAgent {
       }
     }
     return get('/v1/history?' + query)
+  }
+
+  async pendingTimeline() {
+    const p = this.profile
+    if (!p.token) throw new Error('请先连接终端')
+    return request(p, '/v1/history/timeline/pending', undefined, p.controller.signal)
+  }
+
+  async perceptionSummary({ from, to } = {}) {
+    const p = this.profile
+    if (!p.token) throw new Error('请先连接终端')
+    const query = new URLSearchParams()
+    if (from) query.set('from', String(from))
+    if (to) query.set('to', String(to))
+    const suffix = query.toString() ? '?' + query : ''
+    return request(p, '/v1/history/perception/summary' + suffix, undefined, p.controller.signal)
+  }
+
+  async timelineSources({ id }) {
+    const p = this.profile
+    if (!p.token) throw new Error('请先连接终端')
+    if (typeof id !== 'string' || !/^history-[1-9][0-9]{0,18}-[0-9]{1,10}$/.test(id))
+      throw new Error('无效的时间线消息编号')
+    return request(
+      p,
+      '/v1/history/timeline/' + encodeURIComponent(id) + '/sources',
+      undefined,
+      p.controller.signal,
+    )
+  }
+
+  async contextPreview() {
+    const p = this.profile
+    if (!p.token) throw new Error('请先连接终端')
+    return request(p, '/v1/history/context/preview', undefined, p.controller.signal)
   }
 
   async compression({ kind, layer, id, activity, cursor }) {

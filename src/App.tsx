@@ -451,6 +451,7 @@ export default function App() {
             connectionRevision={agent.connectionRevision}
             connectionKey={JSON.stringify([agent.url, agent.terminal, agent.connectionRevision, connectionVersion])}
             connected={agent.configured}
+            pendingLocalCount={agent.pendingMaterials}
             settings={showSettings}
           />
         )}

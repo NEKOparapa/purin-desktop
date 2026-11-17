@@ -17,10 +17,17 @@ export const emptyPage: PageState = {
   error: '',
 }
 
+export interface HistoryFilter {
+  destination?: string
+  from?: string
+  to?: string
+}
+
 async function historyPage(
   view: HistoryView,
   groupId: string | null,
   cursor: string | null,
+  filter?: HistoryFilter,
 ) {
   const api = window.wintermute
   if (!api) throw new Error('请在桌面应用中连接服务。')
@@ -28,10 +35,18 @@ async function historyPage(
     view,
     ...(groupId && { groupId }),
     ...(cursor && { cursor }),
+    ...(view === 'perception' && filter?.destination && filter.destination !== 'all'
+      ? { destination: filter.destination }
+      : {}),
+    ...(view === 'perception' && filter?.from ? { from: filter.from } : {}),
+    ...(view === 'perception' && filter?.to ? { to: filter.to } : {}),
   })
 }
 
-export function useHistoryPages(view: HistoryView) {
+export function useHistoryPages(view: HistoryView, filter?: HistoryFilter) {
+  const destination = filter?.destination
+  const from = filter?.from
+  const to = filter?.to
   const [pages, setPages] = useState(
     () =>
       new Map<string | null, PageState>([
@@ -48,7 +63,7 @@ export function useHistoryPages(view: HistoryView) {
       if (pending.current.has(groupId)) return
       const token = Symbol()
       pending.current.set(groupId, token)
-      return historyPage(view, groupId, cursor)
+      return historyPage(view, groupId, cursor, { destination, from, to })
         .then(async (page) => {
           if (pending.current.get(groupId) !== token) return
           if (view === 'perception' && background) {
@@ -130,10 +145,13 @@ export function useHistoryPages(view: HistoryView) {
             pending.current.delete(groupId)
         })
     },
-    [view],
+    [view, destination, from, to],
   )
   useEffect(() => {
-    void fetchPage(null, null)
+    pending.current.clear()
+    queueMicrotask(() => {
+      void fetchPage(null, null)
+    })
     const requests = pending.current
     function refreshVisible() {
       if (document.visibilityState === 'visible')

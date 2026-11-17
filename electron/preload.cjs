@@ -20,6 +20,10 @@ contextBridge.exposeInMainWorld('wintermute', {
     return () => ipcRenderer.removeListener('agent:notice', listener)
   },
   history: (options) => ipcRenderer.invoke('agent:history', options),
+  pendingTimeline: () => ipcRenderer.invoke('agent:pendingTimeline'),
+  perceptionSummary: (options) => ipcRenderer.invoke('agent:perceptionSummary', options),
+  timelineSources: (options) => ipcRenderer.invoke('agent:timelineSources', options),
+  contextPreview: () => ipcRenderer.invoke('agent:contextPreview'),
   terminalToolHistory: (cursor) => ipcRenderer.invoke('agent:terminalToolHistory', cursor),
   previewHistoryImage: (options) => ipcRenderer.invoke('agent:previewHistoryImage', options),
   compression: (options) => ipcRenderer.invoke('agent:compression', options),
