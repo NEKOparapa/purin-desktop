@@ -244,7 +244,7 @@ test('switching apps while the native screenshot is being taken discards the ima
   let shots = 0
   const client = launch(() => sample, () => {
     shots++
-    sample = { ...browser, foreground_app: 'Editor', target: { id: '88', pid: 654321 } }
+    if (shots === 1) sample = { ...browser, foreground_app: 'Editor', target: { id: '88', pid: 654321 } }
     return { jpegBase64: '/9j/2Q==' }
   })
   await client.configure({ url, terminal: 'desktop', token: 'test' })
@@ -260,8 +260,11 @@ test('switching apps while the native screenshot is being taken discards the ima
   await client.capture()
   await client.flushMaterials()
   await until(() => !client.profile.flushing && !client.state().pendingMaterials)
-  assert.equal(shots, 1)
-  assert.deepEqual(uploads.map(item => item.route), ['/v1/perceptions'])
+  assert.equal(shots, 2)
+  assert.deepEqual(uploads.map(item => item.body.value.foreground_app), ['Chrome', 'Editor', 'Chrome'])
+  assert.equal(uploads[0].body.frames, undefined)
+  assert.equal(uploads[1].body.value.duration_seconds, 2)
+  assert.equal(uploads[2].body.frames.length, 1)
 })
 
 test('screenshot opt-out strips queued frames while retaining the dwell', async (t) => {

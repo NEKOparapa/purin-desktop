@@ -57,6 +57,7 @@ export interface HistoryItem {
   text: string
   files: HistoryFile[]
   raw?: Record<string, unknown>
+  filter_result?: 'filtered' | 'partial' | 'kept' | 'unprojected'
   group?: ScreenshotGroup | null
 }
 export interface HistoryPage {
@@ -133,6 +134,7 @@ export interface OriginalDetail extends ResultsPage<OriginalRecord> {
 }
 
 export interface PerceptionStages {
+  dwell_threshold_seconds?: number
   decisions: { kind: 'application' | 'title'; label: string; seconds: number; kept: boolean }[]
   retained: unknown
   parts: { kind: 'observation' | 'visual'; text: string; delivered: boolean; round_id: string | null }[]

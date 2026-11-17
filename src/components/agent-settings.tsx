@@ -307,7 +307,7 @@ export function AgentSettings({
               采集桌面活动
             </label>
             <p id="desktop-activity-description">
-              同一应用停留满 5 秒，离开后才记一条，保留最后可读的窗口标题。切换标签页合并计时，可在「记忆 → 感知层」查看。
+              约每秒采样一次。切走后上传本次停留及窗口标题变化，包括短停留。在「记忆 → 感知层」可查看原始记录和后端的过滤原因。
             </p>
             {state.collecting && navigator.platform.startsWith('Mac') && (
               <p>

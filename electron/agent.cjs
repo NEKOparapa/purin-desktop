@@ -7,10 +7,7 @@ const {
   removeMaterialFiles,
   desktopWindowRoute,
 } = require('./materials.cjs')
-const {
-  advanceWindowSpan,
-  minDwellMs,
-} = require('./window-spans.cjs')
+const { advanceWindowSpan } = require('./window-spans.cjs')
 const { screenshotDwellMs, saveVisitScreenshot } = require('./visit-screenshot.cjs')
 const { saveHistoryFile, readHistoryImage } = require('./history.cjs')
 const { ChatHistory } = require('./chat-history.cjs')
@@ -36,12 +33,7 @@ function save(file, value) {
 function recordWindow(profile, sample, at, target) {
   const history = profile.history
   const previous = history.windowSpan
-  const { active, candidate, finished } = advanceWindowSpan(
-    previous,
-    profile.windowCandidate,
-    sample,
-    at,
-  )
+  const { active, finished } = advanceWindowSpan(previous, sample, at)
   if (finished) {
     const frames = previous.frames ?? []
     history.materials.push({
@@ -54,15 +46,10 @@ function recordWindow(profile, sample, at, target) {
     })
   }
   history.windowSpan = active
-  profile.windowCandidate = candidate
-  // Even a brief switch breaks continuous screenshot dwell. Activity history
-  // can still merge an accidental switch into the same visit.
-  if (candidate && active) delete active.screenshotDueAt
-  const current = candidate ?? active
-  if (current) {
-    if (profile.screenshotsEnabled && target && target.pid !== process.pid && !current.screenshotAttempted)
-      current.screenshotDueAt ??= at.getTime() + screenshotDwellMs
-    else delete current.screenshotDueAt
+  if (active) {
+    if (profile.screenshotsEnabled && target && target.pid !== process.pid && !active.screenshotAttempted)
+      active.screenshotDueAt ??= at.getTime() + screenshotDwellMs
+    else delete active.screenshotDueAt
   }
   return finished
 }
@@ -208,10 +195,7 @@ class DesktopAgent {
     this.remoteTimer = setInterval(() => this.profile.remote?.poll(), 2000)
     this.pollTimer = setInterval(() => this.sync(), 2200)
     if (presentNotifications) this.notificationTimer = setInterval(() => this.pollNotifications(), 5000)
-    this.captureTimer = setInterval(() => {
-      const p = this.profile
-      if (p.screenshotsEnabled || Date.now() >= (p.nextActivityPoll || 0)) void this.capture()
-    }, 1000)
+    this.captureTimer = setInterval(() => this.capture(), 1000)
     this.sync()
     this.capture()
   }
@@ -825,15 +809,12 @@ class DesktopAgent {
 
   finishWindow() {
     const p = this.profile
-    clearTimeout(p?.dwellTimer)
     if (!p?.history.windowSpan || p.controller.signal.aborted) return
     recordWindow(p, null, new Date())
     this.persist(p)
   }
 
   clearActivity(p) {
-    clearTimeout(p.dwellTimer)
-    p.windowCandidate = null
     this.dropAutomatic(p, 'window')
     p.history.windowSpan = null
   }
@@ -843,7 +824,6 @@ class DesktopAgent {
     if (p.uploading?.source === source) p.uploadController?.abort()
     const removed = []
     if (source === 'screenshot') {
-      if (p.windowCandidate) delete p.windowCandidate.screenshotDueAt
       if (p.history.windowSpan) delete p.history.windowSpan.screenshotDueAt
       if (p.history.windowSpan?.frames) {
         removed.push(...p.history.windowSpan.frames)
@@ -1082,7 +1062,6 @@ class DesktopAgent {
       !target ||
       target.pid === process.pid ||
       !span ||
-      p.windowCandidate ||
       value.activity !== 'active' ||
       span.screenshotAttempted ||
       span.screenshotDueAt == null ||
@@ -1114,6 +1093,7 @@ class DesktopAgent {
         return
       }
       const title = after.window_title === value.window_title ? value.window_title : undefined
+      if (after.window_title !== value.window_title) recordWindow(p, after, new Date(), after.target)
       span.frames = [saveVisitScreenshot(p, jpegBase64, occurredAt, title)]
       save(p.file, p.history)
       if (p.screenshotIssue) {
@@ -1133,9 +1113,7 @@ class DesktopAgent {
     const signal = p.captureController.signal
     if (!p.token || !p.collecting || p.capturing || signal.aborted) return
     p.capturing = true
-    let observed = false
     try {
-      p.nextActivityPoll = Date.now() + 15_000
       const { target, ...value } = p.screenshotsEnabled
         ? await this.sample(true)
         : await this.sample()
@@ -1143,7 +1121,6 @@ class DesktopAgent {
       const now = new Date()
       const previous = p.history.windowSpan
       const finished = recordWindow(p, value, now, target)
-      observed = true
       if (finished) this.persist(p)
       else if ((previous || p.history.windowSpan) &&
         (previous?.id !== p.history.windowSpan?.id || now >= (p.nextCheckpoint || 0))) {
@@ -1162,24 +1139,6 @@ class DesktopAgent {
       }
     } finally {
       p.capturing = false
-      // Keep the normal 15 s poll inexpensive. Recheck a newly observed window
-      // at its dwell threshold instead of waiting for the next normal poll.
-      clearTimeout(p.dwellTimer)
-      const since = p.windowCandidate
-        ? p.history.windowSpan?.awaySince ?? p.windowCandidate.start
-        : p.history.windowSpan?.pendingObject?.occurred_at
-      if (
-        observed &&
-        since &&
-        !signal.aborted &&
-        p === this.profile
-      ) {
-        const dueAt = Date.parse(since) + minDwellMs
-        p.dwellTimer = setTimeout(
-          () => this.capture(),
-          Math.max(0, dueAt - Date.now()),
-        )
-      }
       if (
         signal.aborted &&
         p === this.profile &&

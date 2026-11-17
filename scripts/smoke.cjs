@@ -248,7 +248,6 @@ async function main() {
       assert.equal(api.events.size, 0)
       await sample('邮件', '误切的窗口')
       await sample('Chrome', '会议纪要')
-      assert.equal(api.events.size, 0)
       await expect
         .poll(() => app.evaluate(() => globalThis.confirmedMeetingTitle()), { timeout: 12000 })
         .toBe('会议纪要')
@@ -263,11 +262,13 @@ async function main() {
         [...api.events.values()].filter(
           (event) => event.state_key === 'desktop.window_span',
         )
-      await expect.poll(() => spans().length, { timeout: 35000 }).toBe(1)
-      const [span] = spans()
+      await expect.poll(() => spans().length, { timeout: 35000 }).toBe(3)
+      const [first, brief, span] = spans()
+      assert.deepEqual([first, brief, span].map(event => event.value.foreground_app), ['Chrome', '邮件', 'Chrome'])
+      assert.equal(brief.value.work_objects[0].window_title, '误切的窗口')
       assert.equal(span.value.foreground_app, 'Chrome')
       assert.equal(span.value.window_title, '会议纪要')
-      assert.ok(span.value.duration_seconds > 0)
+      assert.ok(span.value.duration_seconds >= 0)
       assert.equal(span.occurred_at, span.value.ended_at)
       assert.equal(api.slices.size, 0)
       await expect(win.getByText(/最近一次停留 ·/)).toContainText('会议纪要')
@@ -289,7 +290,7 @@ async function main() {
     if (api) {
       await expect.poll(() => api.outputs.size).toBe(0)
       assert.equal(api.messages.size, 1)
-      assert.deepEqual([...api.events.values()].map((event) => event.state_key), ['desktop.window_span'])
+      assert.deepEqual([...api.events.values()].map((event) => event.state_key), Array(3).fill('desktop.window_span'))
     }
     await win.getByRole('button', { name: '记忆', exact: true }).click()
     await expect(

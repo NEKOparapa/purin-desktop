@@ -510,7 +510,7 @@ test('perception shows the complete event, ordered observations with inline fram
     }})
   })
   await page.getByRole('button', {name:'感知层',exact:true}).click()
-  await expect(page.getByRole('group',{name:'压缩过程'}).getByRole('button')).toHaveText(['原始信息','规则压缩','格式排版','AI 压缩'])
+  await expect(page.getByRole('group',{name:'压缩过程'}).getByRole('button')).toHaveText(['原始信息','过滤筛选','规则压缩','格式排版','AI 压缩'])
   await expect(page.getByRole('button', {name:'原始信息'})).toHaveAttribute('aria-pressed','true')
   await expect(page.getByRole('heading', {name:'Editor'})).toBeVisible()
   await expect(page.getByText('停留 1 分钟 30 秒')).toBeVisible()
@@ -541,8 +541,8 @@ test('perception shows the complete event, ordered observations with inline fram
 })
 
 test('stage selection follows the record and ignores late responses for another visit', async ({page}) => {
-  const rows = ['Editor','QQ'].map((app,i)=>({...item(app,app),raw:{payload:{
-    state_key:'desktop.window_span',value:{foreground_app:app,duration_seconds:i?3:30}}}}))
+  const rows = ['Editor','QQ'].map((app,i)=>({...item(app,app),filter_result:i?'filtered':'kept',raw:{payload:{
+    state_key:'desktop.window_span',value:{foreground_app:app,duration_seconds:i?5:30}}}}))
   await openMemory(page,()=>({items:rows,next_cursor:null}))
   let release!: () => void
   const gate = new Promise<void>(resolve=> { release=resolve })
@@ -550,7 +550,7 @@ test('stage selection follows the record and ignores late responses for another 
   await page.exposeFunction('readStages',async ({id}:{id:string})=>{
     if(id==='Editor') await gate
     const kept=id==='Editor'
-    return { decisions:[{kind:'application',label:id,seconds:kept?30:3,kept}],retained:kept?{app:id}:null,
+    return { dwell_threshold_seconds:5, decisions:[{kind:'application',label:id,seconds:kept?30:5,kept}],retained:kept?{app:id}:null,
       parts:[{kind:'observation',text:kept?'编辑记录':'',delivered:false,round_id:kept&&finished?'9':null}],
       rounds:kept&&finished?[{id:'9',status:'ready',summary:'本轮完成',input:'编辑记录'}]:[],
       ai_enabled:true,pending_size:75,budget:800 }
@@ -562,11 +562,20 @@ test('stage selection follows the record and ignores late responses for another 
   const list=page.getByRole('navigation',{name:'采集记录'})
   await list.getByRole('button',{name:/QQ/}).click()
   await expect(page.getByText('整次停留已过滤')).toBeVisible()
+  const filter=page.getByRole('combobox',{name:'按过滤结果筛选'})
+  await filter.selectOption('filtered')
+  await expect(list.getByRole('button')).toHaveCount(1)
+  await page.getByRole('button',{name:'过滤筛选',exact:true}).click()
+  await expect(page.getByRole('row').filter({hasText:'QQ'})).toContainText('过滤（5 秒及以内）')
+  await filter.selectOption('partial')
+  await expect(page.getByRole('status')).toContainText('没有符合此筛选条件')
+  await filter.selectOption('filtered')
   release()
   await page.getByRole('button',{name:'格式排版'}).click()
   await expect(page.getByText(/没有生成时间线文字/)).toBeVisible()
   await page.getByRole('button',{name:'AI 压缩'}).click()
   await expect(page.getByText(/无需 AI 压缩/)).toBeVisible()
+  await filter.selectOption('all')
   await list.getByRole('button',{name:/Editor/}).click()
   await expect(page.getByText('尚未超过压缩预算')).toBeVisible()
   await expect(page.getByText(/75 \/ 800/)).toBeVisible()

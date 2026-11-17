@@ -107,34 +107,14 @@ async function sampleActivity(withTarget = false) {
   const state = powerMonitor.getSystemIdleState(60)
   const value = { activity: state }
   if (state !== 'active') return value
-  let executable, args
-  if (process.platform === 'win32') {
-    executable = 'powershell.exe'
-    args = [
-      '-NoProfile',
-      '-NonInteractive',
-      '-EncodedCommand',
-      Buffer.from(windowsProbe + '\nRead-Foreground', 'utf16le').toString('base64'),
-    ]
-  } else if (process.platform === 'darwin') {
-    executable = '/usr/bin/osascript'
-    args = [
-      '-l',
-      'JavaScript',
-      '-e',
-      macProbe + (withTarget ? macTarget : '') + '\nJSON.stringify(result)',
-    ]
-  } else {
-    return value
-  }
+  if (process.platform !== 'win32' && process.platform !== 'darwin') return value
   try {
-    const { stdout } = process.platform === 'win32' && withTarget
+    const { stdout } = process.platform === 'win32'
       ? await windowsObservation()
-      : await run(executable, args, {
-      timeout: 5000,
-      windowsHide: true,
-      maxBuffer: 64 * 1024,
-    })
+      : await run('/usr/bin/osascript', [
+          '-l', 'JavaScript', '-e',
+          macProbe + (withTarget ? macTarget : '') + '\nJSON.stringify(result)',
+        ], { timeout: 5000, maxBuffer: 64 * 1024 })
     const observation = JSON.parse(stdout)
     const clean = (text, limit) =>
       typeof text === 'string'

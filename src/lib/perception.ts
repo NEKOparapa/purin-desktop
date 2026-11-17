@@ -26,7 +26,7 @@ export function text(value: unknown) {
 export function duration(seconds: number) {
   const hours = Math.floor(seconds / 3600)
   const minutes = Math.floor(seconds / 60) % 60
-  const rest = seconds % 60
+  const rest = Number((seconds % 60).toFixed(3))
   return [
     hours && hours + ' 小时',
     minutes && minutes + ' 分钟',

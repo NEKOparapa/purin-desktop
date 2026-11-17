@@ -1,140 +1,56 @@
 const { randomUUID } = require('node:crypto')
 
-// A longer gap can be caused by sleep or a stopped client.
+// After a sampling interruption we only know the visit up to its last observation.
 const maxSampleGap = 45_000
-const minDwellMs = 5_000
-const maxWorkObjects = 16
-const stateKey = 'desktop.window_span'
-
-function spanValue(app, title, start, end, seconds) {
-  return {
-    foreground_app: app,
-    ...(title ? { window_title: title } : {}),
-    started_at: start,
-    ended_at: end,
-    duration_seconds: seconds,
-  }
-}
 
 function finishSpan(span, observedEnd) {
   if (!span) return null
+  // An interrupted visit saved by an older client can include time spent away.
   const end = span.awaySince || observedEnd
   const elapsed = Date.parse(end) - Date.parse(span.start) - (span.awayMs || 0)
-  if (elapsed < minDwellMs) return null
   return {
     event_id: span.id,
     occurred_at: end,
-    state_key: stateKey,
+    state_key: 'desktop.window_span',
     value: {
-      ...spanValue(
-        span.app,
-        span.workObjects?.at(-1)?.window_title || span.title,
-        span.start,
-        end,
-        Math.round(elapsed / 1000),
-      ),
-      ...(span.workObjects?.length > 1 && { work_objects: span.workObjects }),
+      foreground_app: span.app,
+      ...(span.title && { window_title: span.title }),
+      started_at: span.start,
+      ended_at: end,
+      duration_seconds: Math.max(0, elapsed) / 1000,
+      ...(span.workObjects?.length && { work_objects: span.workObjects }),
       ...(span.omittedObjects && { work_objects_omitted: span.omittedObjects }),
     },
   }
 }
 
-// A title can change for a notification badge or the editor's dirty indicator.
-// Only distinct objects observed twice past the dwell threshold enter the visit.
-function observeObject(span, title, observed) {
-  const clean = title
-    .replace(/^(?:\(\d{1,3}\+?\)|\[\d{1,3}\+?\])\s+/u, '')
-    .replace(/^[●*]\s+|\s+[●*]$/gu, '')
-    .trim()
-  if (!clean || clean === span.workObjects?.at(-1)?.window_title) {
-    delete span.pendingObject
-    return span
-  }
-  if (span.pendingObject?.window_title !== clean) {
-    span.pendingObject = { occurred_at: observed, window_title: clean }
-  } else if (
-    Date.parse(observed) - Date.parse(span.pendingObject.occurred_at) >=
-    minDwellMs
-  ) {
-    const objects = [...(span.workObjects || []), span.pendingObject]
-    if (objects.length > maxWorkObjects) {
-      objects.splice(1, 1)
-      span.omittedObjects = (span.omittedObjects || 0) + 1
-    }
-    span.workObjects = objects
-    delete span.pendingObject
-  }
-  return span
-}
-
-function advanceWindowSpan(previous, candidate, sample, at = new Date()) {
+function advanceWindowSpan(previous, sample, at = new Date()) {
   const observed = at.toISOString()
   const app = sample?.activity === 'active' && sample.foreground_app
-  const title = sample?.window_title || ''
-  const lastSample =
-    candidate?.lastSeen || previous?.awaySince || previous?.lastSeen
-  const gap = lastSample ? at.getTime() - Date.parse(lastSample) : 0
+  const gap = previous ? at.getTime() - Date.parse(previous.lastSeen) : 0
   const interrupted = gap < 0 || gap > maxSampleGap
-  if (interrupted || !app) {
-    return {
-      active: null,
-      candidate: app
-        ? observeObject(
-            { app, title, start: observed, lastSeen: observed },
-            title,
-            observed,
-          )
-        : null,
-      finished: finishSpan(
-        previous,
-        interrupted ? previous?.lastSeen : observed,
-      ),
-    }
-  }
-
-  if (previous?.app === app) {
-    const active = {
-      ...previous,
-      title: title || previous.title,
-      lastSeen: observed,
-    }
-    if (active.awaySince) {
-      active.awayMs =
-        (active.awayMs || 0) + at.getTime() - Date.parse(active.awaySince)
-      delete active.awaySince
-    }
-    return {
-      active: observeObject(active, title, observed),
-      candidate: null,
-      finished: null,
-    }
-  }
-
-  let active = previous ?? null
+  let active = previous
   let finished = null
-  if (active && !active.awaySince) {
-    active = { ...active, awaySince: observed }
-    delete active.pendingObject
-  } else if (
-    active &&
-    at.getTime() - Date.parse(active.awaySince) >= minDwellMs
-  ) {
-    // The former app stayed out of focus even if several other apps flashed by.
-    finished = finishSpan(active, active.awaySince)
+  if (previous && (interrupted || previous.app !== app)) {
+    finished = finishSpan(previous, interrupted ? previous.lastSeen : observed)
     active = null
   }
-  const next =
-    candidate?.app === app
-      ? { ...candidate, title: title || candidate.title, lastSeen: observed }
-      : { app, title, start: observed, lastSeen: observed }
-  observeObject(next, title, observed)
-  if (at.getTime() - Date.parse(next.start) < minDwellMs)
-    return { active, candidate: next, finished }
-  return {
-    active: { ...next, id: randomUUID() },
-    candidate: null,
-    finished,
+  if (app) {
+    active ??= { id: randomUUID(), app, start: observed, workObjects: [] }
+    const title = sample.window_title || ''
+    if (title !== (active.title || '')) {
+      if (title) {
+        active.workObjects.push({ occurred_at: observed, window_title: title })
+      } else {
+        // A title can become unreadable while the application remains in focus.
+        const last = active.workObjects.at(-1)
+        if (last) last.ended_at = observed
+      }
+      active.title = title
+    }
+    active.lastSeen = observed
   }
+  return { active, finished }
 }
 
-module.exports = { advanceWindowSpan, minDwellMs, maxSampleGap }
+module.exports = { advanceWindowSpan }

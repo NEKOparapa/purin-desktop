@@ -452,6 +452,8 @@
   border-right: 1px solid var(--line);
   padding-right: 12px;
 }
+.perception-outcome { display: grid; gap: 4px; margin: 0 6px 14px; color: var(--muted); font-size: 12px; }
+.perception-outcome select { width: 100%; padding: 5px 7px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--ink); font: inherit; }
 .perception-index h2, .perception-choice small, .perception-choice time,
 .perception-inspect > header small, .stage-caption small {
   font-size: 12px;
