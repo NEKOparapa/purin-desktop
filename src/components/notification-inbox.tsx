@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ChevronDown, Download, Paperclip, RotateCw } from 'lucide-react'
+import { ChevronDown, Download, Paperclip } from 'lucide-react'
 import type { DeviceFile, DeviceNotice, NoticeAlert } from '@/lib/desktop'
 import './notification-inbox.css'
 
@@ -10,6 +10,7 @@ const stamp = new Intl.DateTimeFormat('zh-CN', {
   minute: '2-digit',
   year: 'numeric',
 })
+const previewCount = 2
 function size(bytes: number) {
   if (bytes < 1024) return bytes + ' B'
   if (bytes < 1048576) return +(bytes / 1024).toFixed(1) + ' KB'
@@ -30,6 +31,16 @@ export function NotificationInbox({
 }) {
   const [items, setItems] = useState<DeviceNotice[]>([])
   const [cursor, setCursor] = useState<string | null>(null)
+  const [listView, setListView] = useState<{
+    open: boolean
+    request: NoticeAlert | null
+  }>({ open: false, request: null })
+  const focusIndex = focusNotice
+    ? items.findIndex((n) => n.id === focusNotice.id)
+    : -1
+  const showAll =
+    listView.open ||
+    (listView.request !== focusNotice && focusIndex >= previewCount)
   const [selection, setSelection] = useState<{
     id: string | null
     request: NoticeAlert | null
@@ -49,7 +60,7 @@ export function NotificationInbox({
     next: null,
   })
   const reading = useRef(new Set<string>())
-  const load = useRef<(cursor?: string) => void>(() => {})
+  const load = useRef<(cursor?: string) => boolean>(() => false)
   const api = window.wintermute
   useEffect(() => {
     if (!connected || !api?.notificationPage) return
@@ -89,7 +100,11 @@ export function NotificationInbox({
         if (active) setLoading(false)
       }
     }
-    load.current = fetchPage
+    load.current = (after) => {
+      if (!active || busy) return false
+      void fetchPage(after)
+      return true
+    }
     const refresh = () => {
       if (document.visibilityState === 'visible') void fetchPage()
     }
@@ -126,7 +141,9 @@ export function NotificationInbox({
     },
     [api],
   )
+  const visitedCursors = useRef(new Set<string>())
   useEffect(() => {
+    visitedCursors.current.clear()
     if (
       focusNotice &&
       !cache.current.items.some((item) => item.id === focusNotice.id)
@@ -136,14 +153,25 @@ export function NotificationInbox({
   const requested = useRef<NoticeAlert | null>(null)
   useEffect(() => {
     if (!focusNotice || requested.current === focusNotice) return
-    const item = items.find((n) => n.id === focusNotice.id)
-    if (!item) return
+    if (focusIndex < 0) {
+      if (issue) visitedCursors.current.clear()
+      else if (
+        cursor &&
+        !visitedCursors.current.has(cursor) &&
+        load.current(cursor)
+      ) {
+        visitedCursors.current.add(cursor)
+      }
+      return
+    }
+    if (focusIndex >= previewCount && !showAll) return
+    const item = items[focusIndex]
     requested.current = focusNotice
     void markRead(item)
     document
       .getElementById('notice-' + item.id)
       ?.scrollIntoView({ block: 'nearest' })
-  }, [focusNotice, items, markRead])
+  }, [focusNotice, focusIndex, items, cursor, issue, showAll, markRead])
   async function saveFile(id: string, file: DeviceFile) {
     if (!api || working) return
     setWorking(file.id)
@@ -161,14 +189,21 @@ export function NotificationInbox({
   return (
     <section className="notice-page" aria-labelledby="notices-heading">
       <header className="notice-toolbar">
-        <h2 id="notices-heading">通知</h2>
-        {connected && (
+        <h2 id="notices-heading">最近通知</h2>
+        {connected && (items.length > previewCount || cursor) && (
           <button
-            className="notice-refresh"
-            onClick={() => load.current()}
-            aria-label="刷新通知"
+            className="notice-toggle"
+            aria-controls="schedule-notices"
+            aria-expanded={showAll}
+            onClick={() =>
+              setListView({ open: !showAll, request: focusNotice })
+            }
           >
-            <RotateCw size={16} />
+            {showAll
+              ? '收起'
+              : cursor
+                ? '显示全部'
+                : `显示全部 ${items.length} 条`}
           </button>
         )}
       </header>
@@ -186,8 +221,8 @@ export function NotificationInbox({
           ) : (
             !issue && !items.length && <p className="notice-empty">暂无通知</p>
           )}
-          <div className="notice-list">
-            {items.map((n) => {
+          <div className="notice-list" id="schedule-notices">
+            {(showAll ? items : items.slice(0, previewCount)).map((n) => {
               const open = expanded === n.id
               const late = n.expired
               return (
@@ -215,7 +250,7 @@ export function NotificationInbox({
                         {late ? (
                           <small>已过期</small>
                         ) : (
-                          !n.read_at && <small>未读</small>
+                          !n.read_at && <small className="sr-only">未读</small>
                         )}
                       </span>
                       {!open && n.body && (
@@ -270,7 +305,7 @@ export function NotificationInbox({
               )
             })}
           </div>
-          {cursor && (
+          {showAll && cursor && (
             <button
               className="notice-more"
               onClick={() => load.current(cursor)}

@@ -5,20 +5,19 @@ import {
   Bell,
   CalendarDays,
   BookOpen,
-  CornerDownLeft,
   History,
   ListChecks,
   MessageCircle,
   NotebookPen,
-  PanelLeftClose,
-  PanelLeftOpen,
+  Plus,
   SlidersHorizontal,
   X,
 } from 'lucide-react'
+import { DropdownMenu } from 'radix-ui'
 import { Dialog } from '@/components/ui/dialog'
+import { DesktopLayout } from '@/components/desktop-layout'
 import { AgentSettings } from '@/components/agent-settings'
 import { ScheduleCalendar } from '@/components/schedule-calendar'
-import { NotificationInbox } from '@/components/notification-inbox'
 import type { NoticeAlert } from '@/lib/desktop'
 import { MemoryBrowser } from '@/components/memory-browser'
 import { useAgent, type AgentState, type ChatMessage } from '@/lib/desktop'
@@ -26,21 +25,10 @@ import './App.css'
 
 const pages = [
   { id: 'chat', label: '对话', icon: MessageCircle },
-  { id: 'memory', label: '记忆', icon: BookOpen },
   { id: 'schedule', label: '日程', icon: CalendarDays },
+  { id: 'memory', label: '记忆', icon: BookOpen },
 ] as const
 type Page = (typeof pages)[number]['id']
-const sidebarPreference = 'wintermute.sidebarCollapsed'
-
-function initialSidebarCollapsed() {
-  try {
-    const saved = localStorage.getItem(sidebarPreference)
-    if (saved !== null) return saved === 'true'
-  } catch {
-    // Layout still works when browser storage is unavailable.
-  }
-  return window.matchMedia('(max-width: 750px)').matches
-}
 const prompts = [
   { label: '回顾今天', text: '帮我回顾一下今天的活动。', icon: History },
   {
@@ -54,15 +42,12 @@ const prompts = [
     icon: ListChecks,
   },
 ]
-const timeFormat = new Intl.DateTimeFormat('zh-CN', {
-  hour: '2-digit',
-  minute: '2-digit',
-  hour12: false,
-})
-const dateFormat = new Intl.DateTimeFormat('zh-CN', {
+const timestamp = new Intl.DateTimeFormat('zh-CN', {
   month: 'long',
   day: 'numeric',
-  weekday: 'long',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
 })
 const statuses = {
   queued: '正在发送',
@@ -74,39 +59,35 @@ const statuses = {
   completed: '',
 }
 
-function Mark() {
-  return (
-    <span className="brand-mark" aria-hidden="true">
-      {[7, 14, 20, 12, 8].map((h) => (
-        <i key={h} style={{ height: h + 'px' }} />
-      ))}
-    </span>
-  )
-}
-
 function Message({
   message,
+  at,
   retry,
 }: {
   message: ChatMessage
+  at: number
   retry: (id: string) => void
 }) {
   const user = message.role === 'user'
   const notice = message.notificationReply
+  const author = user ? '你' : notice ? 'Wintermute · 通知回复' : 'Wintermute'
   return (
-    <article className={'message ' + (notice ? 'notification' : message.role)}>
-      <header>
-        {notice ? <Bell size={14} /> : !user && <Mark />}
-        <strong>
-          {user ? '你' : notice ? 'Wintermute · 通知回复' : 'Wintermute'}
-        </strong>
-        {message.at && (
-          <time dateTime={message.at}>
-            {timeFormat.format(new Date(message.at))}
-          </time>
+    <article
+      className={'message ' + (notice ? 'notification' : message.role)}
+      aria-label={author}
+    >
+      <div
+        className="message-bubble"
+        title={Number.isFinite(at) ? timestamp.format(at) : undefined}
+      >
+        {notice && (
+          <header>
+            <Bell size={13} aria-hidden="true" />
+            {author}
+          </header>
         )}
-      </header>
-      <p>{message.text}</p>
+        <p>{message.text}</p>
+      </div>
       {message.status && statuses[message.status] && (
         <footer>
           {statuses[message.status]} {message.error}
@@ -140,6 +121,7 @@ function Chat({
   const follow = useRef(true)
   const log = useRef<HTMLDivElement>(null)
   const input = useRef<HTMLTextAreaElement>(null)
+  const promptSelected = useRef(false)
   const lastMessageId = agent.messages.at(-1)?.id
   const hasMessages = agent.messages.length > 0 || agent.hasEarlier
   const olderAnchor = useRef<{ height: number; position: number } | null>(null)
@@ -168,14 +150,11 @@ function Chat({
       olderAnchor.current = null
     } else if (visible && follow.current && log.current)
       log.current.scrollTop = log.current.scrollHeight
-  }, [agent.messages.length, lastMessageId, visible, loadingEarlier])
-  useLayoutEffect(() => {
-    if (visible && input.current) {
-      input.current.style.height = 'auto'
-      input.current.style.height =
-        Math.min(150, input.current.scrollHeight) + 'px'
-    }
-  }, [draft, visible])
+  }, [agent.messages.length, lastMessageId, visible, loadingEarlier, draft])
+  function fillPrompt(text: string) {
+    setDraft(text)
+    input.current?.focus()
+  }
   async function send() {
     if (sending || !draft.trim()) return
     if (!agent.configured || !window.wintermute) {
@@ -202,74 +181,87 @@ function Chat({
   const status =
     issue || (agent.issue && '连接异常，将自动重试 · ' + agent.issue)
   return (
-    <section
-      className={'chat ' + (hasMessages ? 'with-messages' : 'empty-chat')}
-      aria-label="与 Wintermute 对话"
-    >
+    <section className="chat" aria-label="与 Wintermute 对话">
+      <header className="chat-identity">
+        <span className="chat-avatar" aria-hidden="true" />
+        <span className="chat-name">Wintermute</span>
+      </header>
       {hasMessages ? (
-        <>
-          <div
-            className="message-scroller"
-            ref={log}
-            role="log"
-            aria-label="消息记录"
-            onScroll={() => {
-              const el = log.current
-              if (!el) return
-              follow.current =
-                el.scrollHeight - el.scrollTop - el.clientHeight < 64
-              setAtBottom(follow.current)
-            }}
-          >
-            <div className="thread">
-              {agent.hasEarlier && (
-                <button
-                  className="earlier-messages"
-                  disabled={loadingEarlier}
-                  onClick={earlier}
-                >
-                  {loadingEarlier ? '正在读取…' : '加载更早消息'}
-                </button>
-              )}
-              {agent.messages.map((message, i) => {
-                const day = message.at ? new Date(message.at) : null
-                const previous = agent.messages[i - 1]?.at
-                const newDate =
-                  day &&
-                  (!previous ||
-                    day.toDateString() !== new Date(previous).toDateString())
-                return (
-                  <div key={message.id}>
-                    {day && newDate && (
-                      <p className="day-divider">
-                        <span>{dateFormat.format(day)}</span>
-                      </p>
-                    )}
-                    <Message message={message} retry={retry} />
-                  </div>
-                )
-              })}
-            </div>
+        <div
+          className="message-scroller"
+          ref={log}
+          role="log"
+          aria-label="消息记录"
+          onScroll={() => {
+            const el = log.current
+            if (!el) return
+            follow.current =
+              el.scrollHeight - el.scrollTop - el.clientHeight < 64
+            setAtBottom(follow.current)
+          }}
+        >
+          <div className="thread">
+            {agent.hasEarlier && (
+              <button
+                className="earlier-messages"
+                disabled={loadingEarlier}
+                onClick={earlier}
+              >
+                {loadingEarlier ? '正在读取…' : '加载更早消息'}
+              </button>
+            )}
+            {agent.messages.map((message, i) => {
+              const at = Date.parse(message.at ?? '')
+              const previous = Date.parse(agent.messages[i - 1]?.at ?? '')
+              const showTime =
+                Number.isFinite(at) &&
+                (!Number.isFinite(previous) ||
+                  Math.abs(at - previous) >= 5 * 60_000 ||
+                  new Date(at).toDateString() !==
+                    new Date(previous).toDateString())
+              return (
+                <div key={message.id}>
+                  {showTime && (
+                    <time
+                      className="chat-timestamp"
+                      dateTime={message.at ?? undefined}
+                    >
+                      {timestamp.format(at)}
+                    </time>
+                  )}
+                  <Message message={message} at={at} retry={retry} />
+                </div>
+              )
+            })}
           </div>
-          {!atBottom && (
-            <button
-              className="jump-to-end"
-              onClick={() => {
-                if (log.current)
-                  log.current.scrollTop = log.current.scrollHeight
-              }}
-            >
-              <ArrowDown size={14} />
-              最新消息
-            </button>
-          )}
-        </>
+        </div>
       ) : (
         <div className="welcome">
           <h1>有什么想聊的？</h1>
+          <div className="prompt-list">
+            {prompts.map((p) => (
+              <button key={p.label} onClick={() => fillPrompt(p.text)}>
+                <p.icon size={15} aria-hidden="true" />
+                {p.label}
+              </button>
+            ))}
+          </div>
         </div>
       )}
       <div className="write-area">
+        {hasMessages && !atBottom && (
+          <button
+            type="button"
+            className="jump-to-end"
+            aria-label="最新消息"
+            title="最新消息"
+            onClick={() => {
+              if (log.current) log.current.scrollTop = log.current.scrollHeight
+            }}
+          >
+            <ArrowDown size={17} />
+          </button>
+        )}
         <form
           className="composer"
           onSubmit={(e) => {
@@ -277,9 +269,52 @@ function Chat({
             void send()
           }}
         >
+          {hasMessages && (
+            <DropdownMenu.Root>
+              <DropdownMenu.Trigger asChild>
+                <button
+                  type="button"
+                  className="prompt-trigger"
+                  aria-label="快捷提问"
+                  title="快捷提问"
+                >
+                  <Plus size={19} />
+                </button>
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Portal>
+                <DropdownMenu.Content
+                  className="chat-prompt-menu"
+                  side="top"
+                  align="start"
+                  sideOffset={10}
+                  onCloseAutoFocus={(event) => {
+                    if (promptSelected.current) {
+                      event.preventDefault()
+                      promptSelected.current = false
+                      input.current?.focus()
+                    }
+                  }}
+                >
+                  {prompts.map((p) => (
+                    <DropdownMenu.Item
+                      key={p.label}
+                      onSelect={() => {
+                        promptSelected.current = true
+                        setDraft(p.text)
+                      }}
+                    >
+                      <p.icon size={15} aria-hidden="true" />
+                      {p.label}
+                    </DropdownMenu.Item>
+                  ))}
+                </DropdownMenu.Content>
+              </DropdownMenu.Portal>
+            </DropdownMenu.Root>
+          )}
           <textarea
             aria-label="对话消息"
-            placeholder="写给 Wintermute…"
+            aria-description="回车换行，Ctrl + Enter 或 ⌘ + Enter 发送"
+            placeholder="发送消息"
             rows={1}
             ref={input}
             value={draft}
@@ -287,7 +322,9 @@ function Chat({
             onKeyDown={(e) => {
               if (
                 e.key === 'Enter' &&
+                (e.ctrlKey || e.metaKey) &&
                 !e.shiftKey &&
+                !e.altKey &&
                 !e.nativeEvent.isComposing &&
                 e.nativeEvent.keyCode !== 229
               ) {
@@ -296,20 +333,16 @@ function Chat({
               }
             }}
           />
-          <div className="composer-tools">
-            <span>
-              <CornerDownLeft size={13} />
-              发送 <i /> Shift + Enter 换行
-            </span>
-            <button
-              className="send-button"
-              type="submit"
-              aria-label="发送对话消息"
-              disabled={!draft.trim() || sending}
-            >
-              <ArrowUp size={19} strokeWidth={2} />
-            </button>
-          </div>
+          <button
+            className="send-button"
+            type="submit"
+            aria-label="发送对话消息"
+            aria-keyshortcuts="Control+Enter Meta+Enter"
+            title="发送消息（Ctrl + Enter 或 ⌘ + Enter）"
+            disabled={!draft.trim() || sending}
+          >
+            <ArrowUp size={19} strokeWidth={2} />
+          </button>
         </form>
         {agent.materialIssue && (
           <p className="issue" role="status">
@@ -321,22 +354,6 @@ function Chat({
             {status}
           </p>
         )}
-        {!hasMessages && (
-          <div className="prompt-list">
-            {prompts.map((p) => (
-              <button
-                key={p.label}
-                onClick={() => {
-                  setDraft(p.text)
-                  input.current?.focus()
-                }}
-              >
-                <p.icon size={15} />
-                {p.label}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
     </section>
   )
@@ -344,8 +361,7 @@ function Chat({
 
 export default function App() {
   const [page, setPage] = useState<Page>('chat')
-  const [collapsed, setCollapsed] = useState(initialSidebarCollapsed)
-  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [dialog, setDialog] = useState<'settings' | 'about' | null>(null)
   const [connectionVersion, setConnectionVersion] = useState(0)
   const agent = useAgent()
   const [lastAlert,setNotice]=useState<(NoticeAlert & {version:number})|null>(null)
@@ -354,7 +370,7 @@ export default function App() {
   function openNotice(alert: NoticeAlert) {
     setFocusNotice(alert)
     setPage('schedule')
-    setSettingsOpen(false)
+    setDialog(null)
     setNotice(null)
   }
   useEffect(()=>{
@@ -370,35 +386,10 @@ export default function App() {
     })
     return ()=>{clearTimeout(timer);stop?.()}
   },[agent.url,agent.terminal,connectionVersion])
-  const showSettings = () => setSettingsOpen(true)
-  const toggleLabel = collapsed ? '展开导航栏' : '收起导航栏'
-  function toggleSidebar() {
-    const next = !collapsed
-    setCollapsed(next)
-    try {
-      localStorage.setItem(sidebarPreference, String(next))
-    } catch {
-      // The preference still applies to the current window.
-    }
-  }
+  const showSettings = () => setDialog('settings')
   return (
-    <div className="app-shell" data-collapsed={collapsed}>
-      <aside className="sidebar">
-        <button
-          type="button"
-          className="sidebar-toggle"
-          onClick={toggleSidebar}
-          aria-label={toggleLabel}
-          title={toggleLabel}
-          aria-expanded={!collapsed}
-          aria-controls="main-navigation"
-        >
-          {collapsed ? (
-            <PanelLeftOpen size={18} />
-          ) : (
-            <PanelLeftClose size={18} />
-          )}
-        </button>
+    <DesktopLayout aboutOpen={dialog === 'about'} onAboutChange={(open) => setDialog(open ? 'about' : null)}>
+      <aside className="sidebar" id="app-sidebar">
         <nav id="main-navigation" className="nav-list" aria-label="主导航">
           {pages.map((p) => (
             <button
@@ -415,7 +406,7 @@ export default function App() {
               }}
             >
               <p.icon size={18} aria-hidden="true" />
-              {!collapsed && <span>{p.label}</span>}
+              <span>{p.label}</span>
             </button>
           ))}
         </nav>
@@ -426,7 +417,7 @@ export default function App() {
           aria-label="终端设置"
         >
           <SlidersHorizontal size={18} aria-hidden="true" />
-          {!collapsed && <span>设置</span>}
+          <span>设置</span>
         </button>
       </aside>
       <main className="workspace">
@@ -452,20 +443,15 @@ export default function App() {
               <header className="page-heading">
                 <h1 id="schedule-heading">日程</h1>
               </header>
-              <NotificationInbox
+              <ScheduleCalendar
                 connected={agent.configured}
+                settings={showSettings}
                 focusNotice={
                   focusNotice?.url === agent.url && focusNotice.terminal === agent.terminal
                     ? focusNotice
                     : null
                 }
               />
-              <section aria-label="日历">
-                <ScheduleCalendar
-                  connected={agent.configured}
-                  settings={showSettings}
-                />
-              </section>
             </div>
           </section>
         )}
@@ -482,14 +468,14 @@ export default function App() {
         <button onClick={()=>openNotice(notice)}><strong>{notice.title}</strong><span>{notice.body}</span></button>
         <button aria-label="关闭提醒" onClick={()=>setNotice(null)}><X size={15}/></button>
       </aside>}
-      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-        {settingsOpen && (
+      <Dialog open={dialog === 'settings'} onOpenChange={(open) => setDialog(open ? 'settings' : null)}>
+        {dialog === 'settings' && (
           <AgentSettings
             state={agent}
             onConnected={() => setConnectionVersion((version) => version + 1)}
           />
         )}
       </Dialog>
-    </div>
+    </DesktopLayout>
   )
 }

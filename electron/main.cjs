@@ -24,7 +24,8 @@ function windowBackground() {
 
 function windowControls() {
   return {
-    color: windowBackground(),
+    // Match the sidebar behind the native caption buttons.
+    color: nativeTheme.shouldUseDarkColors ? '#1e1f23' : '#f4f4f6',
     symbolColor: nativeTheme.shouldUseDarkColors ? '#f1f2f5' : '#20222a',
     height: 32,
   }
