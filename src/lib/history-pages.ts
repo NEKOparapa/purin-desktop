@@ -51,11 +51,12 @@ export function useHistoryPages(view: HistoryView) {
       return historyPage(view, groupId, cursor)
         .then(async (page) => {
           if (pending.current.get(groupId) !== token) return
-          if (view === 'perception' && background) {
+          if ((view === 'perception' || view === 'slice' || view === 'timeline') && background) {
             // Recognition can complete on an older page while the user has it open.
             const prior = loaded.current
             const unfinished = new Set(prior.filter(item => {
               const payload = item.raw?.payload as { image_recognition?: string } | undefined
+              if (view === 'timeline' || view === 'slice') return true
               return payload?.image_recognition && payload.image_recognition !== 'ready'
             }).map(item => item.id))
             let chunk = page
@@ -84,7 +85,7 @@ export function useHistoryPages(view: HistoryView) {
               for (const row of previous.get(groupId)?.items ?? [])
                 rows.set(row.id, row)
             for (const row of items) rows.set(row.id, row)
-            if (background && page.next_cursor && items.length) {
+            if (background && view !== 'timeline' && view !== 'slice' && page.next_cursor && items.length) {
               const prior = previous.get(groupId)
               const last = items.at(-1)!
               const overlap = prior?.items.findIndex(
@@ -139,7 +140,7 @@ export function useHistoryPages(view: HistoryView) {
       if (document.visibilityState === 'visible')
         void fetchPage(null, null, true)
     }
-    if (view !== 'chat' && view !== 'perception') return () => requests.clear()
+    if (!['chat', 'perception', 'slice', 'timeline'].includes(view)) return () => requests.clear()
     const timer = window.setInterval(refreshVisible, 5000)
     window.addEventListener('focus', refreshVisible)
     document.addEventListener('visibilitychange', refreshVisible)

@@ -146,7 +146,7 @@ test('history uses the bound terminal and fetches an attachment only after Save'
   const [grouped, unsupported, fallback, forbidden, detail] =
     requests.slice(before)
   assert.equal(requests.length - before, 5)
-  assert.equal(grouped.searchParams.get('grouped'), '1')
+  assert.equal(grouped.searchParams.get('view'), 'slicetimeline')
   assert.equal(unsupported.searchParams.get('grouped'), '1')
   assert.equal(fallback.searchParams.get('grouped'), null)
   assert.equal(fallback.searchParams.get('cursor'), 'old-server')

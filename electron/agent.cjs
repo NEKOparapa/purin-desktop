@@ -629,13 +629,14 @@ class DesktopAgent {
       )
     }
     query.set('view', view)
-    if (view === 'perception' && !cursor?.startsWith('perception:')) {
-      query.set('view', 'perceptiontimeline')
+    const projection = { slice: 'slicetimeline', timeline: 'merged' }[view]
+    if (projection && (!cursor || cursor.startsWith(projection + ':'))) {
+      query.set('view', projection)
       try {
         return await get('/v1/history?' + query)
       } catch (error) {
         if (cursor || error.status !== 400 || error.code !== 'invalid_query') throw error
-        query.set('view', 'perception')
+        query.set('view', view)
       }
     }
     if (view === 'slice') {

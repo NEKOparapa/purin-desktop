@@ -83,8 +83,8 @@ function Formatted({ data }: { data: PerceptionStages }) {
     return (
       <p className="stage-note">
         {data.parts.length || data.filter_reason
-          ? '整条记录已过滤，没有生成压缩文本。'
-          : '这条记录没有生成压缩文本。'}
+          ? '整条记录已过滤。'
+          : '暂无精简文本。'}
       </p>
     )
   return (
@@ -92,7 +92,7 @@ function Formatted({ data }: { data: PerceptionStages }) {
       {parts.map((part) => (
         <div key={part.kind} className="stage-section">
           <div className="stage-caption">
-            <span>{part.kind === 'visual' ? '截图识别补充' : '规则压缩文本'}</span>
+            <span>{part.kind === 'visual' ? '截图识别补充' : '精简文本'}</span>
             {part.tokens != null && <small>{part.tokens.toLocaleString('zh-CN')} tokens</small>}
           </div>
           <pre className="stage-text">{part.text}</pre>

@@ -60,6 +60,16 @@ export interface HistoryItem {
   filter_result?: 'filtered' | 'partial' | 'kept' | 'unprojected'
   context_messages?: ContextMessageRef[]
   pending_context?: boolean
+  layer?: ActivityLayer | 'conversation' | 'notification'
+  material_type?: 'slice.recorded' | 'slice.audio' | 'slice.image'
+  processing?: 'ready' | 'retrying' | 'pending'
+  members?: { id: string; occurred_at: string; terminal: string; layer: ActivityLayer }[]
+  merged_summary?: {
+    kind: 'ai' | 'rules'
+    generated_at: string | null
+    covered_from: string
+    covered_until: string
+  }
   summary_round?: SummaryRoundRef
   usage?: TimelineUsage
   group?: ScreenshotGroup | null

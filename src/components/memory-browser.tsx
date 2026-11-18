@@ -5,7 +5,8 @@ import { emptyPage, useHistoryPages, type PageState } from '@/lib/history-pages'
 import { Files } from './history-files'
 import { HistoryConnection } from './history-viewport'
 import { PerceptionBrowser } from './perception-browser'
-import { CompressionBrowser, OriginalDisclosure } from './compression-browser'
+import { MergedTimeline } from './merged-timeline'
+import { OriginalDisclosure } from './compression-browser'
 import { UserProfile } from './user-profile'
 import { TerminalToolHistory } from './terminal-tool-history'
 import './memory-browser.css'
@@ -215,6 +216,48 @@ function HistoryRecords({
   )
 }
 
+function ActivityRecords({items}: {items: HistoryItem[]}) {
+  const [selected, setSelected] = useState<string | null>(null)
+  return (
+    <div className="perception-timeline">
+      <div className="trace-heading"><h2>活动时间轴</h2></div>
+      <ol className="trace-axis" aria-label="活动记录">
+        {items.map((item, index) => {
+          const at = new Date(item.occurred_at ?? '')
+          const day = isNaN(+at) ? '时间未记录' : dateFormat.format(at)
+          const prior = new Date(items[index - 1]?.occurred_at ?? '')
+          const dayHeading = !index || day !== (isNaN(+prior) ? '时间未记录' : dateFormat.format(prior))
+          const material = item.material_type
+          const kind = material === 'slice.audio' ? '录音' : material === 'slice.image' ? '图片'
+            : material ? '文本' : item.members ? '合并摘要' : item.layer === 'slice' ? '切片' : '感知'
+          const open = selected === item.id
+          const preview = item.text.trim() || item.files[0]?.name || kind
+          return <li key={item.id}>
+            {dayHeading && <h3 className="trace-day">{day}</h3>}
+            <button className="trace-toggle" data-kind="visit" aria-expanded={open}
+              onClick={() => setSelected(open ? null : item.id)}>
+              <time dateTime={item.occurred_at ?? undefined}>{isNaN(+at) ? '—' : timeFormat.format(at)}</time>
+              <span className="trace-point" aria-hidden />
+              <span className="trace-title"><strong className="activity-preview">{preview}</strong>
+                <small>{item.source}{item.members && ' · ' + item.members.length + ' 条来源'}</small></span>
+              <span className="trace-status">{kind}</span><ChevronRight size={14} className="trace-chevron" aria-hidden />
+            </button>
+            {open && <div className="trace-detail activity-detail">
+              {item.text && <p>{item.text}</p>}
+              {item.processing && item.processing !== 'ready' && <small>{item.processing === 'retrying' ? '等待重试' : '等待处理'}</small>}
+              <Files files={item.files}/>
+              {item.members ? <ol aria-label="摘要来源">{item.members.map(member =>
+                <li key={member.id}><span>{groupTime(member.occurred_at, member.occurred_at)} · {member.layer === 'slice' ? '切片' : '感知'} · {member.terminal}</span>
+                  <OriginalDisclosure id={member.id} layer={member.layer} activity/></li>)}</ol>
+                : <OriginalDisclosure id={item.id} layer={item.layer === 'perception' ? 'perception' : 'slice'} activity={!material}/>}
+            </div>}
+          </li>
+        })}
+      </ol>
+    </div>
+  )
+}
+
 function HistoryList({
   view,
   label,
@@ -261,7 +304,11 @@ function HistoryList({
       </div>
       {view === 'perception' ? visible.length > 0 && <PerceptionBrowser
         key={term} items={visible} revision={revision}
-      /> : <HistoryRecords
+      /> : view === 'timeline' && page.items.some(row => row.members || row.layer) ? (
+        visible.length > 0 && <MergedTimeline items={visible} groupVisits={!term} />
+      ) : view === 'slice' && visible.some(row => row.material_type || row.members || row.layer) ? (
+        <ActivityRecords items={visible} />
+      ) : <HistoryRecords
         items={visible}
         pages={pages}
         read={read}
@@ -280,41 +327,6 @@ function HistoryList({
         moreLabel="加载更早记录"
       />
     </section>
-  )
-}
-
-function ActivityHistory({
-  layer,
-  label,
-  openTimeline,
-}: {
-  layer: ActivityLayer
-  label: string
-  openTimeline: () => void
-}) {
-  const [compare, setCompare] = useState(false)
-  if (layer === 'perception')
-    return <HistoryList view={layer} label={label} />
-  return (
-    <>
-      <div
-        className="history-modes"
-        role="group"
-        aria-label={label + '显示方式'}
-      >
-        <button aria-pressed={!compare} onClick={() => setCompare(false)}>
-          记录
-        </button>
-        <button aria-pressed={compare} onClick={() => setCompare(true)}>
-          压缩对照
-        </button>
-      </div>
-      {compare ? (
-        <CompressionBrowser layer={layer} openTimeline={openTimeline} />
-      ) : (
-        <HistoryList view={layer} label={label} />
-      )}
-    </>
   )
 }
 
@@ -352,21 +364,8 @@ export function MemoryBrowser({
             <UserProfile key={connectionKey} />
           ) : view.id === 'terminal-tools' ? (
             <TerminalToolHistory key={connectionKey} />
-          ) : view.id === 'slice' || view.id === 'perception' ? (
-            <ActivityHistory
-              key={connectionKey + view.id}
-              layer={view.id}
-              label={view.label}
-              openTimeline={() =>
-                setView(views.find((v) => v.id === 'timeline')!)
-              }
-            />
           ) : (
-            <HistoryList
-              key={connectionKey + view.id}
-              view={view.id}
-              label={view.label}
-            />
+            <HistoryList key={connectionKey + view.id} view={view.id} label={view.label} />
           )
         ) : (
           <div className="history-empty">

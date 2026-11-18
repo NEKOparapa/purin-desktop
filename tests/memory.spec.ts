@@ -353,127 +353,99 @@ test('groups screen captures and previews visible frames automatically', async (
   ])
 })
 
-test('compares the same batch with its persisted summaries and opens scoped originals lazily', async ({
-  page,
-}) => {
-  const calls: {
-    kind: string
-    id?: string
-    layer?: string
-    cursor?: string
-    activity?: boolean
-  }[] = []
-  const downloads: HistoryFile[] = []
+test('merged timeline expands grouped and single visits as compressed text only', async ({ page }) => {
+  function visit(id: string, app: string, subject: string, start: string, end: string, seconds: number, device = 'http-desktop') {
+    const at = '2026-11-18T' + end + 'Z'
+    const text = at + ' | 感知 · ' + device + ' | ' + app + ' ' + start + '–' + end + ' ' + seconds
+      + ' 秒\n内容：' + start + ' ' + subject + '\n设备：' + device
+    return { ...item(id, text), occurred_at: at, source: '感知层 · ' + device, layer: 'perception' as const }
+  }
+  const records = [
+    visit('one', 'ChatGPT', 'ChatGPT', '02:33:30', '02:34:06', 36.276),
+    visit('two', 'ChatGPT', 'ChatGPT', '02:33:23', '02:33:29', 6.072),
+    visit('three', 'ChatGPT', 'ChatGPT', '02:32:33', '02:32:39', 6.022),
+    visit('four', 'chrome', 'GitHub', '02:32:08', '02:32:33', 14.089),
+    visit('five', 'ChatGPT', '起草文档', '02:31:46', '02:32:08', 22.134),
+    visit('six', 'ChatGPT', '另一台电脑上的对话', '02:31:12', '02:31:20', 8, 'laptop'),
+    visit('seven', 'ChatGPT', '先前的对话', '02:25:12', '02:25:20', 8, 'laptop'),
+  ]
+  await openMemory(page, ({ view }) => ({ items: view === 'timeline' ? records : [], next_cursor: null }))
+  await page.getByRole('button', { name: '合并线', exact: true }).click()
+  const timeline = page.getByRole('region', { name: '活动时间轴' })
+  const visits = timeline.getByRole('button', { expanded: false })
+  await expect(visits).toHaveCount(5)
+  const recent = timeline.getByRole('button', { name: /ChatGPT.*3 次 · 共 48 秒/ })
+  await expect(recent).toBeVisible()
+  await expect(recent).not.toContainText('http-desktop')
+  await expect(timeline).not.toContainText('2026-11-18T')
+  const localTime = await page.evaluate(iso => new Intl.DateTimeFormat('zh-CN', {
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(new Date(iso)), records[0].occurred_at)
+  await expect(recent.locator('time')).toHaveText(localTime)
+  await recent.click()
+  const texts = timeline.getByRole('group', {name:'压缩处理后的文本'})
+  await expect(texts.locator('p')).toHaveCount(3)
+  await expect(texts.locator('p').first()).toHaveText(records[0].text.split(' | ')[2])
+  await expect(timeline.getByRole('button')).toHaveCount(5)
+  await expect(timeline.locator('details, pre, .original-disclosure')).toHaveCount(0)
+  await page.getByRole('textbox', {name:'筛选已加载记录'}).fill('GitHub')
+  await expect(visits).toHaveCount(1)
+  await expect(visits).toHaveAccessibleName(/Chrome.*GitHub.*14 秒/)
+  await visits.click()
+  await expect(texts).toHaveText(records[3].text.split(' | ')[2])
+  await expect(timeline.getByRole('button')).toHaveCount(1)
+})
+
+test('slice captures keep their details and merged summaries expand as text only', async ({ page }) => {
   const at = '2026-11-15T11:00:00+08:00'
-  const batch = {
-    id: '17',
-    terminal_id: '会议电脑',
-    started_at: at,
-    ended_at: at,
-    perception_count: 1,
-    slice_count: 1,
-    status: 'ready',
-    partial: false,
-  }
-  const input = {
-    id: 'obs',
-    layer: 'slice',
-    occurred_at: at,
-    source: '切片 · 会议电脑',
-    text: '截图上出现“发送成功”',
-    source_count: 1,
-  }
-  const file = { id: 'shot', name: '会议窗口.jpg' }
-  const data = ({ id }: { id?: string }) => ({
-    items: [
-      {
-        id: 'shot',
-        kind: 'slice.image',
-        occurred_at: at,
-        source: '截图',
-        payload: { title: '发布会议', app: 'QQ' },
-        transcript: null,
-        files: [file],
-      },
-    ],
-    next_cursor: null,
-    extraction: {
-      status: 'ready',
-      text: id === 'obs' ? '已提取的图像事实' : '直接从记录读取的事实',
-      strategy: 'image_description',
-      source_count: 1,
-    },
-  })
-  await openMemory(
-    page,
-    ({ view }) => ({
-      items: view === 'slice' ? [item('event', '原始切片')] : [],
-      next_cursor: null,
-    }),
-    (f) => {
-      downloads.push(f)
-      return { saved: true }
-    },
-  )
-  await page.exposeFunction('inspectFixture', (q: (typeof calls)[number]) => {
-    calls.push(q)
-    if (q.kind === 'list')
-      return {
-        items: [q.cursor ? { ...batch, id: '18', partial: true } : batch],
-        next_cursor: q.cursor ? null : 'more-batches',
-      }
-    if (q.kind === 'source') return data(q)
-    return {
-      batch: q.id === '18' ? { ...batch, id: '18', partial: true } : batch,
-      rule_text: q.id === '18' ? null : '规则合计 90 秒',
-      ai_text: q.id === '18' ? null : 'AI 归纳了会议进展',
-      rollup: {
-        status: 'ready',
-        rule_text: '多批规则',
-        ai_text: '跨批会议总览',
-      },
-      items: [
-        q.cursor ? { ...input, id: 'obs2', text: '后续打开了会议清单' } : input,
-      ],
-      next_cursor: q.cursor ? null : 'more-inputs',
-    }
-  })
-  await page.evaluate(() => {
-    const api = window as unknown as {
-      wintermute: Record<string, unknown>
-      inspectFixture: unknown
-    }
-    api.wintermute.compression = api.inspectFixture
-  })
-  await page.getByRole('button', { name: '切片层', exact: true }).click()
-  await page.getByRole('button', { name: '查看原始资料' }).click()
-  await expect(page.getByText('直接从记录读取的事实')).toBeVisible()
-  await page.getByRole('button', { name: '压缩对照', exact: true }).click()
-  await expect(page.getByRole('button', { name: /会议电脑/ })).toBeVisible()
-  expect(calls.filter((q) => q.kind === 'batch')).toHaveLength(0)
-  await page.getByRole('button', { name: /会议电脑/ }).click()
-  await expect(page.getByText('规则合计 90 秒')).toBeVisible()
-  await expect(page.getByText('AI 归纳了会议进展')).toBeVisible()
-  await page.getByText('跨批次汇总', { exact: true }).click()
-  await expect(page.getByText('跨批会议总览')).toBeVisible()
-  await page.getByRole('button', { name: '查看原始资料' }).click()
-  await expect(page.locator('pre')).toContainText('发布会议')
-  await expect(page.getByText('已提取的图像事实')).toBeVisible()
-  expect(calls).toContainEqual({ kind: 'source', id: 'obs', activity: true })
-  expect(downloads).toEqual([])
-  await page.getByText('会议窗口.jpg', { exact: true }).scrollIntoViewIfNeeded()
-  await expect(page.getByRole('img', { name: '会议窗口.jpg' })).toBeVisible()
-  expect(downloads).toEqual([])
-  await page.getByRole('button', { name: '加载更多活动输入' }).click()
-  await expect(page.getByText('后续打开了会议清单')).toBeVisible()
-  await page.getByRole('button', { name: '加载更早批次' }).click()
-  await page.getByRole('button', { name: /部分可见/ }).click()
-  await expect(page.getByText(/此批次仅部分记录/)).toBeVisible()
-  await expect(page.getByText('跨批次汇总')).toHaveCount(0)
-  await page.getByRole('button', { name: '查看已投递的时间线' }).click()
-  await expect(
-    page.getByRole('button', { name: '合并线', exact: true }),
-  ).toHaveAttribute('aria-pressed', 'true')
+  await openMemory(page, ({ view }) => ({
+    items: view === 'slice' ? [
+      { ...item('audio', '预算要再核一次'), occurred_at: at, material_type: 'slice.audio', layer: 'slice', processing: 'ready' }
+    ] : view === 'timeline' ? [
+      { ...item('merged-1', '检查预算与方案'), members: [
+        {id:'observed-1', terminal:'电脑', layer:'perception', occurred_at:at},
+        {id:'captured-1', terminal:'录音机', layer:'slice', occurred_at:at},
+      ]}
+    ] : [], next_cursor: null
+  }))
+  await page.getByRole('button', {name:'切片层',exact:true}).click()
+  await expect(page.getByRole('heading', {name:'活动时间轴'})).toBeVisible()
+  await page.getByRole('button', {name:/预算要再核一次/}).click()
+  await expect(page.getByRole('button', {name:'查看原始资料'})).toBeVisible()
+  await expect(page.getByRole('button', {name:'压缩对照'})).toHaveCount(0)
+  await page.getByRole('button',{name:'合并线',exact:true}).click()
+  const summary=page.getByRole('button',{name:/检查预算与方案/})
+  await summary.click()
+  const timeline=page.getByRole('region',{name:'活动时间轴'})
+  await expect(timeline.getByRole('group',{name:'压缩处理后的文本'})).toHaveText('检查预算与方案')
+  await expect(timeline.getByRole('button')).toHaveCount(1)
+  await summary.click()
+  await expect(timeline.getByRole('group',{name:'压缩处理后的文本'})).toHaveCount(0)
+})
+
+test('AI summaries show the generation clock and the local interval of the summarized events', async ({ page }) => {
+  // Use the browser time zone to construct the instants, including a midnight crossing.
+  const [start, end, generated] = await page.evaluate(() =>
+    ['2026-11-17T23:57:30', '2026-11-18T00:02:45', '2026-11-18T11:20:00']
+      .map(value => new Date(value).toISOString()))
+  const members = [{id:'visit', layer:'perception' as const, terminal:'电脑', occurred_at:end}]
+  const meta = {kind:'ai' as const, generated_at:generated, covered_from:start, covered_until:end}
+  await openMemory(page, ({view}) => ({
+    items: view === 'timeline' ? [
+      {...item('new-ai','整理待办'), occurred_at:generated, members, merged_summary:meta},
+      {...item('visit','浏览文档'), occurred_at:end, layer:'perception'},
+      {...item('old-ai','较早的摘要'), occurred_at:end, members, merged_summary:{...meta,generated_at:null}},
+    ] : [], next_cursor:null,
+  }))
+  await page.getByRole('button',{name:'合并线',exact:true}).click()
+  const rows=page.getByRole('region',{name:'活动时间轴'}).getByRole('button')
+  await expect(rows.nth(0)).toContainText('AI 摘要')
+  await expect(rows.nth(0).locator('time')).toHaveText('11:20')
+  await expect(rows.nth(0)).toContainText(/覆盖 .*11月17日 23:57:30 – .*11月18日 00:02:45/)
+  await expect(rows.nth(1)).toContainText('浏览文档')
+  await expect(rows.nth(2)).toContainText('生成时间未记录')
+  await rows.nth(0).click()
+  await expect(page.getByRole('group',{name:'压缩处理后的文本'})).toHaveText('整理待办')
 })
 
 test('a visit separates original JSON and attachments, filter decisions and rule-compressed text', async ({page}) => {
@@ -514,6 +486,7 @@ test('a visit separates original JSON and attachments, filter decisions and rule
   await page.getByRole('button',{name:/Editor/}).click()
   const detail = page.locator('.perception-stage')
   await expect(detail.getByRole('heading')).toHaveText(['原始信息','过滤处理','压缩处理'])
+  await expect(detail.getByText('精简文本', { exact: true })).toBeVisible()
   await detail.getByText('原始 JSON',{exact:true}).click()
   await expect(detail.locator('.perception-json:visible')).toHaveText(JSON.stringify(raw,null,2))
   await detail.getByText('附件（2）',{exact:true}).click()
@@ -573,7 +546,7 @@ test('stage selection follows the record and ignores late responses for another 
   await filter.selectOption('filtered')
   release()
   await list.getByRole('button',{name:/QQ/}).click()
-  await expect(page.getByText('整条记录已过滤，没有生成压缩文本。')).toBeVisible()
+  await expect(page.getByText('整条记录已过滤。', { exact: true })).toBeVisible()
   await filter.selectOption('all')
   await list.getByRole('button',{name:/Editor/}).click()
   await expect(page.getByText('编辑记录',{exact:true})).toBeVisible()
@@ -599,7 +572,7 @@ test('fixed Wintermute exclusions show zero tokens and undated observations sort
   await expect(page.locator('.trace-budget').first()).toHaveText('约 0 tokens')
   await page.locator('.trace-toggle').first().click()
   await expect(page.getByText('Wintermute 自身活动固定整条过滤。')).toBeVisible()
-  await expect(page.getByText('整条记录已过滤，没有生成压缩文本。')).toBeVisible()
+  await expect(page.getByText('整条记录已过滤。', { exact: true })).toBeVisible()
 })
 
 test('a visit opens the stored message and follows a peer outside the loaded page', async ({page}) => {
