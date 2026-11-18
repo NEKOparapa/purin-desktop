@@ -307,7 +307,7 @@ export function AgentSettings({
                 采集桌面活动
               </label>
               <p id="desktop-activity-description">
-                约每秒采样一次。切走后上传本次停留及窗口标题变化，包括短停留。在「记忆
+                约每秒采样一次，未操作键鼠也会累计前台停留。切走或锁屏后上传本次停留及窗口标题变化，包括短停留。在「记忆
                 → 感知层」可查看原始记录和后端的过滤原因。
               </p>
               {state.collecting && navigator.platform.startsWith('Mac') && (

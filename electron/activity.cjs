@@ -104,9 +104,10 @@ if (front && front.kCGWindowOwnerPID === result.pid) {
 `
 
 async function sampleActivity(withTarget = false) {
-  const state = powerMonitor.getSystemIdleState(60)
-  const value = { activity: state }
-  if (state !== 'active') return value
+  // Keep checking for a locked session, but count foreground dwell without input.
+  const state = powerMonitor.getSystemIdleState(1)
+  const value = { activity: state === 'idle' ? 'active' : state }
+  if (value.activity !== 'active') return value
   if (process.platform !== 'win32' && process.platform !== 'darwin') return value
   try {
     const { stdout } = process.platform === 'win32'
