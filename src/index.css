@@ -45,6 +45,7 @@
   --canvas: light-dark(#ffffff, #16171b);
   --sidebar: light-dark(#f6f7f9, #101115);
   --surface: light-dark(#ffffff, #202126);
+  --grouped: light-dark(#f6f6f8, #222327);
   --hover: light-dark(#eceef3, #26282f);
   --active: light-dark(#e6e8ef, #2b2d35);
   --user-bubble: light-dark(#eef0f7, #292c39);
