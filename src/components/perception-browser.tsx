@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronRight, MessageSquareText, NotebookText } from 'lucide-react'
+import { ChevronRight, NotebookText } from 'lucide-react'
 import type {
-  ContextMessageRef,
   HistoryItem,
   PerceptionStages,
   SummaryRoundRef,
@@ -156,7 +155,6 @@ function VisitDetails({
     }
   }, [id, needsRecord, revision, retry])
   const raw = item ?? data?.record
-  const messages = data?.context_messages ?? raw?.context_messages
   return (
     <div className="perception-stage">
       {raw && (
@@ -191,16 +189,6 @@ function VisitDetails({
                   {data.rounds.length > 1 && ' · ' + clock.format(new Date(ref.occurred_at))} ↗
                 </button>
               ))}
-              {messages?.map((ref) => (
-                <button
-                  key={ref.id}
-                  className="history-inline"
-                  onClick={() => navigation.openMessage(ref)}
-                >
-                  查看上下文原文
-                  {messages.length > 1 && ref.parts?.includes('visual') && ' · 截图识别补充'} ↗
-                </button>
-              ))}
             </div>
           </section>
         </>
@@ -218,7 +206,7 @@ type TimelineRow = {
   duration?: string
   timeNote?: string
   status: string
-  kind: 'visit' | 'summary' | 'message'
+  kind: 'visit' | 'summary'
   item?: HistoryItem
 }
 
@@ -233,27 +221,8 @@ function visitRow(item: HistoryItem): TimelineRow {
     usage: item.usage,
     device: text(item.raw?.terminal_id),
     duration: info.duration,
-    status: item.context_messages?.length
-      ? item.pending_context
-        ? '部分已写入'
-        : '已关联上下文'
-      : item.pending_context
-        ? '等待写入'
-        : item.filter_result
-          ? outcomes[item.filter_result]
-          : '',
+    status: item.filter_result ? outcomes[item.filter_result] : '',
     item,
-  }
-}
-function messageRow(message: ContextMessageRef): TimelineRow {
-  return {
-    id: message.id,
-    at: message.written_at ?? message.activity_at ?? null,
-    title: '时间线消息写入上下文',
-    usage: message.usage,
-    timeNote: message.written_at ? undefined : '写入时刻未记录，按活动时间排列',
-    status: '已写入',
-    kind: 'message',
   }
 }
 
@@ -269,7 +238,7 @@ function summaryRow(ref: SummaryRoundRef): TimelineRow {
   }
 }
 
-const atSameTime = { visit: 0, summary: 1, message: 2 }
+const atSameTime = { visit: 0, summary: 1 }
 
 function timelineTime(row: TimelineRow) {
   const time = Date.parse(row.at ?? '')
@@ -297,8 +266,6 @@ export function PerceptionBrowser({
         ? summaryRow(item.summary_round)
         : visitRow(item),
     )
-    for (const ref of item.context_messages ?? [])
-      rows.set(ref.id, messageRow(ref))
   }
   const ordered = [...rows.values()].sort(
     (a, b) =>
@@ -323,7 +290,6 @@ export function PerceptionBrowser({
           status: '关联记录',
         })
     },
-    openMessage: (message) => jump(messageRow(message)),
     openSummary: (ref) => jump(summaryRow(ref)),
   }
   useEffect(() => {
@@ -393,7 +359,6 @@ export function PerceptionBrowser({
                   {stamp ? clock.format(stamp) : '—'}
                 </time>
                 <span className="trace-point" aria-hidden>
-                  {row.kind === 'message' && <MessageSquareText size={13} />}
                   {row.kind === 'summary' && <NotebookText size={14} />}
                 </span>
                 <span className="trace-title">

@@ -304,7 +304,7 @@ function HistoryList({
       </div>
       {view === 'perception' ? visible.length > 0 && <PerceptionBrowser
         key={term} items={visible} revision={revision}
-      /> : view === 'timeline' && page.items.some(row => row.members || row.layer) ? (
+      /> : view === 'timeline' && page.items.some(row => row.context_write || row.members || row.layer) ? (
         visible.length > 0 && <MergedTimeline items={visible} groupVisits={!term} />
       ) : view === 'slice' && visible.some(row => row.material_type || row.members || row.layer) ? (
         <ActivityRecords items={visible} />

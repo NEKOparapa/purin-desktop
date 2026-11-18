@@ -1,6 +1,5 @@
 import { useCallback } from 'react'
 import type {
-  ContextMessageRef,
   SummaryRoundRef,
   TraceMember,
   TracePage,
@@ -10,7 +9,6 @@ import { Navigation, OriginalDisclosure } from './compression-browser'
 
 export type TraceNavigation = {
   openMember: (member: TraceMember) => void
-  openMessage: (message: ContextMessageRef) => void
   openSummary: (round: SummaryRoundRef) => void
 }
 
@@ -34,13 +32,12 @@ export function PerceptionLinks({
   )
   const result = usePages<TraceMember, TracePage>(fetch)
   const page = result.page
-  const round = target.startsWith('round-')
   const prior = page?.round?.previous_summary
   return (
     <section className="trace-group">
       {page && (
         <>
-          {round && page.round && (
+          {page.round && (
             <>
               <h4>AI 摘要原文</h4>
               <pre className="stage-text">{page.round.summary}</pre>
@@ -53,7 +50,7 @@ export function PerceptionLinks({
               </details>
             </>
           )}
-          <h4>{round ? '引用记录' : '这条消息同次处理的记录'}</h4>
+          <h4>引用记录</h4>
           <ul className="trace-members">
             {prior && (
               <li>
@@ -97,18 +94,12 @@ export function PerceptionLinks({
               )
             })}
           </ul>
-          {round && !result.items.length && !prior && (
+          {!result.items.length && !prior && (
             <p className="stage-note">本轮没有可定位的引用记录。</p>
           )}
         </>
       )}
       <Navigation {...result} more="更多关联记录" />
-      {page?.text != null && (
-        <>
-          <h4>写入上下文的整段原文</h4>
-          <pre className="stage-text">{page.text}</pre>
-        </>
-      )}
     </section>
   )
 }

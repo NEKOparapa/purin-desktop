@@ -694,6 +694,7 @@
 }
 .merged-details p { margin: 0; white-space: pre-wrap; }
 .merged-details p + p { margin-top: 10px; }
+.merged-write-meta { color: var(--muted); font-variant-numeric: tabular-nums; }
 @container (max-width: 520px) {
   .merged-timeline { --time-width: 35px; --mark-width: 13px; --row-gap: 6px; }
   .merged-details { margin-left: 8px; }

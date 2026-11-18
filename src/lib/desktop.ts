@@ -70,6 +70,7 @@ export interface HistoryItem {
     covered_from: string
     covered_until: string
   }
+  context_write?: { covered_from: string | null; covered_until: string | null }
   summary_round?: SummaryRoundRef
   usage?: TimelineUsage
   group?: ScreenshotGroup | null

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronRight, Layers, StickyNote } from 'lucide-react'
+import { ChevronRight, Layers, MessageSquareText, StickyNote } from 'lucide-react'
 import type { HistoryItem } from '@/lib/desktop'
 import { duration } from '@/lib/perception'
 
@@ -14,6 +14,7 @@ const entryClock = /^(?:\d\d-\d\d )?\d\d:\d\d:\d\d\s+/
 
 function displayText(item: HistoryItem) {
   const text = item.text.trim()
+  if (item.context_write) return { title: '写入上下文', description: '', seconds: null, origin: item.source }
   if (item.members) {
     // A provisional summary may contain token-limited fragments of generated event lines.
     const layers = new Set(item.members.map(member => member.layer === 'slice' ? '切片' : '感知'))
@@ -84,7 +85,7 @@ function elapsed(seconds: number) {
 }
 
 function coverageLabel({ item, day }: Entry) {
-  const info = item.merged_summary
+  const info = item.context_write ?? item.merged_summary
   // Older servers return members in chronological order, without explicit coverage bounds.
   const from = new Date(info?.covered_from ?? item.members?.[0]?.occurred_at ?? '')
   const to = new Date(info?.covered_until ?? item.members?.at(-1)?.occurred_at ?? '')
@@ -107,8 +108,9 @@ export function MergedTimeline({ items, groupVisits }: {
         const open = group.some(row => row.item.id === selected)
         const summary = !!first.item.members
         const info = first.item.merged_summary
+        const write = first.item.context_write
         const missingGeneration = info?.kind === 'ai' && !info.generated_at
-        const coverage = summary ? coverageLabel(first) : ''
+        const coverage = write || summary ? coverageLabel(first) : ''
         const multiple = group.length > 1
         const description = [...new Set(group.map(row => row.description).filter(Boolean))].join(' · ')
         const metadata = first.seconds !== null
@@ -120,20 +122,23 @@ export function MergedTimeline({ items, groupVisits }: {
             onClick={() => setSelected(open ? null : first.item.id)}>
             {missingGeneration ? <span className="merged-unknown-time" title="生成时间未记录">—</span> :
               <time dateTime={first.item.occurred_at ?? undefined}
-                title={info?.generated_at ? '生成于 ' + first.preciseTime : first.preciseTime}>{first.time}</time>}
+                title={write ? '写入时间 · ' + first.preciseTime : info?.generated_at ? '生成于 ' + first.preciseTime : first.preciseTime}>{first.time}</time>}
             <span className="merged-mark" aria-hidden="true">
-              {summary ? <Layers size={15} /> : first.item.layer === 'slice' ? <StickyNote size={14} /> : <i />}
+              {write ? <MessageSquareText size={15} /> : summary ? <Layers size={15} /> : first.item.layer === 'slice' ? <StickyNote size={14} /> : <i />}
             </span>
             <span className="merged-label">
               <strong>{first.title}</strong>
-              {coverage && <span className="merged-coverage">{coverage}{missingGeneration && ' · 生成时间未记录'}</span>}
+              {coverage && !(write && open) && <span className="merged-coverage">{coverage}{missingGeneration && ' · 生成时间未记录'}</span>}
               {description && <span>{description}</span>}
             </span>
             <span className="merged-amount">{metadata}</span>
             <ChevronRight className="merged-chevron" size={14} aria-hidden="true" />
           </button>
-          {open && <div className="merged-details" role="group" aria-label="压缩处理后的文本">
-            {group.map(({ item }) => <p key={item.id}>
+          {open && <div className="merged-details" role="group" aria-label={write ? '写入原文' : '压缩处理后的文本'}>
+            {write ? <>
+              <p className="merged-write-meta">{first.item.occurred_at ? '写入于 ' + first.preciseTime : '写入时间未记录'} · {coverage || '覆盖时段未记录'}</p>
+              <p>{first.item.text}</p>
+            </> : group.map(({ item }) => <p key={item.id}>
               {item.members ? item.text : item.text.replace(envelope, '')}
             </p>)}
           </div>}

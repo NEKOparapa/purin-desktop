@@ -575,51 +575,27 @@ test('fixed Wintermute exclusions show zero tokens and undated observations sort
   await expect(page.getByText('整条记录已过滤。', { exact: true })).toBeVisible()
 })
 
-test('a visit opens the stored message and follows a peer outside the loaded page', async ({page}) => {
-  const ref = {id:'history-4-1',written_at:'2026-11-17T10:00:00Z',
-    usage:{tokens:119,budget:800,devices:['desktop'],duration_seconds:120}}
-  const visit = (app:string,at:string) => ({
-    ...item(app,app), occurred_at:at, context_messages:[ref], raw:{payload:{state_key:'desktop.window_span',
-      value:{foreground_app:app,started_at:at,duration_seconds:60,window_title:app+'.md'}}}
-  })
-  const first = visit('Editor','2026-11-17T09:30:00Z')
-  const peer = visit('Chrome','2026-11-17T08:45:00Z')
-  const original = '…\n只节选了最近的工作对象。\n\n---\n来源：活动时间线\n时间：2026-11-17T09:31:00Z'
-  await openMemory(page,({view})=>({items:view==='perception'?[first]:[],next_cursor:null}))
-  const lookup:string[]=[]
-  await page.exposeFunction('traceFixture',({kind,id,record}:{kind:string;id:string;record?:boolean})=>{
-    if(kind==='trace'){
-      expect(id).toBe(ref.id)
-      return {text:original,written_at:ref.written_at,next_cursor:null,items:[first,peer].map(v=>({
-        id:v.id,event_id:v.id,occurred_at:v.occurred_at,terminal:'desktop',title:v.id
-      }))}
-    }
-    if(record) lookup.push(id)
-    return {record:record?peer:undefined,context_messages:[ref],decisions:[],retained:{},
-      parts:[{kind:'observation',text:'保留的规则文字',delivered:true,round_id:null}],
-      rounds:[],ai_enabled:true,budget:800,pending_size:0}
-  })
-  await page.evaluate(()=>Object.assign(window.wintermute!,{compression:(window as unknown as {traceFixture:unknown}).traceFixture}))
+test('committed writes appear only in the merged timeline with the exact original', async ({page}) => {
+  const at = '2026-11-17T09:30:00Z', written = '2026-11-17T10:00:00Z'
+  const ref = {id:'history-4-1',written_at:written}
+  const visit = {...item('Editor','Editor'),occurred_at:at,context_messages:[ref],raw:{payload:{
+    state_key:'desktop.window_span',value:{foreground_app:'Editor',started_at:at,duration_seconds:60},
+  }}}
+  const original = '…\n合并摘要 · 核对预算。\n  保留空格。\n\n---\n来源：活动时间线\n时间：' + at
+  const write = {...item(ref.id,original),role:'context_write',occurred_at:written,
+    context_write:{covered_from:at,covered_until:'2026-11-17T09:31:00Z'}}
+  await openMemory(page,({view})=>({items:view==='perception'?[visit]:view==='timeline'?[write]:[],next_cursor:null}))
   await page.getByRole('button',{name:'感知层',exact:true}).click()
-  await expect(page.locator('.trace-title strong')).toHaveText(['时间线消息写入上下文','Editor'])
-  await expect(page.locator('.trace-toggle[data-kind="message"] .trace-budget')).toHaveText('约 119 tokens')
-  await expect(page.locator('.trace-toggle[data-kind="message"] small')).toHaveText('来源设备 desktop · 使用时长 2 分钟')
-  await page.locator('.trace-toggle[data-kind="visit"]').click()
-  await expect(page.locator('.perception-stage pre.stage-text')).toHaveText('保留的规则文字')
-  await expect(page.locator('.perception-stage .trace-group')).toHaveCount(0)
-  await page.getByRole('button',{name:/查看上下文原文/}).click()
-  await expect(page.locator('.trace-group pre')).toHaveText(original)
-  await page.getByRole('button',{name:/Chrome ↗/}).click()
-  await expect(page.locator('.trace-toggle[aria-expanded=true]')).toContainText('Chrome')
-  await page.getByText('原始 JSON',{exact:true}).click()
-  await expect(page.locator('.perception-json:visible')).toContainText('Chrome.md')
-  await expect(page.locator('.trace-title strong')).toHaveText(['时间线消息写入上下文','Editor','Chrome'])
-  expect(lookup).toContain(peer.id)
-  await page.getByRole('button',{name:/查看上下文原文/}).click()
-  await expect(page.locator('.trace-toggle[aria-expanded=true]')).toContainText('时间线消息写入上下文')
-  await expect(page.locator('.trace-group pre')).toHaveText(original)
-  await page.getByRole('button',{name:/Editor ↗/}).click()
-  await expect(page.locator('.trace-toggle[aria-expanded=true]')).toContainText('Editor')
+  await expect(page.locator('.trace-title strong')).toHaveText(['Editor'])
+  await page.getByRole('button',{name:'合并线',exact:true}).click()
+  const row = page.getByRole('button',{name:/写入上下文/})
+  await expect(row.locator('time')).toHaveAttribute('datetime', written)
+  await row.click()
+  const detail = page.getByRole('group',{name:'写入原文'})
+  const times = await page.evaluate(stamps => stamps.map(stamp =>
+    new Intl.DateTimeFormat('zh-CN',{timeStyle:'medium',hour12:false}).format(new Date(stamp))), [at,write.context_write.covered_until])
+  await expect(detail).toContainText('覆盖 ' + times.join(' – '))
+  expect(await detail.locator('p').last().textContent()).toBe(original)
 })
 
 test('a completed AI round appears on refresh and links back to its source before context delivery', async ({page}) => {
