@@ -244,6 +244,7 @@ class DesktopAgent {
       })
       void p.remote.poll()
       void this.syncObsidianConnector(p)
+      void this.syncTerminalConnector(p)
     }
     // Old clients persisted a complete local transcript. Keep outstanding sends
     // so they can still be retried; committed history is loaded from the server.
@@ -800,7 +801,40 @@ class DesktopAgent {
     if (enabled && !p.remote.tools.length) throw new Error('本机没有可用的命令行工具')
     this.savePreferences({ remoteCommandsEnabled: enabled })
     p.remote.setEnabled(enabled)
+    void this.syncTerminalConnector(p)
     this.publish()
+  }
+
+  async syncTerminalConnector(p = this.profile) {
+    if (!p.token || !secureTransport(p.url) || p.controller.signal.aborted) return
+    const enabled = !!p.remote?.enabled
+    try {
+      await request(
+        p,
+        '/v1/connectors/device-sync',
+        {
+          id: 'terminal',
+          name: '本机命令行',
+          enabled,
+          config: enabled ? { tools: p.remote?.tools || [] } : {},
+        },
+        p.controller.signal,
+      )
+    } catch {
+      /* Backend may be offline or not upgraded yet. */
+    }
+  }
+
+  async connectorHistory(cursor) {
+    const p = this.profile
+    if (!p.token) throw new Error('请先连接终端')
+    const query = cursor ? '?cursor=' + encodeURIComponent(cursor) : ''
+    const data = await request(p, '/v1/connectors/history' + query, undefined, p.controller.signal)
+    if (p !== this.profile || p.controller.signal.aborted) throw new Error('连接已更改')
+    return {
+      items: Array.isArray(data.items) ? data.items : [],
+      next_cursor: typeof data.next_cursor === 'string' ? data.next_cursor : null,
+    }
   }
 
   obsidianState(p = this.profile) {

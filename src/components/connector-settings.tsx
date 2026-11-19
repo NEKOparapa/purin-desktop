@@ -26,9 +26,15 @@ function statusLabel(item: ConnectorItem) {
 export function ConnectorSettings({
   configured,
   revision,
+  remoteCommandsEnabled,
+  remoteTools,
+  remoteIssue,
 }: {
   configured: boolean
   revision?: number
+  remoteCommandsEnabled?: boolean
+  remoteTools?: string[]
+  remoteIssue?: string
 }) {
   const api = window.wintermute
   const [attempt, setAttempt] = useState(0)
@@ -117,6 +123,25 @@ export function ConnectorSettings({
     const selected = await api.chooseObsidianVault()
     if (selected) {
       await connectObsidianPath(selected)
+    }
+  }
+
+  async function toggleTerminalConnector(enabled: boolean) {
+    if (!api?.setRemoteCommands || busy) return
+    setBusy(true)
+    setError('')
+    setFeedback('')
+    try {
+      await api.setRemoteCommands({
+        enabled,
+        connectionRevision: revision,
+      })
+      setFeedback(enabled ? '已连接本机命令行连接器。' : '已断开本机命令行连接器。')
+      reload()
+    } catch (err) {
+      setError(cleanError(err, '切换本机命令行连接器失败'))
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -353,6 +378,48 @@ export function ConnectorSettings({
               提示：连接后端服务后，Obsidian 连接器会自动同步给主 Agent 使用。
             </p>
           )}
+        </article>
+
+        <article className="connector-card">
+          <div className="connector-card-head">
+            <div>
+              <div className="connector-card-title">
+                <h5>本机命令行</h5>
+                <Badge variant={remoteCommandsEnabled ? 'default' : 'secondary'}>
+                  {remoteCommandsEnabled ? '已连接' : '未连接'}
+                </Badge>
+                <Badge variant="outline">device</Badge>
+              </div>
+              <p className="connector-card-meta">
+                开启后，主 Agent 可以当前用户权限在本机运行命令（高权限，关闭会立即中止正在运行的命令）。调用记录可在「记忆 → 连接器」中查看。
+              </p>
+            </div>
+            <div className="connector-card-actions">
+              <Button
+                type="button"
+                variant={remoteCommandsEnabled ? 'ghost' : 'outline'}
+                size="sm"
+                disabled={
+                  !configured ||
+                  busy ||
+                  (!remoteCommandsEnabled && !remoteTools?.length)
+                }
+                onClick={() => void toggleTerminalConnector(!remoteCommandsEnabled)}
+              >
+                {remoteCommandsEnabled ? '断开' : '连接'}
+              </Button>
+            </div>
+          </div>
+          <div className="connector-vault-info">
+            <span>
+              {!configured
+                ? '连接终端后可启用本机命令行。'
+                : remoteTools?.length
+                  ? `可用工具：${remoteTools.join('、')}`
+                  : '暂无可用命令行工具（请确认使用 HTTPS 或本机地址连接）。'}
+            </span>
+            {remoteIssue && <span role="status">{remoteIssue}</span>}
+          </div>
         </article>
       </section>
 

@@ -21,7 +21,7 @@ const views: { id: HistoryView | 'archives' | 'record' | 'terminal-tools'; label
   { id: 'record', label: '记录层' },
   { id: 'timeline', label: '合并线' },
   { id: 'archives', label: '档案记录' },
-  { id: 'terminal-tools', label: '终端调用' },
+  { id: 'terminal-tools', label: '连接器' },
 ]
 const dateFormat = new Intl.DateTimeFormat('zh-CN', { dateStyle: 'long' })
 const timeFormat = new Intl.DateTimeFormat('zh-CN', {

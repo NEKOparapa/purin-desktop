@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Activity, Cable, KeyRound, Palette, Plug, Terminal } from 'lucide-react'
+import { Activity, Cable, KeyRound, Palette, Plug } from 'lucide-react'
 import {
   readBrowserAppearance,
   setBrowserAppearance,
@@ -17,7 +17,6 @@ const sections = [
   { id: 'keys', label: '接口密钥', icon: KeyRound },
   { id: 'appearance', label: '外观', icon: Palette },
   { id: 'collection', label: '信息采集', icon: Activity },
-  { id: 'tools', label: '设备工具', icon: Terminal },
 ] as const
 type Section = (typeof sections)[number]['id']
 
@@ -152,6 +151,9 @@ export function AgentSettings({
             ])}
             configured={state.configured}
             revision={state.connectionRevision}
+            remoteCommandsEnabled={state.remoteCommandsEnabled}
+            remoteTools={state.remoteTools}
+            remoteIssue={state.remoteIssue}
           />
         )}
         {tab === 'keys' && (
@@ -419,45 +421,6 @@ export function AgentSettings({
               </dl>
             )}
           </>
-        )}
-        {tab === 'tools' && (
-          <div className="activity-settings">
-            <label>
-              <input
-                type="checkbox"
-                aria-describedby="command-description command-availability"
-                checked={!!state.remoteCommandsEnabled}
-                disabled={
-                  !api ||
-                  !state.configured ||
-                  busy ||
-                  (!state.remoteCommandsEnabled && !state.remoteTools?.length)
-                }
-                onChange={(e) => {
-                  const enabled = e.target.checked
-                  void change(() =>
-                    api?.setRemoteCommands({
-                      enabled,
-                      connectionRevision: state.connectionRevision,
-                    }),
-                  )
-                }}
-              />
-              命令行工具
-            </label>
-            <p id="command-description">
-              开启后，主 Agent
-              可以当前用户的权限在这台设备上运行命令。命令和输出可在「记忆」中查看。关闭开关会停止正在运行的命令。
-            </p>
-            <p id="command-availability">
-              {!state.configured
-                ? '连接终端后可启用命令行工具。'
-                : state.remoteTools?.length
-                  ? `可用工具：${state.remoteTools.join('、')}`
-                  : '暂无可用工具。请确认使用 HTTPS 或本机地址连接，并已安装命令行工具。'}
-            </p>
-            {state.remoteIssue && <p role="status">{state.remoteIssue}</p>}
-          </div>
         )}
         {sourceFeedback?.section === tab && (
           <p className="source-feedback" role="status">

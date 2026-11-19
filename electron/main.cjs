@@ -149,6 +149,7 @@ function start() {
     apiKeys: 'apiKeys',
     updateApiKey: 'updateApiKey',
     connectors: 'connectors',
+    connectorHistory: 'connectorHistory',
     setObsidianConnector: 'setObsidianConnector',
     addMcpConnector: 'addMcpConnector',
     saveConnectorCredentials: 'saveConnectorCredentials',

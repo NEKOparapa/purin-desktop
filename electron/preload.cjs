@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('wintermute', {
   apiKeys: () => ipcRenderer.invoke('agent:apiKeys'),
   updateApiKey: (options) => ipcRenderer.invoke('agent:updateApiKey', options),
   connectors: () => ipcRenderer.invoke('agent:connectors'),
+  connectorHistory: (cursor) => ipcRenderer.invoke('agent:connectorHistory', cursor),
   chooseObsidianVault: () => ipcRenderer.invoke('agent:chooseObsidianVault'),
   setObsidianConnector: (options) => ipcRenderer.invoke('agent:setObsidianConnector', options),
   addMcpConnector: (payload) => ipcRenderer.invoke('agent:addMcpConnector', payload),

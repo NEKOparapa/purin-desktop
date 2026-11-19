@@ -124,6 +124,25 @@ export interface TerminalToolCall {
   truncated: boolean
 }
 
+export interface ConnectorCall {
+  id: string
+  connector_id: string
+  connector_name: string
+  tool_type: 'mcp' | 'device' | 'cli'
+  target: string
+  tool: string
+  arguments: Record<string, unknown>
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'timed_out' | 'expired'
+  output: string
+  error: string
+  exit_code: number | null
+  truncated: boolean
+  timeout_seconds: number | null
+  created_at: string
+  started_at: string | null
+  completed_at: string | null
+}
+
 export type ActivityLayer = 'perception' | 'slice'
 export type CompressionStatus =
   'open' | 'rules' | 'pending' | 'ready' | 'retrying' | 'disabled'
@@ -388,6 +407,7 @@ declare global {
       apiKeys(): Promise<ApiKeySetting[]>
       updateApiKey(update: ApiKeyUpdate): Promise<ApiKeySetting[]>
       connectors(): Promise<ConnectorsSnapshot>
+      connectorHistory(cursor?: string): Promise<ResultsPage<ConnectorCall>>
       chooseObsidianVault(): Promise<string | null>
       setObsidianConnector(options: {
         enabled: boolean
