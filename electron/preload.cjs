@@ -39,7 +39,9 @@ contextBridge.exposeInMainWorld('wintermute', {
   downloadHistoryFile: (file) =>
     ipcRenderer.invoke('agent:downloadHistoryFile', file),
   configure: (options) => ipcRenderer.invoke('agent:configure', options),
-  send: (text) => ipcRenderer.invoke('agent:send', text),
+  uploadChatFile: (name, data, revision) => ipcRenderer.invoke('agent:uploadChatFile', { name, data, revision }),
+  send: (text, images, documents, imageNames, revision) => ipcRenderer.invoke('agent:send', { text, images, documents, imageNames, revision }),
+  transcribe: (audio, connectionRevision) => ipcRenderer.invoke('agent:transcribe', { audio, connectionRevision }),
   retry: (id) => ipcRenderer.invoke('agent:retry', id),
   setCollection: (enabled) => ipcRenderer.invoke('agent:collection', enabled),
   setRemoteCommands: (options) => ipcRenderer.invoke('agent:remoteCommands', options),

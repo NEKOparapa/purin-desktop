@@ -61,9 +61,12 @@ export interface DeviceNotice {
   received_at: string | null; read_at: string | null; expired: boolean; attachments: DeviceFile[]
 }
 export interface NoticeAlert { id: string; title: string; body: string; open: boolean; terminal: string; url: string }
-export interface HistoryFile {
+export interface ChatFileRef {
   id: string
   name: string
+}
+
+export interface HistoryFile extends ChatFileRef {
   content_type?: string
   occurred_at?: string
   window_title?: string
@@ -275,6 +278,9 @@ export interface PendingQuestion {
   created_at: string
 }
 export interface ChatMessage {
+  documents?: ChatFileRef[]
+  images?: string[]
+  files?: HistoryFile[]
   id: string
   role: 'user' | 'assistant'
   notificationReply?: boolean
@@ -465,7 +471,9 @@ declare global {
       downloadHistoryFile(file: HistoryFile): Promise<{ saved: boolean }>
       previewHistoryImage(options: { id: string; connectionRevision: number }): Promise<ArrayBuffer>
       loadEarlier(): Promise<void>
-      send(text: string): Promise<void>
+      uploadChatFile(name: string, data: ArrayBuffer, revision: number): Promise<ChatFileRef>
+      send(text: string, images?: string[], documents?: ChatFileRef[], imageNames?: string[], revision?: number): Promise<void>
+      transcribe(audio: ArrayBuffer, connectionRevision: number): Promise<string>
       retry(id: string): Promise<void>
       setCollection(enabled: boolean): Promise<void>
       setRemoteCommands(options: { enabled: boolean; connectionRevision?: number }): Promise<void>

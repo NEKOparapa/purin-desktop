@@ -156,7 +156,8 @@ async function fetchResponse(profile, route, options) {
 }
 
 async function request(profile, route, body, signal) {
-  const timeout = AbortSignal.timeout(route.startsWith(desktopWindowRoute) ? 600000 : 8000)
+  const ms = route.startsWith(desktopWindowRoute) ? 600000 : route === '/v1/messages/images' ? 60000 : 8000
+  const timeout = AbortSignal.timeout(ms)
   const response = await fetchResponse(profile, route, {
     method: body === undefined ? 'GET' : 'POST',
     headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
@@ -1149,19 +1150,77 @@ class DesktopAgent {
     void this.flushMaterials(p)
   }
 
-  send(text) {
+  async transcribe({ audio, connectionRevision }) {
+    const p = this.profile
+    if (!p.token || p.revision !== connectionRevision) throw new Error('终端连接已更改')
+    if (!(audio instanceof ArrayBuffer) || !audio.byteLength || audio.byteLength > 3840044)
+      throw new Error('录音无效或超过两分钟')
+    const response = await fetchResponse(p, '/v1/transcriptions', {
+      method: 'POST', body: Buffer.from(audio), headers: { 'Content-Type': 'audio/wav' },
+      signal: AbortSignal.any([p.controller.signal, AbortSignal.timeout(200000)]),
+    }).catch(error => {
+      if (error.code === 'asr_key_missing') throw new Error('请先在后端配置语音转录密钥')
+      throw error
+    })
+    const { text } = await response.json()
+    if (this.profile !== p || typeof text !== 'string') throw new Error('转写结果无效')
+    return text
+  }
+
+  async uploadChatFile({ name, data, revision }) {
+    const p = this.profile
+    if (!p.token || p.revision !== revision) throw new Error('终端连接已更改')
+    if (typeof name !== 'string' || !name.trim() || !(data instanceof ArrayBuffer) || data.byteLength > 32 * 1024 * 1024)
+      throw new Error('文件无效或超过 32 MiB')
+    try {
+      const response = await fetchResponse(p, '/v1/chat/files?' + new URLSearchParams({ name }), {
+        method: 'POST', body: Buffer.from(data), headers: { 'Content-Type': 'application/octet-stream' },
+        signal: AbortSignal.any([p.controller.signal, AbortSignal.timeout(330000)]),
+      })
+      const file = await response.json()
+      if (p !== this.profile || !/^doc_[a-f0-9]{64}$/.test(file.id) || file.name !== name)
+        throw new Error('文件回执无效')
+      return { id: file.id, name }
+    } catch (error) {
+      const reasons = { unsupported_file: 'MarkItDown 无法识别此格式', file_conversion_failed: '文件无法解析，请检查文件是否损坏或加密',
+        parsed_file_too_large: '解析后的正文过大', asr_key_missing: '后端缺少音频转写密钥',
+        audio_conversion_failed: '音频转写失败', file_conversion_timeout: '解析超时', chat_media_busy: '后端正忙，请重试' }
+      throw new Error(name + '：' + (reasons[error.code] || error.message))
+    }
+  }
+
+  send(message) {
     const p = this.profile
     if (!p.token) throw new Error('请先连接终端')
-    if (typeof text !== 'string' || !text.trim())
+    const { text, images = [], documents = [], imageNames = [], revision } = typeof message === 'string' ? { text: message } : message
+    if (revision !== undefined && revision !== p.revision) throw new Error('终端连接已更改')
+    if (!Array.isArray(images) || images.length > 4 || images.some(image =>
+      typeof image !== 'string' || !image.startsWith('data:image/jpeg;base64,') || image.length > 699075))
+      throw new Error('聊天图片无效')
+    if (!Array.isArray(documents) || documents.length + images.length > 4 ||
+      documents.some(doc => !/^doc_[a-f0-9]{64}$/.test(doc?.id) || typeof doc.name !== 'string') ||
+      !Array.isArray(imageNames) || (imageNames.length && imageNames.length !== images.length))
+      throw new Error('聊天附件无效')
+    if (typeof text !== 'string' || (!text.trim() && !images.length && !documents.length))
       throw new Error('消息不能为空')
-    p.history.outbox.push({
+    const entry = {
       id: randomUUID(),
       role: 'user',
-      text: text.trim(),
+      text: text.trim() || (documents.length ? '请阅读附件。' : '请描述图片内容。'),
+      ...(images.length && { images }),
+      ...(imageNames.length && { imageNames }),
+      ...(documents.length && { documents }),
       at: new Date().toISOString(),
       status: 'queued',
-    })
-    this.persist(p)
+    }
+    p.history.outbox.push(entry)
+    try {
+      save(p.file, p.history)
+    } catch (error) {
+      p.history.outbox.pop()
+      throw error
+    }
+    this.publish()
     this.sync()
   }
 
@@ -1172,7 +1231,7 @@ class DesktopAgent {
     )
     if (!m || !p.token) return
     if (['failed', 'interrupted', 'missing'].includes(m.status))
-      return this.send(m.text)
+      return this.send({ text: m.text, images: m.images, documents: m.documents, imageNames: m.imageNames })
     if (m.status !== 'unsent') return
     m.status = 'queued'
     delete m.error
@@ -1191,9 +1250,12 @@ class DesktopAgent {
         (row) => row.status === 'queued',
       )) {
         try {
-          const receipt = await api('/v1/messages', {
+          const receipt = await api(m.images?.length ? '/v1/messages/images' : '/v1/messages', {
             message_id: m.id,
             text: m.text,
+            ...(m.images?.length && { images: m.images }),
+            ...(m.imageNames?.length && { image_names: m.imageNames }),
+            ...(m.documents?.length && { documents: m.documents }),
           })
           if (typeof receipt.job_id !== 'string')
             throw new Error('服务端返回的任务 ID 无效')

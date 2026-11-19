@@ -6,8 +6,11 @@ import {
   CalendarDays,
   BookOpen,
   History,
+  FileText,
+  Paperclip,
   ListChecks,
   MessageCircle,
+  Mic,
   NotebookPen,
   Plus,
   SlidersHorizontal,
@@ -18,9 +21,17 @@ import { Dialog } from '@/components/ui/dialog'
 import { DesktopLayout } from '@/components/desktop-layout'
 import { AgentSettings } from '@/components/agent-settings'
 import { ScheduleCalendar } from '@/components/schedule-calendar'
-import type { NoticeAlert } from '@/lib/desktop'
+import type { ChatFileRef, NoticeAlert } from '@/lib/desktop'
 import { MemoryBrowser } from '@/components/memory-browser'
 import { QuestionCards } from '@/components/question-cards'
+import { VoiceInput } from '@/components/voice-input'
+import { Files } from '@/components/history-files'
+import { HistoryConnection } from '@/components/history-viewport'
+import {
+  maxAttachments,
+  prepareAttachment,
+  type DraftAttachment,
+} from '@/lib/chat-media'
 import { ChatJumpBar } from '@/components/chat-jump-bar'
 import { useAgent, type AgentState, type ChatMessage } from '@/lib/desktop'
 import './App.css'
@@ -88,6 +99,22 @@ function Message({
             {author}
           </header>
         )}
+        {message.files && <Files files={message.files} />}
+        {!message.files &&
+          message.documents?.map((doc, i) => (
+            <span className="queued-file" key={i}>
+              <FileText size={15} />
+              {doc.name}
+            </span>
+          ))}
+        {message.images?.map((url, index) => (
+          <img
+            className="sent-image"
+            key={index}
+            src={url}
+            alt={`聊天图片 ${index + 1}`}
+          />
+        ))}
         <p>{message.text}</p>
       </div>
       {message.status && statuses[message.status] && (
@@ -116,6 +143,13 @@ function Chat({
   visible: boolean
 }) {
   const [draft, setDraft] = useState('')
+  const [attachments, setAttachments] = useState<DraftAttachment[]>([])
+  const [readingFiles, setReadingFiles] = useState(false)
+  const [uploading, setUploading] = useState('')
+  const reading = useRef(false)
+  const [voiceBusy, setVoiceBusy] = useState(false)
+  const [dragging, setDragging] = useState(false)
+  const picker = useRef<HTMLInputElement>(null)
   const [sending, setSending] = useState(false)
   const [issue, setIssue] = useState('')
   const [loadingEarlier, setLoadingEarlier] = useState(false)
@@ -203,8 +237,35 @@ function Chat({
     setDraft(text)
     input.current?.focus()
   }
+  async function addFiles(files: File[]) {
+    if (!files.length || reading.current || sending) return
+    if (files.length + attachments.length > maxAttachments) {
+      setIssue('每条消息最多可添加 4 个附件。')
+      return
+    }
+    reading.current = true
+    setReadingFiles(true)
+    setIssue('')
+    try {
+      const added: DraftAttachment[] = []
+      for (const file of files) added.push(await prepareAttachment(file))
+      setAttachments((current) => [...current, ...added])
+    } catch (error) {
+      setIssue(
+        error instanceof Error ? error.message : '附件读取失败，请重新选择。',
+      )
+    } finally {
+      reading.current = false
+      setReadingFiles(false)
+    }
+  }
+  const canSend =
+    (draft.trim() || attachments.length) &&
+    !voiceBusy &&
+    !readingFiles &&
+    !sending
   async function send() {
-    if (sending || !draft.trim()) return
+    if (!canSend) return
     if (!agent.configured || !window.wintermute) {
       settings()
       return
@@ -214,11 +275,44 @@ function Chat({
     follow.current = true
     const text = draft
     try {
-      await window.wintermute.send(text)
+      const documents: ChatFileRef[] = []
+      const images = attachments.filter((a) => a.kind === 'image')
+      for (const item of attachments) {
+        if (item.kind !== 'file') continue
+        let ref = item.uploaded
+        if (!ref) {
+          if (agent.connectionRevision === undefined)
+            throw new Error('终端连接已更改')
+          setUploading(item.name)
+          ref = await window.wintermute.uploadChatFile(
+            item.name,
+            await item.file.arrayBuffer(),
+            agent.connectionRevision,
+          )
+          const uploaded = ref
+          setAttachments((current) =>
+            current.map((a) => (a.id === item.id ? { ...item, uploaded } : a)),
+          )
+        }
+        documents.push(ref)
+      }
+      await window.wintermute.send(
+        text,
+        images.map((a) => a.url),
+        documents,
+        images.map((a) => a.name),
+        agent.connectionRevision,
+      )
       setDraft((current) => (current === text ? '' : current))
-    } catch {
-      setIssue('这条消息尚未保存，请重试。')
+      setAttachments([])
+    } catch (error) {
+      setIssue(
+        error instanceof Error
+          ? error.message.replace(/^.*?Error: /, '')
+          : '发送失败，请重试。',
+      )
     } finally {
+      setUploading('')
       setSending(false)
       input.current?.focus()
     }
@@ -291,7 +385,11 @@ function Chat({
                         {timestamp.format(at)}
                       </time>
                     )}
-                    <Message message={message} at={at} retry={retry} />
+                    <HistoryConnection.Provider
+                      value={agent.connectionRevision}
+                    >
+                      <Message message={message} at={at} retry={retry} />
+                    </HistoryConnection.Provider>
                   </div>
                 )
               })}
@@ -327,12 +425,87 @@ function Chat({
           </button>
         )}
         <form
-          className="composer"
+          className={'composer' + (dragging ? ' dragging' : '')}
+          onDragOver={(event) => {
+            if (event.dataTransfer.types.includes('Files')) {
+              event.preventDefault()
+              event.dataTransfer.dropEffect = 'copy'
+              setDragging(true)
+            }
+          }}
+          onDragLeave={(event) => {
+            if (!(
+              event.relatedTarget instanceof Node &&
+              event.currentTarget.contains(event.relatedTarget)
+            ))
+              setDragging(false)
+          }}
+          onDrop={(event) => {
+            event.preventDefault()
+            setDragging(false)
+            void addFiles(Array.from(event.dataTransfer.files))
+          }}
           onSubmit={(e) => {
             e.preventDefault()
             void send()
           }}
         >
+          {attachments.length > 0 && (
+            <div className="draft-images" aria-label="待发送附件">
+              {attachments.map((item) => (
+                <div
+                  className={
+                    'draft-attachment ' +
+                    (item.kind === 'image' ? 'with-thumbnail' : '')
+                  }
+                  key={item.id}
+                >
+                  {item.kind === 'image' ? (
+                    <img src={item.url} alt={item.name} />
+                  ) : (
+                    <FileText size={21} aria-hidden="true" />
+                  )}
+                  <span title={item.name}>{item.name}</span>
+                  <button
+                    type="button"
+                    disabled={sending}
+                    aria-label={'移除 ' + item.name}
+                    onClick={() =>
+                      setAttachments((current) =>
+                        current.filter(
+                          (attachment) => attachment.id !== item.id,
+                        ),
+                      )
+                    }
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <input
+            hidden
+            type="file"
+            ref={picker}
+            multiple
+            onChange={(event) => {
+              void addFiles(Array.from(event.target.files ?? []))
+              event.target.value = ''
+            }}
+          />
+          <button
+            className="prompt-trigger"
+            type="button"
+            aria-label="添加附件"
+            title="添加文件或图片，也可拖入输入框"
+            disabled={
+              readingFiles || sending || attachments.length >= maxAttachments
+            }
+            onClick={() => picker.current?.click()}
+          >
+            <Paperclip size={19} />
+          </button>
           {hasMessages && (
             <DropdownMenu.Root>
               <DropdownMenu.Trigger asChild>
@@ -378,7 +551,7 @@ function Chat({
           <textarea
             aria-label="对话消息"
             aria-description="回车换行，Ctrl + Enter 或 ⌘ + Enter 发送"
-            placeholder="发送消息"
+            placeholder={dragging ? '松开以添加附件' : '发送消息，或拖入文件'}
             rows={1}
             ref={input}
             value={draft}
@@ -397,17 +570,51 @@ function Chat({
               }
             }}
           />
+          <span className="composer-spacer" />
+          {visible &&
+          agent.configured &&
+          agent.connectionRevision !== undefined ? (
+            <VoiceInput
+              revision={agent.connectionRevision}
+              onBusy={setVoiceBusy}
+              onError={setIssue}
+              onText={(text) => {
+                setDraft(
+                  (current) =>
+                    current +
+                    (current && !/\s$/.test(current) ? ' ' : '') +
+                    text,
+                )
+                input.current?.focus()
+              }}
+            />
+          ) : (
+            <button
+              type="button"
+              className="prompt-trigger"
+              title="连接终端后使用语音输入"
+              aria-label="语音输入"
+              onClick={settings}
+            >
+              <Mic size={19} />
+            </button>
+          )}
           <button
             className="send-button"
             type="submit"
             aria-label="发送对话消息"
             aria-keyshortcuts="Control+Enter Meta+Enter"
             title="发送消息（Ctrl + Enter 或 ⌘ + Enter）"
-            disabled={!draft.trim() || sending}
+            disabled={!canSend}
           >
             <ArrowUp size={19} strokeWidth={2} />
           </button>
         </form>
+        {uploading && (
+          <p className="upload-status" role="status">
+            正在上传并解析 {uploading}…
+          </p>
+        )}
         {agent.materialIssue && (
           <p className="issue" role="status">
             材料待传 · {agent.materialIssue}
@@ -487,6 +694,7 @@ export default function App() {
       <main className="workspace">
         <div className="chat-host" hidden={page !== 'chat'}>
           <Chat
+            key={JSON.stringify([agent.url, agent.terminal, agent.connectionRevision])}
             agent={agent}
             settings={showSettings}
             visible={page === 'chat'}

@@ -19,6 +19,7 @@ mac:
   entitlements: packaging/entitlements.mac.plist
   entitlementsInherit: packaging/entitlements.mac.plist
   extendInfo:
+    NSMicrophoneUsageDescription: 在对话中录入语音并转写为可编辑的文字。
     NSAppleEventsUsageDescription: 读取已同意分享的前台窗口标题。
   category: public.app-category.productivity
   target:

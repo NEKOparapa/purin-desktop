@@ -42,6 +42,7 @@ function chatRow(row, layer = row.layer) {
     id: row.id,
     role: row.role,
     text: row.text,
+    ...(row.role === 'user' && Array.isArray(row.files) && row.files.length && { files: row.files }),
     at: row.occurred_at ?? null,
     ...(row.role === 'assistant' &&
       layer === 'notification' && { notificationReply: true }),

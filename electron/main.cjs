@@ -10,6 +10,7 @@ const {
   dialog,
 } = require('electron')
 const path = require('node:path')
+const { pathToFileURL } = require('node:url')
 const { DesktopAgent } = require('./agent.cjs')
 const { sampleActivity } = require('./activity.cjs')
 const {
@@ -165,6 +166,8 @@ function start() {
     compression: 'compression',
     configure: 'configure',
     send: 'send',
+    transcribe: 'transcribe',
+    uploadChatFile: 'uploadChatFile',
     retry: 'retry',
     collection: 'setCollection',
     remoteCommands: 'setRemoteCommands',
@@ -184,8 +187,16 @@ function start() {
         : agent[method](arg)
     })
   }
-  session.defaultSession.setPermissionCheckHandler(() => false)
-  session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
+  const chatUrl = app.isPackaged || process.argv.includes('--preview')
+    ? pathToFileURL(path.join(__dirname, '../dist/index.html')).href : 'http://127.0.0.1:5173/'
+  const isChatFrame = (contents, permission, details) =>
+    permission === 'media' && contents && contents === appWindow?.webContents &&
+    details.isMainFrame && details.requestingUrl === chatUrl && contents.getURL() === chatUrl
+  session.defaultSession.setPermissionCheckHandler((contents, permission, _origin, details) =>
+    Boolean(isChatFrame(contents, permission, details) && details.mediaType === 'audio'))
+  session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) =>
+    callback(Boolean(isChatFrame(contents, permission, details) &&
+      details.mediaTypes?.length === 1 && details.mediaTypes[0] === 'audio')))
   Menu.setApplicationMenu(
     process.platform === 'darwin'
       ? Menu.buildFromTemplate([

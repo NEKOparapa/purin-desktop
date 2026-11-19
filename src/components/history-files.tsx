@@ -141,12 +141,12 @@ export function Files({ files }: { files: HistoryFile[] }) {
   if (!files.length) return null
   return (
     <ul className="history-files" aria-label="附件">
-      {files.map((file) =>
+      {files.map((file, index) =>
         file.content_type === 'image/jpeg' ||
         (!file.content_type && /\.jpe?g$/i.test(file.name)) ? (
-          <Screenshot key={file.id} file={file} />
+          <Screenshot key={file.id + ':' + index} file={file} />
         ) : (
-          <DownloadFile key={file.id} file={file} />
+          <DownloadFile key={file.id + ':' + index} file={file} />
         ),
       )}
     </ul>
