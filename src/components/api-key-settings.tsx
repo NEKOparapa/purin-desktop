@@ -7,11 +7,11 @@ import './api-key-settings.css'
 // Electron may wrap errors with the IPC channel name. Never render arbitrary
 // exception text from a transport that carried a credential.
 const messages = [
-  '请先连接终端',
+  '请先连接设备',
   '连接已更改，请重新打开接口密钥',
   '管理接口密钥需要 HTTPS 或本机连接',
-  '终端令牌无效，请重新连接',
-  '此终端没有管理接口密钥的权限',
+  '设备令牌无效，请重新连接',
+  '此设备没有管理接口密钥的权限',
   '当前后端不支持接口密钥管理，请更新后端',
   '密钥配置项已变更，请刷新',
   '请输入有效的接口密钥',

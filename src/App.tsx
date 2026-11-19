@@ -282,7 +282,7 @@ function Chat({
         let ref = item.uploaded
         if (!ref) {
           if (agent.connectionRevision === undefined)
-            throw new Error('终端连接已更改')
+            throw new Error('设备连接已更改')
           setUploading(item.name)
           ref = await window.wintermute.uploadChatFile(
             item.name,
@@ -592,7 +592,7 @@ function Chat({
             <button
               type="button"
               className="prompt-trigger"
-              title="连接终端后使用语音输入"
+              title="连接设备后使用语音输入"
               aria-label="语音输入"
               onClick={settings}
             >
@@ -636,7 +636,7 @@ export default function App() {
   const [connectionVersion, setConnectionVersion] = useState(0)
   const agent = useAgent()
   const [lastAlert,setNotice]=useState<(NoticeAlert & {version:number})|null>(null)
-  const notice=lastAlert?.url===agent.url && lastAlert.terminal===agent.terminal && lastAlert.version===connectionVersion ? lastAlert : null
+  const notice=lastAlert?.url===agent.url && lastAlert.deviceId===agent.deviceId && lastAlert.version===connectionVersion ? lastAlert : null
   const [focusNotice, setFocusNotice] = useState<NoticeAlert | null>(null)
   function openNotice(alert: NoticeAlert) {
     setFocusNotice(alert)
@@ -647,7 +647,7 @@ export default function App() {
   useEffect(()=>{
     let timer:ReturnType<typeof setTimeout>|undefined
     const stop=window.wintermute?.onNotice?.(alert=>{
-      if (alert.url!==agent.url || alert.terminal!==agent.terminal) return
+      if (alert.url!==agent.url || alert.deviceId!==agent.deviceId) return
       clearTimeout(timer)
       if (alert.open) openNotice(alert)
       else {
@@ -656,7 +656,7 @@ export default function App() {
       }
     })
     return ()=>{clearTimeout(timer);stop?.()}
-  },[agent.url,agent.terminal,connectionVersion])
+  },[agent.url,agent.deviceId,connectionVersion])
   const showSettings = () => setDialog('settings')
   return (
     <DesktopLayout aboutOpen={dialog === 'about'} onAboutChange={(open) => setDialog(open ? 'about' : null)}>
@@ -684,8 +684,8 @@ export default function App() {
         <button
           className="nav-item settings-link"
           onClick={showSettings}
-          title="终端设置"
-          aria-label="终端设置"
+          title="设备设置"
+          aria-label="设备设置"
         >
           <SlidersHorizontal size={18} aria-hidden="true" />
           <span>设置</span>
@@ -694,7 +694,7 @@ export default function App() {
       <main className="workspace">
         <div className="chat-host" hidden={page !== 'chat'}>
           <Chat
-            key={JSON.stringify([agent.url, agent.terminal, agent.connectionRevision])}
+            key={JSON.stringify([agent.url, agent.deviceId, agent.connectionRevision])}
             agent={agent}
             settings={showSettings}
             visible={page === 'chat'}
@@ -706,7 +706,7 @@ export default function App() {
             className="schedule-page"
             key={JSON.stringify([
               agent.url,
-              agent.terminal,
+              agent.deviceId,
               connectionVersion,
               agent.configured,
             ])}
@@ -719,7 +719,7 @@ export default function App() {
                 connected={agent.configured}
                 settings={showSettings}
                 focusNotice={
-                  focusNotice?.url === agent.url && focusNotice.terminal === agent.terminal
+                  focusNotice?.url === agent.url && focusNotice.deviceId === agent.deviceId
                     ? focusNotice
                     : null
                 }
@@ -730,7 +730,7 @@ export default function App() {
         {page === 'memory' && (
           <MemoryBrowser
             connectionRevision={agent.connectionRevision}
-            connectionKey={JSON.stringify([agent.url, agent.terminal, agent.connectionRevision, connectionVersion])}
+            connectionKey={JSON.stringify([agent.url, agent.deviceId, agent.connectionRevision, connectionVersion])}
             connected={agent.configured}
             settings={showSettings}
           />

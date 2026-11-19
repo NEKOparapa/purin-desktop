@@ -30,7 +30,8 @@ export function AgentSettings({
   const [browserMode, setBrowserMode] = useState(readBrowserAppearance)
   const [appearanceError, setAppearanceError] = useState('')
   const [url, setUrl] = useState(state.url)
-  const [terminal, setTerminal] = useState(state.terminal)
+  const [deviceId, setDeviceId] = useState(state.deviceId)
+  const [deviceName, setDeviceName] = useState(state.deviceName)
   const [token, setToken] = useState('')
   const [editing, setEditing] = useState(false)
   const [feedback, setFeedback] = useState('')
@@ -50,7 +51,8 @@ export function AgentSettings({
 
   function editConnection() {
     setUrl(state.url)
-    setTerminal(state.terminal)
+    setDeviceId(state.deviceId)
+    setDeviceName(state.deviceName)
     setToken('')
     setFeedback('')
     setEditing(true)
@@ -92,7 +94,7 @@ export function AgentSettings({
     setBusy(true)
     setFeedback('')
     try {
-      await api.configure({ url, terminal, token })
+      await api.configure({ url, deviceId, token, deviceName })
       onConnected()
       setToken('')
       setEditing(false)
@@ -102,7 +104,7 @@ export function AgentSettings({
         '连接失败 · ' +
           (error instanceof Error
             ? error.message.replace(/^.*?Error: /, '')
-            : '请检查地址和终端令牌'),
+            : '请检查地址和设备令牌'),
       )
     } finally {
       setBusy(false)
@@ -115,7 +117,7 @@ export function AgentSettings({
       aria-describedby={undefined}
     >
       <div className="settings-sidebar">
-        <DialogTitle>终端设置</DialogTitle>
+        <DialogTitle>设备设置</DialogTitle>
         <nav className="nav-list" aria-label="设置分类">
           {sections.map(({ id, label, icon: Icon }) => (
             <button
@@ -145,7 +147,7 @@ export function AgentSettings({
           <ConnectorSettings
             key={JSON.stringify([
               state.url,
-              state.terminal,
+              state.deviceId,
               state.connectionRevision,
               state.configured,
             ])}
@@ -160,7 +162,7 @@ export function AgentSettings({
           <ApiKeySettings
             key={JSON.stringify([
               state.url,
-              state.terminal,
+              state.deviceId,
               state.connectionRevision,
               state.configured,
             ])}
@@ -207,8 +209,12 @@ export function AgentSettings({
               {state.configured && !editing && (
                 <>
                   <div>
-                    <dt>终端 ID</dt>
-                    <dd>{state.terminal}</dd>
+                    <dt>设备名称</dt>
+                    <dd>{state.deviceName}</dd>
+                  </div>
+                  <div>
+                    <dt>设备 ID</dt>
+                    <dd>{state.deviceId}</dd>
                   </div>
                   <div>
                     <dt>服务地址</dt>
@@ -242,7 +248,7 @@ export function AgentSettings({
               >
                 <p className="settings-note">
                   {api
-                    ? '使用后端为这台桌面设备分配的终端 ID 和令牌。'
+                    ? '将本机设备 ID 登记到后端，然后填写对应令牌。'
                     : '请打开 Wintermute 桌面应用以连接服务。'}
                 </p>
                 <label>
@@ -255,15 +261,19 @@ export function AgentSettings({
                   />
                 </label>
                 <label>
-                  终端 ID
+                  设备名称
+                  <input value={deviceName} onChange={(e) => setDeviceName(e.target.value)} maxLength={80} required />
+                </label>
+                <label>
+                  设备 ID
                   <input
-                    value={terminal}
-                    onChange={(e) => setTerminal(e.target.value)}
+                    value={deviceId}
+                    onChange={(e) => setDeviceId(e.target.value)}
                     required
                   />
                 </label>
                 <label>
-                  终端令牌
+                  设备令牌
                   <input
                     type="password"
                     autoComplete="off"
@@ -272,7 +282,7 @@ export function AgentSettings({
                     placeholder={
                       state.configured &&
                       state.url === url.trim() &&
-                      state.terminal === terminal.trim()
+                      state.deviceId === deviceId.trim()
                         ? '留空以使用当前连接令牌'
                         : 'Bearer token'
                     }

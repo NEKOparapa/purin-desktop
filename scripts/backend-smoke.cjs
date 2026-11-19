@@ -14,7 +14,7 @@ async function main() {
   const url = process.env.WINTERMUTE_TEST_URL
   assert.ok(url, 'Set WINTERMUTE_TEST_URL to an isolated backend fixture')
   const profile = {
-    url, terminal: 'desktop-test', token: 'test-token-desktop-test',
+    url, deviceId: 'desktop-test', token: 'test-token-desktop-test',
     controller: new AbortController(),
   }
   const agent = Object.create(DesktopAgent.prototype)
@@ -22,7 +22,7 @@ async function main() {
   async function api(route, body, expected = 200) {
     const response = await fetch(url + route, {
       method: body === undefined ? 'GET' : 'POST',
-      headers: { 'X-Terminal-ID': profile.terminal,
+      headers: { 'X-Device-ID': profile.deviceId,
         Authorization: `Bearer ${profile.token}`, 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: AbortSignal.timeout(8000),

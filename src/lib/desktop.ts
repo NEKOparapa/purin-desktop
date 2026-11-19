@@ -60,7 +60,7 @@ export interface DeviceNotice {
   id: string; title: string; body: string; created_at: string; expires_at: string | null;
   received_at: string | null; read_at: string | null; expired: boolean; attachments: DeviceFile[]
 }
-export interface NoticeAlert { id: string; title: string; body: string; open: boolean; terminal: string; url: string }
+export interface NoticeAlert { id: string; title: string; body: string; open: boolean; deviceId: string; url: string }
 export interface ChatFileRef {
   id: string
   name: string
@@ -94,7 +94,7 @@ export interface HistoryItem {
   layer?: ActivityLayer | 'conversation' | 'notification'
   material_type?: 'slice.recorded' | 'slice.audio' | 'slice.image'
   processing?: 'ready' | 'retrying' | 'pending'
-  members?: { id: string; occurred_at: string; terminal: string; layer: ActivityLayer }[]
+  members?: { id: string; occurred_at: string; device_id: string; layer: ActivityLayer }[]
   merged_summary?: {
     kind: 'ai' | 'rules'
     generated_at: string | null
@@ -113,7 +113,7 @@ export interface HistoryPage {
 
 export interface TerminalToolCall {
   id: string
-  terminal_id: string
+  device_id: string
   tool: string
   arguments: Record<string, unknown>
   timeout_seconds: number
@@ -151,7 +151,7 @@ export type CompressionStatus =
   'open' | 'rules' | 'pending' | 'ready' | 'retrying' | 'disabled'
 export interface CompressionBatch {
   id: string
-  terminal_id: string
+  device_id: string
   started_at: string
   ended_at: string
   perception_count: number
@@ -237,7 +237,7 @@ export interface TraceMember {
   id: string
   event_id: string | null
   title: string
-  terminal: string
+  device_id: string
   occurred_at: string
   usage?: TimelineUsage
 }
@@ -297,9 +297,10 @@ export interface ChatMessage {
   error?: string
 }
 export interface AgentState {
+  deviceName: string
   appearance: Appearance
   url: string
-  terminal: string
+  deviceId: string
   configured: boolean
   connectionRevision?: number
   collecting: boolean
@@ -327,8 +328,9 @@ export interface AgentState {
   questions: PendingQuestion[]
 }
 export interface Connection {
+  deviceName?: string
   url: string
-  terminal: string
+  deviceId: string
   token: string
 }
 export interface ApiKeySetting {
@@ -487,9 +489,10 @@ declare global {
   }
 }
 const initial: AgentState = {
+  deviceName: '',
   appearance: 'system',
   url: 'http://127.0.0.1:8080',
-  terminal: 'http-desktop',
+  deviceId: 'http-desktop',
   configured: false,
   collecting: false,
   remoteCommandsEnabled: false,

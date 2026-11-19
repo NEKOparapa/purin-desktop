@@ -66,7 +66,7 @@ export function PerceptionLinks({
                 new Date(member.occurred_at).toLocaleString('zh-CN', {
                   hour12: false,
                 }),
-                member.terminal,
+                member.device_id,
                 member.title,
               ]
                 .filter(Boolean)

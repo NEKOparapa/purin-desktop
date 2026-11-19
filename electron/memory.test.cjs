@@ -37,7 +37,7 @@ test('record content offsets count Unicode code points and reject broken pages',
 
 test('a connection change discards in-flight memory responses', async () => {
   const originalFetch = global.fetch
-  const profile = { token: 'test', url: 'https://test.invalid', terminal: 'test', controller: new AbortController() }
+  const profile = { token: 'test', url: 'https://test.invalid', deviceId: 'test', controller: new AbortController() }
   const agent = Object.create(DesktopAgent.prototype)
   agent.profile = profile
   let respond

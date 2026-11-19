@@ -303,7 +303,7 @@ export function CompressionBrowser({
             <span>
               <strong>{timeRange(batch.started_at, batch.ended_at)}</strong>
               <small>
-                {batch.terminal_id} ·{' '}
+                {batch.device_id} ·{' '}
                 {[
                   batch.perception_count > 0 &&
                     '感知 ' + batch.perception_count + ' 条',

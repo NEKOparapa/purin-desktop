@@ -249,7 +249,7 @@ function ActivityRecords({items}: {items: HistoryItem[]}) {
               {item.processing && item.processing !== 'ready' && <small>{item.processing === 'retrying' ? '等待重试' : '等待处理'}</small>}
               <Files files={item.files}/>
               {item.members ? <ol aria-label="摘要来源">{item.members.map(member =>
-                <li key={member.id}><span>{groupTime(member.occurred_at, member.occurred_at)} · {member.layer === 'slice' ? '切片' : '感知'} · {member.terminal}</span>
+                <li key={member.id}><span>{groupTime(member.occurred_at, member.occurred_at)} · {member.layer === 'slice' ? '切片' : '感知'} · {member.device_id}</span>
                   <OriginalDisclosure id={member.id} layer={member.layer} activity/></li>)}</ol>
                 : <OriginalDisclosure id={item.id} layer={item.layer === 'perception' ? 'perception' : 'slice'} activity={!material}/>}
             </div>}

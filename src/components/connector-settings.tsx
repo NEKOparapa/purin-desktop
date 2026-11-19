@@ -413,7 +413,7 @@ export function ConnectorSettings({
           <div className="connector-vault-info">
             <span>
               {!configured
-                ? '连接终端后可启用本机命令行。'
+                ? '连接设备后可启用本机命令行。'
                 : remoteTools?.length
                   ? `可用工具：${remoteTools.join('、')}`
                   : '暂无可用命令行工具（请确认使用 HTTPS 或本机地址连接）。'}

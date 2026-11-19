@@ -1,5 +1,6 @@
 const fs = require('node:fs')
 const path = require('node:path')
+const os = require('node:os')
 const { randomUUID, createHash } = require('node:crypto')
 const {
   submitMaterial,
@@ -111,7 +112,7 @@ function migrateCaptureSettings(dir, configFile, settings) {
   save(configFile, settings)
 }
 
-function connection(url, terminal) {
+function connection(url, deviceId) {
   const service = new URL(url)
   if (
     !['http:', 'https:'].includes(service.protocol) ||
@@ -123,12 +124,12 @@ function connection(url, terminal) {
   )
     throw new Error('请输入服务根地址')
   if (
-    typeof terminal !== 'string' ||
-    !terminal.trim() ||
-    /[\r\n]/.test(terminal)
+    typeof deviceId !== 'string' ||
+    !deviceId.trim() ||
+    /[\r\n]/.test(deviceId)
   )
-    throw new Error('终端 ID 无效')
-  return { url: service.origin, terminal: terminal.trim() }
+    throw new Error('设备 ID 无效')
+  return { url: service.origin, deviceId: deviceId.trim() }
 }
 
 async function fetchResponse(profile, route, options) {
@@ -137,7 +138,11 @@ async function fetchResponse(profile, route, options) {
     redirect: 'error',
     headers: {
       Authorization: 'Bearer ' + profile.token,
-      'X-Terminal-ID': profile.terminal,
+      'X-Device-ID': profile.deviceId,
+      ...(profile.installation && {
+        'X-Device-Instance': profile.installation,
+        'X-Device-Name': Buffer.from(profile.deviceName, 'utf8').toString('base64'),
+      }),
       ...options.headers,
     },
   })
@@ -177,10 +182,18 @@ class DesktopAgent {
     this.notify = notify
     fs.mkdirSync(dir, { recursive: true })
     this.configFile = path.join(dir, 'agent-settings.json')
-    const settings = read(this.configFile, {
-      url: 'http://127.0.0.1:8080',
-      terminal: 'http-desktop',
-    })
+    const settings = read(this.configFile, { url: 'http://127.0.0.1:8080' })
+    if (Object.hasOwn(settings, 'terminal')) {
+      settings.deviceId ||= settings.terminal
+      delete settings.terminal
+      save(this.configFile, settings)
+    }
+    if (!settings.installation) {
+      settings.installation = randomUUID()
+      settings.deviceId ||= 'desktop-' + settings.installation
+      settings.deviceName ||= os.hostname().slice(0, 80) || '桌面端'
+      save(this.configFile, settings)
+    }
     if (settings.captureVersion !== captureVersion)
       migrateCaptureSettings(dir, this.configFile, settings)
     this.appearance = ['light', 'dark'].includes(settings.appearance)
@@ -208,7 +221,7 @@ class DesktopAgent {
     this.profile?.controller.abort()
     this.profile?.captureController.abort()
     const key = createHash('sha256')
-      .update(settings.url + '\n' + settings.terminal)
+      .update(settings.url + '\n' + settings.deviceId)
       .digest('hex')
     const file = path.join(this.dir, 'terminal-' + key + '.json')
     this.profile = {
@@ -231,7 +244,7 @@ class DesktopAgent {
     p.obsidianVaultPath = obsidianInfo.valid ? obsidianInfo.path : (p.obsidianVaultPath || '')
     p.obsidianEnabled = !!(p.obsidianEnabled && obsidianInfo.valid)
     if (token && secureTransport(p.url)) {
-      const scope = createHash('sha256').update(JSON.stringify([p.url, p.terminal, token])).digest('hex')
+      const scope = createHash('sha256').update(JSON.stringify([p.url, p.deviceId, token])).digest('hex')
       p.remote = new TerminalToolClient({
         file: path.join(this.dir, 'remote-tools-' + scope + '.json'),
         enabled: p.remoteCommandsEnabled === true,
@@ -306,7 +319,8 @@ class DesktopAgent {
     const p = this.profile
     return {
       url: p.url,
-      terminal: p.terminal,
+      deviceId: p.deviceId,
+      deviceName: p.deviceName,
       connectionRevision: p.revision,
       appearance: this.appearance,
       configured: !!p.token,
@@ -337,7 +351,7 @@ class DesktopAgent {
     const byEvent = new Map(p.history.outbox.filter(m => m.eventId).map(m => [m.eventId, m]))
     const messages = p.chat.messages.map(row => {
       if (row.role !== 'user') return row
-      const local = byEvent.get(row.id) || (row.terminal === p.terminal && pending.get(row.messageId))
+      const local = byEvent.get(row.id) || (row.deviceId === p.deviceId && pending.get(row.messageId))
       if (!local) return row
       pending.delete(local.id)
       return { ...row, id: local.id, status: local.status, error: local.error }
@@ -363,18 +377,28 @@ class DesktopAgent {
     this.publish()
   }
 
-  async configure({ url, terminal, token }) {
-    const dest = connection(url, terminal)
+  async configure({ url, deviceId, token, deviceName }) {
+    const dest = connection(url, deviceId)
     const old = this.profile
-    const same = old.url === dest.url && old.terminal === dest.terminal
+    const name = (deviceName ?? old.deviceName).trim()
+    if (!name || [...name].length > 80 || /\p{Cc}/u.test(name))
+      throw new Error('请输入 1 至 80 个字符的设备名')
+    const identity = { installation: old.installation, deviceName: name }
+    const same = old.url === dest.url && old.deviceId === dest.deviceId
     const credential = token?.trim() || (same && old.token)
-    if (!credential) throw new Error('请输入终端令牌')
-    await request({ ...dest, token: credential }, '/v1/outputs?limit=1')
+    if (!credential) throw new Error('请输入设备令牌')
+    try {
+      await request({ ...dest, ...identity, token: credential }, '/v1/devices/self', {})
+    } catch (error) {
+      if (error.code === 'device_id_in_use') throw new Error('此设备 ID 已绑定其他设备，请为本机登记独立的设备 ID')
+      throw error
+    }
     if (this.profile !== old) throw new Error('连接已更改，请重试')
     const secret = this.secure.encryptString(credential).toString('base64')
     const settings = {
       ...(same ? this.settings(old) : {}),
       ...dest,
+      ...identity,
       captureVersion,
       secret,
       remoteCommandsEnabled: same && old.token === credential && !!old.remote?.enabled,
@@ -397,7 +421,7 @@ class DesktopAgent {
 
   async requestMemory(route, validate) {
     const p = this.profile
-    if (!p.token) throw new Error('请先连接终端')
+    if (!p.token) throw new Error('请先连接设备')
     try {
       const doc = await request(p, route, undefined, p.controller.signal)
       if (p !== this.profile || p.controller.signal.aborted) throw new Error('连接已更改')
@@ -445,7 +469,7 @@ class DesktopAgent {
 
   async requestApiKeys(body) {
     const p = this.profile
-    if (!p.token) throw new Error('请先连接终端')
+    if (!p.token) throw new Error('请先连接设备')
     if (!secureTransport(p.url))
       throw new Error('管理接口密钥需要 HTTPS 或本机连接')
 
@@ -457,8 +481,8 @@ class DesktopAgent {
         throw new Error('连接已更改，请重新打开接口密钥')
       if (error.code === 'secure_transport_required')
         throw new Error('管理接口密钥需要 HTTPS 或本机连接')
-      if (error.status === 401) throw new Error('终端令牌无效，请重新连接')
-      if (error.status === 403) throw new Error('此终端没有管理接口密钥的权限')
+      if (error.status === 401) throw new Error('设备令牌无效，请重新连接')
+      if (error.status === 403) throw new Error('此设备没有管理接口密钥的权限')
       if (error.status === 404 && error.code === 'unknown_key_id')
         throw new Error('密钥配置项已变更，请刷新')
       if ([404, 405].includes(error.status))
@@ -484,7 +508,7 @@ class DesktopAgent {
 
   async notificationPage(cursor) {
     const p = this.profile
-    if (!p.token) throw new Error('请先连接终端')
+    if (!p.token) throw new Error('请先连接设备')
     try {
       const page = await request(p, pageRoute(cursor), undefined, p.controller.signal)
       if (p !== this.profile) throw new Error('连接已更改')
@@ -497,13 +521,13 @@ class DesktopAgent {
 
   readNotification(id) {
     const p = this.profile
-    if (!p.token) throw new Error('请先连接终端')
+    if (!p.token) throw new Error('请先连接设备')
     return request(p, notificationPath(id) + '/read', {}, p.controller.signal)
   }
 
   downloadNotificationFile({notificationId, file}, choosePath) {
     const p = this.profile
-    if (!p.token) throw new Error('请先连接终端')
+    if (!p.token) throw new Error('请先连接设备')
     const route = notificationPath(notificationId) + '/files/'
     return saveHistoryFile(file, choosePath, id => {
       if (p !== this.profile || p.controller.signal.aborted) throw new Error('连接已更改')
@@ -536,7 +560,7 @@ class DesktopAgent {
 
   async schedule({ start, end, cursor }) {
     const profile = this.profile
-    if (!profile.token) throw new Error('请先连接终端')
+    if (!profile.token) throw new Error('请先连接设备')
     const isInstant = (value) =>
       typeof value === 'string' &&
       /T.*(?:Z|[+-]\d{2}:\d{2})$/i.test(value) &&
@@ -585,7 +609,7 @@ class DesktopAgent {
 
   async terminalToolHistory(cursor) {
     const p = this.profile
-    if (!p.token) throw new Error('请先连接终端')
+    if (!p.token) throw new Error('请先连接设备')
     const query = new URLSearchParams({ limit: '20' })
     if (cursor !== undefined) {
       if (typeof cursor !== 'string' || !cursor || cursor.length > 2048)
@@ -594,12 +618,12 @@ class DesktopAgent {
     }
     const page = await request(p, '/v1/terminal-tools/history?' + query, undefined, p.controller.signal)
     if (p !== this.profile) throw new Error('连接已更改')
-    const invalid = '后端返回的终端调用记录格式有误'
+    const invalid = '后端返回的设备调用记录格式有误'
     if (!Array.isArray(page?.items) ||
         !(page.next_cursor === null || (typeof page.next_cursor === 'string' && page.next_cursor)))
       throw new Error(invalid)
     const items = page.items.map(item => {
-      if (!item || typeof item.id !== 'string' || typeof item.terminal_id !== 'string' ||
+      if (!item || typeof item.id !== 'string' || typeof item.device_id !== 'string' ||
           typeof item.tool !== 'string' || !item.arguments || typeof item.arguments !== 'object' ||
           Array.isArray(item.arguments) ||
           !['queued', 'running', 'succeeded', 'failed', 'timed_out', 'expired'].includes(item.status) ||
@@ -608,9 +632,9 @@ class DesktopAgent {
           typeof item.stdout !== 'string' || typeof item.stderr !== 'string' ||
           (item.exit_code !== null && !Number.isInteger(item.exit_code)) || typeof item.truncated !== 'boolean')
         throw new Error(invalid)
-      const { id, terminal_id, tool, timeout_seconds, status, created_at, started_at,
+      const { id, device_id, tool, timeout_seconds, status, created_at, started_at,
         completed_at, stdout, stderr, exit_code, truncated } = item
-      return { id, terminal_id, tool, arguments: item.arguments, timeout_seconds,
+      return { id, device_id, tool, arguments: item.arguments, timeout_seconds,
         status, created_at, started_at, completed_at, stdout, stderr, exit_code, truncated }
     })
     return { items, next_cursor: page.next_cursor }
@@ -618,7 +642,7 @@ class DesktopAgent {
 
   async history({ view, cursor, groupId }) {
     const p = this.profile
-    if (!p.token) throw new Error('请先连接终端')
+    if (!p.token) throw new Error('请先连接设备')
     if (
       ![
         'conversation',
@@ -676,7 +700,7 @@ class DesktopAgent {
 
   async compression({ kind, layer, id, activity, cursor, record }) {
     const p = this.profile
-    if (!p.token) throw new Error('请先连接终端')
+    if (!p.token) throw new Error('请先连接设备')
     const query = new URLSearchParams({ limit: '40' })
     if (cursor !== undefined) {
       if (typeof cursor !== 'string' || !cursor || cursor.length > 2048)
@@ -732,7 +756,7 @@ class DesktopAgent {
 
   downloadHistoryFile(file, choosePath) {
     const p = this.profile
-    if (!p.token) throw new Error('请先连接终端')
+    if (!p.token) throw new Error('请先连接设备')
     const token = p.token
     return saveHistoryFile(file, choosePath, (id) => {
       if (p !== this.profile || p.token !== token)
@@ -748,7 +772,7 @@ class DesktopAgent {
 
   async previewHistoryImage({ id, connectionRevision }) {
     const p = this.profile
-    if (!p.token) throw new Error('请先连接终端')
+    if (!p.token) throw new Error('请先连接设备')
     if (connectionRevision !== p.revision) throw new Error('连接已更改，请重新打开记忆')
     if (typeof id !== 'string' || !/^[\w:-]{1,256}$/.test(id))
       throw new Error('无效的截图编号')
@@ -773,7 +797,9 @@ class DesktopAgent {
       obsidianEnabled: !!p.obsidianEnabled,
       obsidianVaultPath: p.obsidianVaultPath || '',
       url: p.url,
-      terminal: p.terminal,
+      deviceId: p.deviceId,
+      deviceName: p.deviceName,
+      installation: p.installation,
       secret: p.secret,
       collecting: !!p.collecting,
       screenshotsEnabled: !!p.screenshotsEnabled,
@@ -797,7 +823,7 @@ class DesktopAgent {
   setRemoteCommands({ enabled, connectionRevision }) {
     const p = this.profile
     if (!p.token || p.revision !== connectionRevision || typeof enabled !== 'boolean')
-      throw new Error('连接已更改，请重新打开终端设置')
+      throw new Error('连接已更改，请重新打开设备设置')
     if (!p.remote) throw new Error('远程命令需要 HTTPS 或本机连接')
     if (enabled && !p.remote.tools.length) throw new Error('本机没有可用的命令行工具')
     this.savePreferences({ remoteCommandsEnabled: enabled })
@@ -828,7 +854,7 @@ class DesktopAgent {
 
   async connectorHistory(cursor) {
     const p = this.profile
-    if (!p.token) throw new Error('请先连接终端')
+    if (!p.token) throw new Error('请先连接设备')
     const query = cursor ? '?cursor=' + encodeURIComponent(cursor) : ''
     const data = await request(p, '/v1/connectors/history' + query, undefined, p.controller.signal)
     if (p !== this.profile || p.controller.signal.aborted) throw new Error('连接已更改')
@@ -917,7 +943,7 @@ class DesktopAgent {
 
   async addMcpConnector(payload) {
     const p = this.profile
-    if (!p.token) throw new Error('请先连接终端')
+    if (!p.token) throw new Error('请先连接设备')
     if (payload?.credentials && !secureTransport(p.url))
       throw new Error('保存连接器凭据需要 HTTPS 或本机连接')
     const data = await request(p, '/v1/connectors/mcp', payload, p.controller.signal)
@@ -927,7 +953,7 @@ class DesktopAgent {
 
   async saveConnectorCredentials({ id, values, connectionId, connectionLabel }) {
     const p = this.profile
-    if (!p.token) throw new Error('请先连接终端')
+    if (!p.token) throw new Error('请先连接设备')
     if (!secureTransport(p.url)) throw new Error('保存连接器凭据需要 HTTPS 或本机连接')
     const body = {
       values,
@@ -946,7 +972,7 @@ class DesktopAgent {
 
   async testConnector(id) {
     const p = this.profile
-    if (!p.token) throw new Error('请先连接终端')
+    if (!p.token) throw new Error('请先连接设备')
     const data = await request(
       p,
       '/v1/connectors/' + encodeURIComponent(id) + '/test',
@@ -959,7 +985,7 @@ class DesktopAgent {
 
   async deleteConnector(id) {
     const p = this.profile
-    if (!p.token) throw new Error('请先连接终端')
+    if (!p.token) throw new Error('请先连接设备')
     const timeout = AbortSignal.timeout(8000)
     const response = await fetchResponse(
       p,
@@ -977,7 +1003,7 @@ class DesktopAgent {
   setCollection(enabled) {
     const p = this.profile
     if (!p.token || typeof enabled !== 'boolean')
-      throw new Error('请先连接终端')
+      throw new Error('请先连接设备')
     this.savePreferences({
       collecting: enabled,
       screenshotsEnabled: enabled && !!p.screenshotsEnabled,
@@ -1152,7 +1178,7 @@ class DesktopAgent {
 
   async transcribe({ audio, connectionRevision }) {
     const p = this.profile
-    if (!p.token || p.revision !== connectionRevision) throw new Error('终端连接已更改')
+    if (!p.token || p.revision !== connectionRevision) throw new Error('设备连接已更改')
     if (!(audio instanceof ArrayBuffer) || !audio.byteLength || audio.byteLength > 3840044)
       throw new Error('录音无效或超过两分钟')
     const response = await fetchResponse(p, '/v1/transcriptions', {
@@ -1169,7 +1195,7 @@ class DesktopAgent {
 
   async uploadChatFile({ name, data, revision }) {
     const p = this.profile
-    if (!p.token || p.revision !== revision) throw new Error('终端连接已更改')
+    if (!p.token || p.revision !== revision) throw new Error('设备连接已更改')
     if (typeof name !== 'string' || !name.trim() || !(data instanceof ArrayBuffer) || data.byteLength > 32 * 1024 * 1024)
       throw new Error('文件无效或超过 32 MiB')
     try {
@@ -1183,7 +1209,7 @@ class DesktopAgent {
       return { id: file.id, name }
     } catch (error) {
       const reasons = { unsupported_file: 'MarkItDown 无法识别此格式', file_conversion_failed: '文件无法解析，请检查文件是否损坏或加密',
-        parsed_file_too_large: '解析后的正文过大', asr_key_missing: '后端缺少音频转写密钥',
+        asr_key_missing: '后端缺少音频转写密钥',
         audio_conversion_failed: '音频转写失败', file_conversion_timeout: '解析超时', chat_media_busy: '后端正忙，请重试' }
       throw new Error(name + '：' + (reasons[error.code] || error.message))
     }
@@ -1191,9 +1217,9 @@ class DesktopAgent {
 
   send(message) {
     const p = this.profile
-    if (!p.token) throw new Error('请先连接终端')
+    if (!p.token) throw new Error('请先连接设备')
     const { text, images = [], documents = [], imageNames = [], revision } = typeof message === 'string' ? { text: message } : message
-    if (revision !== undefined && revision !== p.revision) throw new Error('终端连接已更改')
+    if (revision !== undefined && revision !== p.revision) throw new Error('设备连接已更改')
     if (!Array.isArray(images) || images.length > 4 || images.some(image =>
       typeof image !== 'string' || !image.startsWith('data:image/jpeg;base64,') || image.length > 699075))
       throw new Error('聊天图片无效')
@@ -1278,7 +1304,7 @@ class DesktopAgent {
         p.chat.read(api).then(changed => {
           if (p.controller.signal.aborted) return
           // The POST may have reached the server even if its receipt was lost.
-          const accepted = new Set(p.chat.messages.filter(row => row.terminal === p.terminal && row.messageId).map(row => row.messageId))
+          const accepted = new Set(p.chat.messages.filter(row => row.deviceId === p.deviceId && row.messageId).map(row => row.messageId))
           const keep = p.history.outbox.filter(m => m.status !== 'unsent' || !accepted.has(m.id))
           if (keep.length !== p.history.outbox.length) {
             p.history.outbox = keep
@@ -1322,7 +1348,7 @@ class DesktopAgent {
 
   async answerQuestion({ id, selectedOptions, answerText } = {}) {
     const p = this.profile
-    if (!p.token) throw new Error('请先连接终端')
+    if (!p.token) throw new Error('请先连接设备')
     if (typeof id !== 'string' || !id) throw new Error('无效的提问编号')
     try {
       const item = await request(
@@ -1346,7 +1372,7 @@ class DesktopAgent {
         p.questions = (p.questions || []).filter(q => q.id !== id)
         p.questionsDigest = JSON.stringify(p.questions)
         this.publish()
-        throw new Error('该提问已在其他终端处理')
+        throw new Error('该提问已在其他设备处理')
       }
       if (error.status === 400) throw new Error('请至少选择一个选项或填写回答内容')
       throw error
@@ -1355,7 +1381,7 @@ class DesktopAgent {
 
   async dismissQuestion(id) {
     const p = this.profile
-    if (!p.token) throw new Error('请先连接终端')
+    if (!p.token) throw new Error('请先连接设备')
     if (typeof id !== 'string' || !id) throw new Error('无效的提问编号')
     try {
       const item = await request(
@@ -1376,7 +1402,7 @@ class DesktopAgent {
         p.questions = (p.questions || []).filter(q => q.id !== id)
         p.questionsDigest = JSON.stringify(p.questions)
         this.publish()
-        throw new Error('该提问已在其他终端处理')
+        throw new Error('该提问已在其他设备处理')
       }
       throw error
     }

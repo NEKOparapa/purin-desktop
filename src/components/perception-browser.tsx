@@ -124,7 +124,7 @@ function VisitDetails({
       reading = true
       try {
         if (!window.wintermute?.compression)
-          throw new Error('当前终端无法读取处理记录。')
+          throw new Error('当前设备无法读取处理记录。')
         const next = await window.wintermute.compression({
           kind: 'stages',
           id,
@@ -219,7 +219,7 @@ function visitRow(item: HistoryItem): TimelineRow {
     at: text(value.started_at) || item.occurred_at,
     title: info.title,
     usage: item.usage,
-    device: text(item.raw?.terminal_id),
+    device: text(item.raw?.device_id),
     duration: info.duration,
     status: item.filter_result ? outcomes[item.filter_result] : '',
     item,
@@ -285,7 +285,7 @@ export function PerceptionBrowser({
           id: member.event_id,
           at: member.occurred_at,
           title: member.title,
-          device: member.terminal,
+          device: member.device_id,
           usage: member.usage,
           status: '关联记录',
         })

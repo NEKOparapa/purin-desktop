@@ -48,7 +48,7 @@ export function perceptionLabel(item: HistoryItem) {
       text(item.raw?.type) ||
       '设备观测',
     subject: text(value.window_title) || text(value.title),
-    source: text(item.raw?.terminal_id) || item.source,
+    source: text(item.raw?.device_id) || item.source,
     duration:
       typeof value.duration_seconds === 'number'
         ? duration(value.duration_seconds)

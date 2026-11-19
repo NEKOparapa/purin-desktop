@@ -202,7 +202,7 @@ class TerminalToolClient {
       }
       this.updateIssue('')
     } catch (error) {
-      this.updateIssue(error.message || '终端工具连接失败')
+      this.updateIssue(error.message || '设备工具连接失败')
     } finally {
       this.running = null
       this.busy = false

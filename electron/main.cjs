@@ -67,7 +67,7 @@ function presentNotifications(items, profile) {
   const latest = items[0]
   const title = items.length === 1 ? latest.title : items.length + ' 条新通知'
   const detail = items.length === 1 ? latest.body : latest.title
-  const alert = { id: latest.id, title, body: detail, terminal: profile.terminal, url: profile.url }
+  const alert = { id: latest.id, title, body: detail, deviceId: profile.deviceId, url: profile.url }
   const send = open => {
     if (agent.profile === profile && !win.isDestroyed())
       win.webContents.send('agent:notice', {...alert, open})
