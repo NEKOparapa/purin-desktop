@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld('wintermute', {
   updateApiKey: (options) => ipcRenderer.invoke('agent:updateApiKey', options),
   notificationPage: (cursor) => ipcRenderer.invoke('agent:notificationPage', cursor),
   readNotification: (id) => ipcRenderer.invoke('agent:readNotification', id),
+  answerQuestion: (payload) => ipcRenderer.invoke('agent:answerQuestion', payload),
+  dismissQuestion: (id) => ipcRenderer.invoke('agent:dismissQuestion', id),
   downloadNotificationFile: (file) => ipcRenderer.invoke('agent:downloadNotificationFile', file),
   onNotice: (callback) => {
     const listener = (_event, notice) => callback(notice)

@@ -143,6 +143,8 @@ function start() {
     updateApiKey: 'updateApiKey',
     notificationPage: 'notificationPage',
     readNotification: 'readNotification',
+    answerQuestion: 'answerQuestion',
+    dismissQuestion: 'dismissQuestion',
     history: 'history',
     terminalToolHistory: 'terminalToolHistory',
     previewHistoryImage: 'previewHistoryImage',

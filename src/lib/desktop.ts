@@ -245,6 +245,16 @@ export interface ScheduleRange {
   cursor?: string
 }
 
+export interface PendingQuestion {
+  id: string
+  title: string
+  question: string
+  options: string[]
+  multi_select: boolean
+  allow_custom: boolean
+  status: 'pending' | 'answered' | 'dismissed'
+  created_at: string
+}
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
@@ -287,6 +297,7 @@ export interface AgentState {
   } | null
   hasEarlier: boolean
   messages: ChatMessage[]
+  questions: PendingQuestion[]
 }
 export interface Connection {
   url: string
@@ -343,6 +354,12 @@ declare global {
       }): Promise<OriginalDetail>
       notificationPage(cursor?: string): Promise<ResultsPage<DeviceNotice>>
       readNotification(id: string): Promise<unknown>
+      answerQuestion(payload: {
+        id: string
+        selectedOptions: string[]
+        answerText: string
+      }): Promise<PendingQuestion>
+      dismissQuestion(id: string): Promise<PendingQuestion>
       downloadNotificationFile(file: {notificationId: string; file: DeviceFile}): Promise<{saved: boolean}>
       onNotice(callback: (alert: NoticeAlert) => void): () => void
       downloadHistoryFile(file: HistoryFile): Promise<{ saved: boolean }>
@@ -380,6 +397,7 @@ const initial: AgentState = {
   sampleIssue: '',
   hasEarlier: false,
   messages: [],
+  questions: [],
   lastSpan: null,
 }
 

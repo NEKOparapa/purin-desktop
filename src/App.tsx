@@ -20,6 +20,7 @@ import { AgentSettings } from '@/components/agent-settings'
 import { ScheduleCalendar } from '@/components/schedule-calendar'
 import type { NoticeAlert } from '@/lib/desktop'
 import { MemoryBrowser } from '@/components/memory-browser'
+import { QuestionCards } from '@/components/question-cards'
 import { useAgent, type AgentState, type ChatMessage } from '@/lib/desktop'
 import './App.css'
 
@@ -249,6 +250,7 @@ function Chat({
         </div>
       )}
       <div className="write-area">
+        <QuestionCards questions={agent.questions} />
         {hasMessages && !atBottom && (
           <button
             type="button"

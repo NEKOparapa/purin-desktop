@@ -221,6 +221,8 @@ class DesktopAgent {
       sampleIssue: '',
       history: read(file, {}),
       chat: new ChatHistory(),
+      questions: [],
+      questionsDigest: '[]',
     }
     const p = this.profile
     if (token && secureTransport(p.url)) {
@@ -313,6 +315,7 @@ class DesktopAgent {
       lastSpan: p.history.lastSpan ?? null,
       messages: this.chatMessages(p),
       hasEarlier: p.chat.hasEarlier,
+      questions: p.questions || [],
     }
   }
 
@@ -1026,6 +1029,7 @@ class DesktopAgent {
       // notification reply or a server reset from becoming visible in chat.
       const results = await Promise.allSettled([
         this.syncDelivery(p, api),
+        this.syncQuestions(p, api),
         p.chat.read(api).then(changed => {
           if (p.controller.signal.aborted) return
           // The POST may have reached the server even if its receipt was lost.
@@ -1050,6 +1054,86 @@ class DesktopAgent {
       }
     } finally {
       p.syncing = false
+    }
+  }
+
+  async syncQuestions(p, api) {
+    try {
+      const page = await api('/v1/questions?status=pending&limit=20')
+      if (p !== this.profile || p.controller.signal.aborted) return
+      const items = Array.isArray(page?.items) ? page.items : []
+      const digest = JSON.stringify(items)
+      if (digest !== p.questionsDigest) {
+        p.questions = items
+        p.questionsDigest = digest
+        this.publish()
+      }
+    } catch (error) {
+      // Older backends may not expose /v1/questions yet.
+      if (error.status === 404) return
+      throw error
+    }
+  }
+
+  async answerQuestion({ id, selectedOptions, answerText } = {}) {
+    const p = this.profile
+    if (!p.token) throw new Error('请先连接终端')
+    if (typeof id !== 'string' || !id) throw new Error('无效的提问编号')
+    try {
+      const item = await request(
+        p,
+        '/v1/questions/' + encodeURIComponent(id) + '/answer',
+        {
+          selected_options: Array.isArray(selectedOptions) ? selectedOptions : [],
+          answer_text: typeof answerText === 'string' ? answerText : '',
+        },
+        p.controller.signal,
+      )
+      if (p === this.profile && !p.controller.signal.aborted) {
+        p.questions = (p.questions || []).filter(q => q.id !== id)
+        p.questionsDigest = JSON.stringify(p.questions)
+        this.publish()
+        void this.sync()
+      }
+      return item
+    } catch (error) {
+      if (error.status === 409 && p === this.profile && !p.controller.signal.aborted) {
+        p.questions = (p.questions || []).filter(q => q.id !== id)
+        p.questionsDigest = JSON.stringify(p.questions)
+        this.publish()
+        throw new Error('该提问已在其他终端处理')
+      }
+      if (error.status === 400) throw new Error('请至少选择一个选项或填写回答内容')
+      throw error
+    }
+  }
+
+  async dismissQuestion(id) {
+    const p = this.profile
+    if (!p.token) throw new Error('请先连接终端')
+    if (typeof id !== 'string' || !id) throw new Error('无效的提问编号')
+    try {
+      const item = await request(
+        p,
+        '/v1/questions/' + encodeURIComponent(id) + '/dismiss',
+        {},
+        p.controller.signal,
+      )
+      if (p === this.profile && !p.controller.signal.aborted) {
+        p.questions = (p.questions || []).filter(q => q.id !== id)
+        p.questionsDigest = JSON.stringify(p.questions)
+        this.publish()
+        void this.sync()
+      }
+      return item
+    } catch (error) {
+      if (error.status === 409 && p === this.profile && !p.controller.signal.aborted) {
+        p.questions = (p.questions || []).filter(q => q.id !== id)
+        p.questionsDigest = JSON.stringify(p.questions)
+        this.publish()
+        throw new Error('该提问已在其他终端处理')
+      }
+      throw error
     }
   }
 
