@@ -122,6 +122,13 @@ function start() {
   const actions = {
     downloadHistoryFile: file => agent.downloadHistoryFile(file, chooseAttachmentPath),
     downloadNotificationFile: file => agent.downloadNotificationFile(file, chooseAttachmentPath),
+    async chooseObsidianVault() {
+      const result = await dialog.showOpenDialog(appWindow, {
+        title: '选择 Obsidian Vault 文件夹',
+        properties: ['openDirectory'],
+      })
+      return result.canceled || !result.filePaths.length ? null : result.filePaths[0]
+    },
     async screenshots(options) {
       if (options?.enabled && !agent.state().screenshotsEnabled) {
         const profile = agent.profile
@@ -141,6 +148,12 @@ function start() {
     recordContent: 'recordContent',
     apiKeys: 'apiKeys',
     updateApiKey: 'updateApiKey',
+    connectors: 'connectors',
+    setObsidianConnector: 'setObsidianConnector',
+    addMcpConnector: 'addMcpConnector',
+    saveConnectorCredentials: 'saveConnectorCredentials',
+    testConnector: 'testConnector',
+    deleteConnector: 'deleteConnector',
     notificationPage: 'notificationPage',
     readNotification: 'readNotification',
     answerQuestion: 'answerQuestion',

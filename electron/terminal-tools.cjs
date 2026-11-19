@@ -115,11 +115,19 @@ function runCommand(call, signal) {
 
 // The journal belongs to one authenticated connection. At most one call is in flight.
 class TerminalToolClient {
-  constructor({ file, enabled, tools, post, save, read, onIssue }) {
-    Object.assign(this, { file, enabled, tools, post, save, onIssue })
+  constructor({ file, enabled, tools, extraTools = [], handlers = {}, post, save, read, onIssue }) {
+    Object.assign(this, { file, enabled, tools, extraTools, handlers, post, save, onIssue })
     this.journal = read(file, {})
     this.epoch = 0
     this.issue = ''
+  }
+
+  activeTools() {
+    const list = this.enabled ? [...this.tools] : []
+    for (const name of this.extraTools || []) {
+      if (!list.includes(name)) list.push(name)
+    }
+    return list
   }
 
   updateIssue(message) {
@@ -132,7 +140,16 @@ class TerminalToolClient {
     this.enabled = enabled
     this.epoch++
     if (!enabled) this.running?.abort()
-    this.journal.withdraw = !enabled
+    this.journal.withdraw = this.activeTools().length === 0
+    this.save(this.file, this.journal)
+    void this.poll()
+  }
+
+  setExtraTools(extraTools, handlers = {}) {
+    this.extraTools = [...extraTools]
+    this.handlers = { ...handlers }
+    this.epoch++
+    this.journal.withdraw = this.activeTools().length === 0
     this.save(this.file, this.journal)
     void this.poll()
   }
@@ -143,15 +160,17 @@ class TerminalToolClient {
   }
 
   async poll() {
-    if (this.closed || this.busy || (!this.enabled && !this.journal.pending && !this.journal.withdraw)) return
+    const active = this.activeTools()
+    if (this.closed || this.busy || (!active.length && !this.journal.pending && !this.journal.withdraw)) return
     this.busy = true
     try {
       await this.flushResult()
       if (this.closed) return
       const epoch = this.epoch
-      const { call } = await this.post('/v1/terminal-tools/claim', { tools: this.enabled ? this.tools : [] })
+      const advertised = this.activeTools()
+      const { call } = await this.post('/v1/terminal-tools/claim', { tools: advertised })
       if (this.closed) return
-      if (!this.enabled && epoch === this.epoch && this.journal.withdraw) {
+      if (!advertised.length && epoch === this.epoch && this.journal.withdraw) {
         delete this.journal.withdraw
         this.save(this.file, this.journal)
       }
@@ -165,8 +184,17 @@ class TerminalToolClient {
         // the completed result below; it never starts the same command again.
         this.save(this.file, this.journal)
         this.running = new AbortController()
-        const result = !this.enabled || this.epoch !== epoch
-          ? failed('远程执行已关闭') : await runCommand(call, this.running.signal)
+        let result
+        const handler = this.handlers?.[call.tool]
+        if (handler) {
+          result = this.epoch !== epoch
+            ? failed('连接器状态已变更')
+            : await handler(call, this.running.signal)
+        } else {
+          result = !this.enabled || this.epoch !== epoch
+            ? failed('远程执行已关闭')
+            : await runCommand(call, this.running.signal)
+        }
         if (this.closed) return
         Object.assign(pending.body, result)
         this.save(this.file, this.journal)

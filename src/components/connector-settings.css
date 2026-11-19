@@ -1,0 +1,120 @@
+.connector-settings {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.connector-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.connector-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.connector-group-header h4 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  margin: 0;
+}
+
+.connector-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.connector-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.connector-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.connector-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.connector-card-title h5 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.connector-card-meta {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.connector-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.connector-vault-info {
+  font-size: 12px;
+  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.connector-vault-info code {
+  font-size: 11px;
+  word-break: break-all;
+}
+
+.connector-detected-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.connector-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.connector-form-grid .connector-span-2 {
+  grid-column: 1 / -1;
+}
+
+.connector-form-grid select {
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.connector-cred-form {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}

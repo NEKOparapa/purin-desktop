@@ -281,6 +281,8 @@ export interface AgentState {
   remoteCommandsEnabled: boolean
   remoteTools: string[]
   remoteIssue: string
+  obsidianEnabled?: boolean
+  obsidianVaultPath?: string
   screenshotsEnabled: boolean
   screenshotIssue: string
   pendingMaterials: number
@@ -315,6 +317,68 @@ export interface ApiKeyUpdate {
   apiKey: string
   connectionRevision: number
 }
+export interface DetectedObsidianVault {
+  id: string
+  name: string
+  path: string
+  open: boolean
+}
+export interface ObsidianConnectorState {
+  enabled: boolean
+  vaultPath: string
+  vaultName: string
+  noteCount: number
+  hasObsidianDir: boolean
+  valid: boolean
+  detectedVaults: DetectedObsidianVault[]
+}
+export interface ConnectorSourceInfo {
+  kind: 'official' | 'third_party'
+  found_at: string
+  publisher: string
+}
+export interface ConnectorConnectionInfo {
+  connection_id: string
+  label: string
+  verified: boolean
+}
+export interface ConnectorItem {
+  id: string
+  name: string
+  tool_type: 'mcp' | 'device' | 'cli'
+  connected: boolean
+  status: string
+  endpoint: string | null
+  source: ConnectorSourceInfo | null
+  header_names: string[]
+  credential_label: string | null
+  credential_query_param: string | null
+  auth_mode: 'none' | 'credential' | 'oauth' | 'device'
+  device_id: string | null
+  config: Record<string, unknown>
+  verified: boolean
+  enabled: boolean
+  has_credentials: boolean
+  connections: ConnectorConnectionInfo[]
+}
+export interface ConnectorsSnapshot {
+  items: ConnectorItem[]
+  obsidian: ObsidianConnectorState
+}
+export interface AddMcpConnectorInput {
+  name: string
+  endpoint: string
+  source: ConnectorSourceInfo
+  header_names?: string[]
+  credential_label?: string | null
+  credential_query_param?: string | null
+  credentials?: Record<string, string> | null
+}
+export interface ConnectorMutationResult {
+  item: ConnectorItem
+  tool_count: number | null
+  verify_error: string | null
+}
 declare global {
   interface Window {
     wintermute?: {
@@ -323,6 +387,22 @@ declare global {
       configure(settings: Connection): Promise<void>
       apiKeys(): Promise<ApiKeySetting[]>
       updateApiKey(update: ApiKeyUpdate): Promise<ApiKeySetting[]>
+      connectors(): Promise<ConnectorsSnapshot>
+      chooseObsidianVault(): Promise<string | null>
+      setObsidianConnector(options: {
+        enabled: boolean
+        vaultPath?: string
+        connectionRevision?: number
+      }): Promise<ObsidianConnectorState>
+      addMcpConnector(payload: AddMcpConnectorInput): Promise<ConnectorMutationResult>
+      saveConnectorCredentials(payload: {
+        id: string
+        values: Record<string, string>
+        connectionId?: string
+        connectionLabel?: string
+      }): Promise<ConnectorMutationResult>
+      testConnector(id: string): Promise<ConnectorMutationResult>
+      deleteConnector(id: string): Promise<{ deleted: boolean; id: string }>
       schedule(range: ScheduleRange): Promise<ResultsPage<ScheduleEntry>>
       memoryTree(): Promise<MemoryFile[]>
       memoryFile(path: string): Promise<MemoryDocument>

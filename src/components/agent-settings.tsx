@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Activity, Cable, KeyRound, Palette, Terminal } from 'lucide-react'
+import { Activity, Cable, KeyRound, Palette, Plug, Terminal } from 'lucide-react'
 import {
   readBrowserAppearance,
   setBrowserAppearance,
@@ -8,10 +8,12 @@ import {
 } from '@/lib/desktop'
 import { Button } from '@/components/ui/button'
 import { ApiKeySettings } from '@/components/api-key-settings'
+import { ConnectorSettings } from '@/components/connector-settings'
 import { DialogContent, DialogTitle } from '@/components/ui/dialog'
 
 const sections = [
   { id: 'connection', label: '连接', icon: Cable },
+  { id: 'connectors', label: '连接器', icon: Plug },
   { id: 'keys', label: '接口密钥', icon: KeyRound },
   { id: 'appearance', label: '外观', icon: Palette },
   { id: 'collection', label: '信息采集', icon: Activity },
@@ -140,6 +142,18 @@ export function AgentSettings({
         <h3 id="settings-section-title">
           {sections.find(({ id }) => id === tab)?.label}
         </h3>
+        {tab === 'connectors' && (
+          <ConnectorSettings
+            key={JSON.stringify([
+              state.url,
+              state.terminal,
+              state.connectionRevision,
+              state.configured,
+            ])}
+            configured={state.configured}
+            revision={state.connectionRevision}
+          />
+        )}
         {tab === 'keys' && (
           <ApiKeySettings
             key={JSON.stringify([

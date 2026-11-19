@@ -12,6 +12,7 @@ const { screenshotDwellMs, saveVisitScreenshot } = require('./visit-screenshot.c
 const { saveHistoryFile, readHistoryImage } = require('./history.cjs')
 const { ChatHistory } = require('./chat-history.cjs')
 const { availableTools, secureTransport, TerminalToolClient } = require('./terminal-tools.cjs')
+const { detectObsidianVaults, inspectVault, runObsidianTool } = require('./obsidian-connector.cjs')
 const { notificationPath, pageRoute, validatePage, deliverPending } = require('./notifications.cjs')
 const memory = require('./memory.cjs')
 const captureVersion = 6
@@ -225,16 +226,24 @@ class DesktopAgent {
       questionsDigest: '[]',
     }
     const p = this.profile
+    const obsidianInfo = inspectVault(p.obsidianVaultPath || '')
+    p.obsidianVaultPath = obsidianInfo.valid ? obsidianInfo.path : (p.obsidianVaultPath || '')
+    p.obsidianEnabled = !!(p.obsidianEnabled && obsidianInfo.valid)
     if (token && secureTransport(p.url)) {
       const scope = createHash('sha256').update(JSON.stringify([p.url, p.terminal, token])).digest('hex')
       p.remote = new TerminalToolClient({
         file: path.join(this.dir, 'remote-tools-' + scope + '.json'),
         enabled: p.remoteCommandsEnabled === true,
         tools: availableTools(),
+        extraTools: p.obsidianEnabled ? ['obsidian'] : [],
+        handlers: p.obsidianEnabled
+          ? { obsidian: (call) => runObsidianTool(p.obsidianVaultPath, call.arguments) }
+          : {},
         post: (route, body) => request(p, route, body, p.controller.signal),
         read, save, onIssue: () => this.publish(),
       })
       void p.remote.poll()
+      void this.syncObsidianConnector(p)
     }
     // Old clients persisted a complete local transcript. Keep outstanding sends
     // so they can still be retried; committed history is loaded from the server.
@@ -302,6 +311,8 @@ class DesktopAgent {
       remoteCommandsEnabled: !!p.remote?.enabled,
       remoteTools: p.remote?.tools || [],
       remoteIssue: p.remote?.issue || '',
+      obsidianEnabled: !!p.obsidianEnabled,
+      obsidianVaultPath: p.obsidianVaultPath || '',
       collecting: !!p.collecting,
       screenshotsEnabled: !!p.screenshotsEnabled,
       screenshotIssue: p.screenshotIssue || '',
@@ -757,6 +768,8 @@ class DesktopAgent {
   settings(p = this.profile) {
     return {
       remoteCommandsEnabled: !!p.remote?.enabled,
+      obsidianEnabled: !!p.obsidianEnabled,
+      obsidianVaultPath: p.obsidianVaultPath || '',
       url: p.url,
       terminal: p.terminal,
       secret: p.secret,
@@ -788,6 +801,142 @@ class DesktopAgent {
     this.savePreferences({ remoteCommandsEnabled: enabled })
     p.remote.setEnabled(enabled)
     this.publish()
+  }
+
+  obsidianState(p = this.profile) {
+    const info = inspectVault(p.obsidianVaultPath || '')
+    return {
+      enabled: !!(p.obsidianEnabled && info.valid),
+      vaultPath: p.obsidianVaultPath || '',
+      vaultName: info.name || '',
+      noteCount: info.noteCount || 0,
+      hasObsidianDir: info.hasObsidianDir || false,
+      valid: info.valid,
+      detectedVaults: detectObsidianVaults(),
+    }
+  }
+
+  async syncObsidianConnector(p = this.profile) {
+    if (!p.token || !secureTransport(p.url) || p.controller.signal.aborted) return
+    const info = inspectVault(p.obsidianVaultPath || '')
+    const enabled = !!(p.obsidianEnabled && info.valid)
+    try {
+      await request(
+        p,
+        '/v1/connectors/device-sync',
+        {
+          id: 'obsidian',
+          name: 'Obsidian',
+          enabled,
+          config: enabled
+            ? { vaultName: info.name, noteCount: info.noteCount }
+            : {},
+        },
+        p.controller.signal,
+      )
+    } catch {
+      /* Backend may be offline or not upgraded yet; will sync on next open or toggle. */
+    }
+  }
+
+  async connectors() {
+    const p = this.profile
+    const obsidian = this.obsidianState(p)
+    if (!p.token) return { items: [], obsidian }
+    const data = await request(p, '/v1/connectors', undefined, p.controller.signal)
+    if (p !== this.profile || p.controller.signal.aborted) throw new Error('连接已更改')
+    return { items: Array.isArray(data.items) ? data.items : [], obsidian }
+  }
+
+  async setObsidianConnector({ enabled, vaultPath, connectionRevision }) {
+    const p = this.profile
+    if (typeof enabled !== 'boolean') throw new Error('Obsidian 连接设置无效')
+    if (connectionRevision !== undefined && p.revision !== connectionRevision)
+      throw new Error('连接已更改，请重新打开连接器设置')
+    const targetPath = typeof vaultPath === 'string' ? vaultPath.trim() : (p.obsidianVaultPath || '')
+    if (enabled) {
+      const info = inspectVault(targetPath)
+      if (!info.valid) throw new Error('请选择有效的 Obsidian Vault 目录')
+      p.obsidianVaultPath = info.path
+      p.obsidianEnabled = true
+    } else {
+      if (typeof vaultPath === 'string') p.obsidianVaultPath = targetPath
+      p.obsidianEnabled = false
+    }
+    this.savePreferences({
+      obsidianEnabled: p.obsidianEnabled,
+      obsidianVaultPath: p.obsidianVaultPath,
+    })
+    if (p.remote) {
+      p.remote.setExtraTools(
+        p.obsidianEnabled ? ['obsidian'] : [],
+        p.obsidianEnabled
+          ? { obsidian: (call) => runObsidianTool(p.obsidianVaultPath, call.arguments) }
+          : {},
+      )
+    }
+    await this.syncObsidianConnector(p)
+    this.publish()
+    return this.obsidianState(p)
+  }
+
+  async addMcpConnector(payload) {
+    const p = this.profile
+    if (!p.token) throw new Error('请先连接终端')
+    if (payload?.credentials && !secureTransport(p.url))
+      throw new Error('保存连接器凭据需要 HTTPS 或本机连接')
+    const data = await request(p, '/v1/connectors/mcp', payload, p.controller.signal)
+    if (p !== this.profile || p.controller.signal.aborted) throw new Error('连接已更改')
+    return data
+  }
+
+  async saveConnectorCredentials({ id, values, connectionId, connectionLabel }) {
+    const p = this.profile
+    if (!p.token) throw new Error('请先连接终端')
+    if (!secureTransport(p.url)) throw new Error('保存连接器凭据需要 HTTPS 或本机连接')
+    const body = {
+      values,
+      ...(connectionId ? { connection_id: connectionId } : {}),
+      ...(connectionLabel ? { connection_label: connectionLabel } : {}),
+    }
+    const data = await request(
+      p,
+      '/v1/connectors/' + encodeURIComponent(id) + '/credentials',
+      body,
+      p.controller.signal,
+    )
+    if (p !== this.profile || p.controller.signal.aborted) throw new Error('连接已更改')
+    return data
+  }
+
+  async testConnector(id) {
+    const p = this.profile
+    if (!p.token) throw new Error('请先连接终端')
+    const data = await request(
+      p,
+      '/v1/connectors/' + encodeURIComponent(id) + '/test',
+      {},
+      p.controller.signal,
+    )
+    if (p !== this.profile || p.controller.signal.aborted) throw new Error('连接已更改')
+    return data
+  }
+
+  async deleteConnector(id) {
+    const p = this.profile
+    if (!p.token) throw new Error('请先连接终端')
+    const timeout = AbortSignal.timeout(8000)
+    const response = await fetchResponse(
+      p,
+      '/v1/connectors/' + encodeURIComponent(id),
+      {
+        method: 'DELETE',
+        headers: {},
+        signal: AbortSignal.any([timeout, p.controller.signal]),
+      },
+    )
+    if (p !== this.profile || p.controller.signal.aborted) throw new Error('连接已更改')
+    return response.json()
   }
 
   setCollection(enabled) {
