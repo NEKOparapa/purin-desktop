@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('wintermute', {
   loadEarlier: () => ipcRenderer.invoke('agent:loadEarlier'),
   schedule: (options) => ipcRenderer.invoke('agent:schedule', options),
   memoryTree: () => ipcRenderer.invoke('agent:memoryTree'),
+  memorySchedule: (options) => ipcRenderer.invoke('agent:memorySchedule', options),
   memoryFile: (path) => ipcRenderer.invoke('agent:memoryFile', path),
   recordItems: (options) => ipcRenderer.invoke('agent:recordItems', options),
   recordContent: (options) => ipcRenderer.invoke('agent:recordContent', options),

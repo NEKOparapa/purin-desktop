@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Activity, Cable, KeyRound, Palette, Plug } from 'lucide-react'
+import { Activity, Cable, CalendarClock, KeyRound, Palette, Plug } from 'lucide-react'
 import {
   readBrowserAppearance,
   setBrowserAppearance,
@@ -9,12 +9,14 @@ import {
 import { Button } from '@/components/ui/button'
 import { ApiKeySettings } from '@/components/api-key-settings'
 import { ConnectorSettings } from '@/components/connector-settings'
+import { MemoryScheduleSettings } from '@/components/memory-schedule-settings'
 import { DialogContent, DialogTitle } from '@/components/ui/dialog'
 
 const sections = [
   { id: 'connection', label: '连接', icon: Cable },
   { id: 'connectors', label: '连接器', icon: Plug },
   { id: 'keys', label: '接口密钥', icon: KeyRound },
+  { id: 'memory', label: '记忆整理', icon: CalendarClock },
   { id: 'appearance', label: '外观', icon: Palette },
   { id: 'collection', label: '信息采集', icon: Activity },
 ] as const
@@ -166,6 +168,13 @@ export function AgentSettings({
               state.connectionRevision,
               state.configured,
             ])}
+            configured={state.configured}
+            revision={state.connectionRevision}
+          />
+        )}
+        {tab === 'memory' && (
+          <MemoryScheduleSettings
+            key={state.connectionRevision}
             configured={state.configured}
             revision={state.connectionRevision}
           />

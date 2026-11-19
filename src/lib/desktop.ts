@@ -28,6 +28,13 @@ export interface MemoryFile {
   title?: string
   summary?: string
 }
+export interface MemorySchedule {
+  interval_days: number
+  local_time: string
+  timezone: string
+  next_run_at: string
+}
+
 export interface MemoryDocument {
   path: string
   content: string
@@ -433,6 +440,7 @@ declare global {
       deleteConnector(id: string): Promise<{ deleted: boolean; id: string }>
       schedule(range: ScheduleRange): Promise<ResultsPage<ScheduleEntry>>
       memoryTree(): Promise<MemoryFile[]>
+      memorySchedule(options?: { interval_days: number; local_time: string; connectionRevision: number }): Promise<MemorySchedule>
       memoryFile(path: string): Promise<MemoryDocument>
       recordItems(options?: { cursor?: string; recordType?: RecordType }): Promise<ResultsPage<ImportedRecord>>
       recordContent(options: { id: string; offset?: number }): Promise<RecordContent>

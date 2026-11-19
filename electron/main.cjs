@@ -144,6 +144,7 @@ function start() {
     loadEarlier: 'loadEarlier',
     schedule: 'schedule',
     memoryTree: 'memoryTree',
+    memorySchedule: 'memorySchedule',
     memoryFile: 'memoryFile',
     recordItems: 'recordItems',
     recordContent: 'recordContent',

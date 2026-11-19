@@ -419,11 +419,11 @@ class DesktopAgent {
     this.capture()
   }
 
-  async requestMemory(route, validate) {
+  async requestMemory(route, validate, body) {
     const p = this.profile
     if (!p.token) throw new Error('请先连接设备')
     try {
-      const doc = await request(p, route, undefined, p.controller.signal)
+      const doc = await request(p, route, body, p.controller.signal)
       if (p !== this.profile || p.controller.signal.aborted) throw new Error('连接已更改')
       return validate(doc)
     } catch (error) {
@@ -435,6 +435,21 @@ class DesktopAgent {
       if (error instanceof SyntaxError) throw new Error('后端返回的记忆数据格式无效')
       throw error
     }
+  }
+
+  memorySchedule(options) {
+    let body
+    if (options !== undefined) {
+      if (this.profile.revision !== options.connectionRevision) throw new Error('连接已更改')
+      body = { interval_days: options.interval_days, local_time: options.local_time }
+    }
+    return this.requestMemory('/v1/memory/schedule', plan => {
+      if (!Number.isInteger(plan?.interval_days) || typeof plan.local_time !== 'string' ||
+        typeof plan.timezone !== 'string' || typeof plan.next_run_at !== 'string' ||
+        !Number.isFinite(Date.parse(plan.next_run_at)))
+        throw new Error('后端返回的整理计划格式无效')
+      return plan
+    }, body)
   }
 
   memoryTree() {
