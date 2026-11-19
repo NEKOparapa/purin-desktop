@@ -7,18 +7,20 @@ import { HistoryConnection } from './history-viewport'
 import { PerceptionBrowser } from './perception-browser'
 import { MergedTimeline } from './merged-timeline'
 import { OriginalDisclosure } from './compression-browser'
-import { UserProfile } from './user-profile'
+import { ArchiveRecords } from './archive-records'
+import { RecordTimeline } from './record-timeline'
 import { TerminalToolHistory } from './terminal-tool-history'
 import './memory-browser.css'
 
-const views: { id: HistoryView | 'profile' | 'terminal-tools'; label: string }[] = [
+const views: { id: HistoryView | 'archives' | 'record' | 'terminal-tools'; label: string }[] = [
   { id: 'chat', label: '对话历史' },
   { id: 'conversation', label: '交流层' },
   { id: 'notification', label: '通知层' },
   { id: 'perception', label: '感知层' },
   { id: 'slice', label: '切片层' },
+  { id: 'record', label: '记录层' },
   { id: 'timeline', label: '合并线' },
-  { id: 'profile', label: '用户档案' },
+  { id: 'archives', label: '档案记录' },
   { id: 'terminal-tools', label: '终端调用' },
 ]
 const dateFormat = new Intl.DateTimeFormat('zh-CN', { dateStyle: 'long' })
@@ -360,8 +362,10 @@ export function MemoryBrowser({
           ))}
         </div>
         {connected ? (
-          view.id === 'profile' ? (
-            <UserProfile key={connectionKey} />
+          view.id === 'archives' ? (
+            <ArchiveRecords key={connectionKey} />
+          ) : view.id === 'record' ? (
+            <RecordTimeline key={connectionKey} />
           ) : view.id === 'terminal-tools' ? (
             <TerminalToolHistory key={connectionKey} />
           ) : (
@@ -371,8 +375,8 @@ export function MemoryBrowser({
           <div className="history-empty">
             <Plug size={22} aria-hidden="true" />
             <p>
-              {view.id === 'profile'
-                ? '连接后可查看用户档案'
+              {view.id === 'archives'
+                ? '连接后可浏览档案记录'
                 : '连接后可浏览后端历史记录'}
             </p>
             <button onClick={settings}>连接设置</button>

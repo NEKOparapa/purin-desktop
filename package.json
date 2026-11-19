@@ -7,6 +7,7 @@
     "dev": "concurrently -k \"vite\" \"wait-on http://127.0.0.1:5173 && electron .\"",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
+    "test": "node --test electron/*.test.cjs",
     "preview": "vite preview",
     "dev:web": "vite",
     "start": "electron . --preview",
@@ -21,6 +22,8 @@
     "radix-ui": "^1.8.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.7.0"
   },
   "devDependencies": {

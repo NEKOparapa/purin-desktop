@@ -5,6 +5,7 @@ directories:
 files:
   - dist/**/*
   - electron/**/*
+  - '!electron/**/*.test.cjs'
   - package.json
 asar: true
 win:

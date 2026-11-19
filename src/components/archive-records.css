@@ -1,0 +1,110 @@
+.archive-tools { flex-wrap: wrap; gap: 10px; }
+.archive-count { margin-left: auto; color: var(--muted); font-size: 12px; }
+.archive-layout {
+  display: grid;
+  grid-template-columns: minmax(190px, 27%) minmax(0, 1fr);
+  align-items: start;
+  gap: 28px;
+  padding-bottom: 24px;
+}
+.archive-files {
+  position: sticky;
+  top: 0;
+  max-height: 65vh;
+  overflow: auto;
+  min-width: 0;
+  padding: 12px 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--grouped);
+}
+.archive-directory-label { padding: 0 8px 10px; color: var(--muted); font-size: 12px; font-weight: 600; }
+.archive-files ul { list-style: none; padding: 0; margin: 0; }
+.archive-files ul ul { padding-left: 12px; }
+.archive-files summary, .archive-files button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  border-radius: 6px;
+  padding: 7px 8px;
+  text-align: left;
+  font-size: 12px;
+  cursor: pointer;
+}
+.archive-files summary { list-style: none; color: var(--muted); font-weight: 550; }
+.archive-files summary::before { content: '›'; display: block; width: 6px; flex: none; }
+.archive-files details[open] > summary::before { transform: rotate(90deg); }
+.archive-files summary::-webkit-details-marker { display: none; }
+.archive-files summary:hover, .archive-files button:hover { background: var(--hover); }
+.archive-files button[aria-current='page'] { background: var(--active); color: var(--primary); }
+.archive-files svg { flex: none; }
+.archive-files span { min-width: 0; overflow-wrap: anywhere; }
+.archive-files small { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
+.archive-document { min-width: 0; }
+.archive-document-heading { display: flex; justify-content: space-between; align-items: start; flex-wrap: wrap; gap: 12px; border-bottom: 1px solid var(--line); padding: 4px 0 18px; margin-bottom: 20px; }
+.archive-document-heading > div:first-child { min-width: 0; }
+.archive-document-heading h2 { font-size: 20px; font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; }
+.archive-path { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; margin-top: 4px; }
+.archive-meta { font-size: 12px; color: var(--muted); line-height: 1.7; margin-top: 6px; }
+.archive-mode { display: flex; flex: none; padding: 3px; border-radius: 7px; background: var(--grouped); }
+.archive-mode button { padding: 4px 10px; border-radius: 5px; font-size: 12px; color: var(--muted); }
+.archive-mode button[aria-pressed='true'] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px var(--line); }
+.archive-source, .archive-markdown pre, .record-original pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.8;
+  padding: 14px;
+  border-radius: 8px;
+  background: var(--grouped);
+  tab-size: 2;
+}
+.archive-markdown { font-size: 14px; line-height: 1.85; overflow-wrap: anywhere; }
+.archive-markdown h1, .archive-markdown h2, .archive-markdown h3,
+.archive-markdown h4, .archive-markdown h5, .archive-markdown h6 { font-weight: 600; margin: 24px 0 8px; line-height: 1.5; }
+.archive-markdown h1 { font-size: 23px; }
+.archive-markdown h2 { font-size: 19px; }
+.archive-markdown h3 { font-size: 16px; }
+.archive-markdown > :first-child { margin-top: 0; }
+.archive-markdown p, .archive-markdown pre, .archive-markdown blockquote, .archive-markdown table { margin: 12px 0; }
+.archive-markdown ul, .archive-markdown ol { padding-left: 1.6em; margin: 8px 0; }
+.archive-markdown ul { list-style: disc; }
+.archive-markdown ol { list-style: decimal; }
+.archive-markdown li + li { margin-top: 3px; }
+.archive-markdown .contains-task-list { list-style: none; padding-left: .3em; }
+.archive-markdown input { margin-right: 6px; }
+.archive-markdown blockquote { padding-left: 14px; border-left: 3px solid var(--line); color: var(--muted); }
+.archive-markdown code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .9em; background: var(--grouped); padding: 2px 4px; border-radius: 4px; }
+.archive-markdown pre code { padding: 0; background: none; }
+.archive-markdown table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
+.archive-markdown th, .archive-markdown td { border: 1px solid var(--line); padding: 7px 12px; min-width: 70px; }
+.archive-markdown th { background: var(--grouped); text-align: left; }
+.archive-markdown hr { border: 0; border-top: 1px solid var(--line); margin: 24px 0; }
+.archive-frontmatter { color: var(--muted); font-size: 12px; }
+.archive-frontmatter summary { cursor: pointer; }
+.archive-link { color: var(--primary); text-decoration: underline; text-underline-offset: 3px; text-align: left; }
+.archive-reference small, .archive-image { color: var(--muted); }
+.archive-more { padding-top: 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--muted); }
+.record-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-top: 20px; }
+.record-hint { font-size: 12px; color: var(--muted); line-height: 1.7; }
+.record-heading label { font-size: 12px; color: var(--muted); display: flex; gap: 8px; align-items: center; }
+.record-heading select { background: var(--grouped); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
+.record-state { color: var(--muted); font-size: 11px; padding: 3px 7px; background: var(--grouped); border-radius: 5px; white-space: nowrap; }
+.record-state[data-status='failed'] { color: var(--error); }
+.record-state[data-status='processed'] { color: var(--online); }
+.record-details dl { display: grid; gap: 5px; }
+.record-details dl > div { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 12px; }
+.record-details dt { color: var(--muted); }
+.record-details dd { margin: 0; overflow-wrap: anywhere; }
+.record-original h3 { font-size: 13px; font-weight: 600; margin: 16px 0 8px; }
+.record-original pre { background: var(--surface); max-height: 500px; overflow: auto; }
+.record-content-actions { display: flex; align-items: center; gap: 14px; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: 8px; }
+.record-content-actions button { color: var(--primary); }
+@container (max-width: 650px) {
+  .archive-layout { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .archive-files { position: static; max-height: 230px; }
+  .archive-count { margin-left: 0; }
+  .archive-tools .history-refresh { margin-left: auto; }
+}

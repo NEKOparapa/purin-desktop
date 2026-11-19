@@ -13,7 +13,7 @@ const { saveHistoryFile, readHistoryImage } = require('./history.cjs')
 const { ChatHistory } = require('./chat-history.cjs')
 const { availableTools, secureTransport, TerminalToolClient } = require('./terminal-tools.cjs')
 const { notificationPath, pageRoute, validatePage, deliverPending } = require('./notifications.cjs')
-const initialProfileMarkdown = require('./profile-template.json')
+const memory = require('./memory.cjs')
 const captureVersion = 6
 
 function read(file, fallback) {
@@ -379,31 +379,38 @@ class DesktopAgent {
     this.capture()
   }
 
-  async userProfile() {
+  async requestMemory(route, validate) {
     const p = this.profile
     if (!p.token) throw new Error('请先连接终端')
     try {
-      const doc = await request(p, '/v1/profile', undefined, p.controller.signal)
+      const doc = await request(p, route, undefined, p.controller.signal)
       if (p !== this.profile || p.controller.signal.aborted) throw new Error('连接已更改')
-      if (!['ready', 'empty', 'unconfigured'].includes(doc?.status) ||
-          typeof doc.markdown !== 'string' ||
-          (doc.effective !== undefined && typeof doc.effective !== 'boolean') ||
-          (doc.effective === true && doc.status !== 'ready') ||
-          (doc.status === 'ready' && !doc.markdown.trim()))
-        throw new Error('后端返回的用户档案格式无效')
-      if (doc.status === 'unconfigured')
-        return { status: 'unconfigured', markdown: '', effective: false }
-      if (doc.status === 'empty') {
-        const markdown = doc.markdown.trim() ? doc.markdown : initialProfileMarkdown
-        return { status: 'empty', markdown, effective: false }
-      }
-      return { status: 'ready', markdown: doc.markdown, effective: doc.effective ?? null }
+      return validate(doc)
     } catch (error) {
       if (p !== this.profile || p.controller.signal.aborted) throw new Error('连接已更改')
-      if (error.status === 404) throw new Error('当前后端不支持用户档案，请更新后端。')
-      if (error instanceof SyntaxError) throw new Error('后端返回的用户档案格式无效')
+      if (error.code === 'memory_unconfigured') throw new Error('后端尚未配置当前用户的记忆目录。')
+      if (error.code === 'memory_file_not_found') throw new Error('档案已不存在，请刷新目录。')
+      if (error.code === 'record_storage_unavailable') throw new Error('暂时无法读取记录原文，请稍后重试。')
+      if (error.status === 404) throw new Error('记录不存在或后端接口不可用，请刷新并确认后端已更新。')
+      if (error instanceof SyntaxError) throw new Error('后端返回的记忆数据格式无效')
       throw error
     }
+  }
+
+  memoryTree() {
+    return this.requestMemory('/v1/memory/tree', memory.validateTree)
+  }
+
+  memoryFile(path) {
+    return this.requestMemory(memory.fileRoute(path), doc => memory.validateFile(doc, path))
+  }
+
+  recordItems(options) {
+    return this.requestMemory(memory.recordsRoute(options), memory.validateRecords)
+  }
+
+  recordContent(options) {
+    return this.requestMemory(memory.contentRoute(options), page => memory.validateContent(page, options))
   }
 
   apiKeys() {

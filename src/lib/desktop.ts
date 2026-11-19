@@ -21,10 +21,38 @@ export function setBrowserAppearance(mode: Appearance) {
 export type HistoryView =
   'conversation' | 'notification' | 'perception' | 'slice' | 'chat' | 'timeline'
 
-export interface UserProfileDocument {
-  status: 'ready' | 'empty' | 'unconfigured'
-  markdown: string
-  effective: boolean | null
+export interface MemoryFile {
+  path: string
+  bytes: number
+  updated_at: string
+  title?: string
+  summary?: string
+}
+export interface MemoryDocument {
+  path: string
+  content: string
+  content_sha256: string
+}
+export type RecordType = 'sms' | 'call_log' | 'contacts' | 'notion' | 'recording_list' | 'document'
+export interface ImportedRecord {
+  id: string
+  record_type: RecordType
+  source_name: string
+  batch_id: string
+  occurred_at: string
+  received_at: string
+  title: string | null
+  external_id: string | null
+  status: 'pending' | 'filtered' | 'processing' | 'processed' | 'failed'
+  attempts: number
+  error: string | null
+}
+export interface RecordContent {
+  text: string
+  format: 'text' | 'json'
+  offset: number
+  next_offset: number | null
+  total_chars: number
 }
 
 export interface DeviceFile { id: string; name: string; size_bytes: number; content_type: string }
@@ -285,7 +313,10 @@ declare global {
       apiKeys(): Promise<ApiKeySetting[]>
       updateApiKey(update: ApiKeyUpdate): Promise<ApiKeySetting[]>
       schedule(range: ScheduleRange): Promise<ResultsPage<ScheduleEntry>>
-      userProfile(): Promise<UserProfileDocument>
+      memoryTree(): Promise<MemoryFile[]>
+      memoryFile(path: string): Promise<MemoryDocument>
+      recordItems(options?: { cursor?: string; recordType?: RecordType }): Promise<ResultsPage<ImportedRecord>>
+      recordContent(options: { id: string; offset?: number }): Promise<RecordContent>
       terminalToolHistory(cursor?: string): Promise<ResultsPage<TerminalToolCall>>
       history(options: {
         view: HistoryView
