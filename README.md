@@ -51,6 +51,8 @@ Wintermute 的 Windows/macOS 桌面终端，使用 Electron、React 和 TypeScri
 
 ## 开发
 
+后端模块拆分不改变桌面端使用的 HTTP 协议。档案记录通过 `/v1/memory/tree` 列出文件，再通过 `/v1/memory/file?path=...` 读取正文的 `content` 字段。
+
 使用 Node.js **24 LTS** 和 npm，依赖由 `package-lock.json` 锁定。
 
 ```sh

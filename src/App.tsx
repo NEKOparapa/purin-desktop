@@ -21,6 +21,7 @@ import { ScheduleCalendar } from '@/components/schedule-calendar'
 import type { NoticeAlert } from '@/lib/desktop'
 import { MemoryBrowser } from '@/components/memory-browser'
 import { QuestionCards } from '@/components/question-cards'
+import { ChatJumpBar } from '@/components/chat-jump-bar'
 import { useAgent, type AgentState, type ChatMessage } from '@/lib/desktop'
 import './App.css'
 
@@ -119,13 +120,59 @@ function Chat({
   const [issue, setIssue] = useState('')
   const [loadingEarlier, setLoadingEarlier] = useState(false)
   const [atBottom, setAtBottom] = useState(true)
+  const [activeJumpId, setActiveJumpId] = useState<string | null>(null)
   const follow = useRef(true)
   const log = useRef<HTMLDivElement>(null)
+  const messageNodes = useRef(new Map<string, HTMLDivElement>())
   const input = useRef<HTMLTextAreaElement>(null)
   const promptSelected = useRef(false)
   const lastMessageId = agent.messages.at(-1)?.id
   const hasMessages = agent.messages.length > 0 || agent.hasEarlier
+  const userMessages = agent.messages.filter((m) => m.role === 'user')
+  const jumpItems = userMessages.length > 0 ? userMessages : agent.messages
+  const effectiveActiveJumpId = atBottom
+    ? (jumpItems.at(-1)?.id ?? null)
+    : (activeJumpId ?? jumpItems.at(-1)?.id ?? null)
   const olderAnchor = useRef<{ height: number; position: number } | null>(null)
+
+  function syncActiveJump(el: HTMLDivElement, isBottom: boolean) {
+    if (!jumpItems.length) return
+    if (isBottom) {
+      setActiveJumpId(jumpItems.at(-1)?.id ?? null)
+      return
+    }
+    const scrollerTop = el.getBoundingClientRect().top
+    const pivot = scrollerTop + Math.min(180, el.clientHeight * 0.32)
+    let current = jumpItems[0].id
+    for (const item of jumpItems) {
+      const node = messageNodes.current.get(item.id)
+      if (!node) continue
+      if (node.getBoundingClientRect().top <= pivot) {
+        current = item.id
+      } else {
+        break
+      }
+    }
+    setActiveJumpId(current)
+  }
+
+  function jumpToMessage(id: string) {
+    const el = log.current
+    const node = messageNodes.current.get(id)
+    if (!el || !node) return
+    const isLast = id === jumpItems.at(-1)?.id
+    follow.current = isLast
+    setAtBottom(isLast)
+    setActiveJumpId(id)
+    const offset =
+      node.getBoundingClientRect().top -
+      el.getBoundingClientRect().top +
+      el.scrollTop
+    el.scrollTo({
+      top: Math.max(0, offset - 96),
+      behavior: 'smooth',
+    })
+  }
   async function earlier() {
     if (loadingEarlier || !log.current || !window.wintermute) return
     olderAnchor.current = {
@@ -188,54 +235,69 @@ function Chat({
         <span className="chat-name">Wintermute</span>
       </header>
       {hasMessages ? (
-        <div
-          className="message-scroller"
-          ref={log}
-          role="log"
-          aria-label="消息记录"
-          onScroll={() => {
-            const el = log.current
-            if (!el) return
-            follow.current =
-              el.scrollHeight - el.scrollTop - el.clientHeight < 64
-            setAtBottom(follow.current)
-          }}
-        >
-          <div className="thread">
-            {agent.hasEarlier && (
-              <button
-                className="earlier-messages"
-                disabled={loadingEarlier}
-                onClick={earlier}
-              >
-                {loadingEarlier ? '正在读取…' : '加载更早消息'}
-              </button>
-            )}
-            {agent.messages.map((message, i) => {
-              const at = Date.parse(message.at ?? '')
-              const previous = Date.parse(agent.messages[i - 1]?.at ?? '')
-              const showTime =
-                Number.isFinite(at) &&
-                (!Number.isFinite(previous) ||
-                  Math.abs(at - previous) >= 5 * 60_000 ||
-                  new Date(at).toDateString() !==
-                    new Date(previous).toDateString())
-              return (
-                <div key={message.id}>
-                  {showTime && (
-                    <time
-                      className="chat-timestamp"
-                      dateTime={message.at ?? undefined}
-                    >
-                      {timestamp.format(at)}
-                    </time>
-                  )}
-                  <Message message={message} at={at} retry={retry} />
-                </div>
-              )
-            })}
+        <>
+          <ChatJumpBar
+            items={jumpItems}
+            activeId={effectiveActiveJumpId}
+            onJump={jumpToMessage}
+          />
+          <div
+            className="message-scroller"
+            ref={log}
+            role="log"
+            aria-label="消息记录"
+            onScroll={() => {
+              const el = log.current
+              if (!el) return
+              const isBottom =
+                el.scrollHeight - el.scrollTop - el.clientHeight < 64
+              follow.current = isBottom
+              setAtBottom(isBottom)
+              syncActiveJump(el, isBottom)
+            }}
+          >
+            <div className="thread">
+              {agent.hasEarlier && (
+                <button
+                  className="earlier-messages"
+                  disabled={loadingEarlier}
+                  onClick={earlier}
+                >
+                  {loadingEarlier ? '正在读取…' : '加载更早消息'}
+                </button>
+              )}
+              {agent.messages.map((message, i) => {
+                const at = Date.parse(message.at ?? '')
+                const previous = Date.parse(agent.messages[i - 1]?.at ?? '')
+                const showTime =
+                  Number.isFinite(at) &&
+                  (!Number.isFinite(previous) ||
+                    Math.abs(at - previous) >= 5 * 60_000 ||
+                    new Date(at).toDateString() !==
+                      new Date(previous).toDateString())
+                return (
+                  <div
+                    key={message.id}
+                    ref={(node) => {
+                      if (node) messageNodes.current.set(message.id, node)
+                      else messageNodes.current.delete(message.id)
+                    }}
+                  >
+                    {showTime && (
+                      <time
+                        className="chat-timestamp"
+                        dateTime={message.at ?? undefined}
+                      >
+                        {timestamp.format(at)}
+                      </time>
+                    )}
+                    <Message message={message} at={at} retry={retry} />
+                  </div>
+                )
+              })}
+            </div>
           </div>
-        </div>
+        </>
       ) : (
         <div className="welcome">
           <h1>有什么想聊的？</h1>
