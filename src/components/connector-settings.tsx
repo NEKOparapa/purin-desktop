@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import type {
   ConnectorItem,
+  MacConnectorState,
   ObsidianConnectorState,
 } from '@/lib/desktop'
 import './connector-settings.css'
@@ -29,12 +30,14 @@ export function ConnectorSettings({
   remoteCommandsEnabled,
   remoteTools,
   remoteIssue,
+  macConnectors = [],
 }: {
   configured: boolean
   revision?: number
   remoteCommandsEnabled?: boolean
   remoteTools?: string[]
   remoteIssue?: string
+  macConnectors?: MacConnectorState[]
 }) {
   const api = window.wintermute
   const [attempt, setAttempt] = useState(0)
@@ -140,6 +143,20 @@ export function ConnectorSettings({
       reload()
     } catch (err) {
       setError(cleanError(err, '切换本机命令行连接器失败'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function toggleMacConnector(app: MacConnectorState) {
+    if (!api?.setMacConnector || revision === undefined || busy) return
+    setBusy(true)
+    setError('')
+    setFeedback('')
+    try {
+      await api.setMacConnector({ id: app.id, enabled: !app.enabled, connectionRevision: revision })
+    } catch (err) {
+      setError(cleanError(err, '更新 Mac 连接器失败'))
     } finally {
       setBusy(false)
     }
@@ -423,7 +440,34 @@ export function ConnectorSettings({
         </article>
       </section>
 
-      {/* Remote MCP Connectors */}
+      {api.setMacConnector && macConnectors.length > 0 && (
+        <section className="connector-group" aria-label="Mac 应用连接器">
+          <div className="connector-group-header"><h4>Mac 应用</h4></div>
+          {macConnectors.map(app => (
+            <article className="connector-card" key={app.id}>
+              <div className="connector-card-head">
+                <div>
+                  <div className="connector-card-title">
+                    <h5>{app.name}</h5>
+                    <Badge variant={app.enabled ? 'default' : 'secondary'}>{app.enabled ? '已启用' : '未启用'}</Badge>
+                  </div>
+                  <p className="connector-card-meta">{app.description}</p>
+                </div>
+                <Button type="button" size="sm" variant={app.enabled ? 'ghost' : 'outline'}
+                  aria-label={`${app.enabled ? '关闭' : '启用'}${app.name}`}
+                  disabled={busy || !configured || revision === undefined}
+                  onClick={() => void toggleMacConnector(app)}>
+                  {app.enabled ? '关闭' : '启用'}
+                </Button>
+              </div>
+            </article>
+          ))}
+          <p className="settings-note">{configured
+            ? '首次调用访达、备忘录或音乐时，macOS 可能会请求自动化权限。'
+            : '连接设备后可启用 Mac 应用。'}</p>
+        </section>
+      )}
+
       <section className="connector-group" aria-label="远程 MCP 连接器">
         <div className="connector-group-header">
           <h4>远程 MCP 服务器</h4>

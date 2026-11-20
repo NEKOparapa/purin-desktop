@@ -315,6 +315,7 @@ export interface AgentState {
   remoteTools: string[]
   remoteIssue: string
   obsidianEnabled?: boolean
+  macConnectors?: MacConnectorState[]
   obsidianVaultPath?: string
   screenshotsEnabled: boolean
   screenshotIssue: string
@@ -356,6 +357,12 @@ export interface DetectedObsidianVault {
   name: string
   path: string
   open: boolean
+}
+export interface MacConnectorState {
+  id: string
+  name: string
+  description: string
+  enabled: boolean
 }
 export interface ObsidianConnectorState {
   enabled: boolean
@@ -422,6 +429,11 @@ declare global {
       apiKeys(): Promise<ApiKeySetting[]>
       updateApiKey(update: ApiKeyUpdate): Promise<ApiKeySetting[]>
       connectors(): Promise<ConnectorsSnapshot>
+      setMacConnector?(options: {
+        id: string
+        enabled: boolean
+        connectionRevision: number
+      }): Promise<void>
       connectorHistory(cursor?: string): Promise<ResultsPage<ConnectorCall>>
       chooseObsidianVault(): Promise<string | null>
       setObsidianConnector(options: {

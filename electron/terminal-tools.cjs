@@ -139,7 +139,7 @@ class TerminalToolClient {
   setEnabled(enabled) {
     this.enabled = enabled
     this.epoch++
-    if (!enabled) this.running?.abort()
+    if (!enabled && this.tools.includes(this.runningTool)) this.running?.abort()
     this.journal.withdraw = this.activeTools().length === 0
     this.save(this.file, this.journal)
     void this.poll()
@@ -148,6 +148,7 @@ class TerminalToolClient {
   setExtraTools(extraTools, handlers = {}) {
     this.extraTools = [...extraTools]
     this.handlers = { ...handlers }
+    if (this.runningTool && !this.activeTools().includes(this.runningTool)) this.running?.abort()
     this.epoch++
     this.journal.withdraw = this.activeTools().length === 0
     this.save(this.file, this.journal)
@@ -184,14 +185,14 @@ class TerminalToolClient {
         // the completed result below; it never starts the same command again.
         this.save(this.file, this.journal)
         this.running = new AbortController()
+        this.runningTool = call.tool
         let result
-        const handler = this.handlers?.[call.tool]
-        if (handler) {
-          result = this.epoch !== epoch
-            ? failed('连接器状态已变更')
-            : await handler(call, this.running.signal)
+        if (this.epoch !== epoch || !advertised.includes(call.tool)) {
+          result = failed('本机未启用该工具或连接器状态已变更')
+        } else if (Object.hasOwn(this.handlers, call.tool)) {
+          result = await this.handlers[call.tool](call, this.running.signal)
         } else {
-          result = !this.enabled || this.epoch !== epoch
+          result = !this.enabled
             ? failed('远程执行已关闭')
             : await runCommand(call, this.running.signal)
         }
@@ -205,6 +206,7 @@ class TerminalToolClient {
       this.updateIssue(error.message || '设备工具连接失败')
     } finally {
       this.running = null
+      this.runningTool = null
       this.busy = false
     }
   }

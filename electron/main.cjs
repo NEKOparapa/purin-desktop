@@ -153,6 +153,7 @@ function start() {
     connectors: 'connectors',
     connectorHistory: 'connectorHistory',
     setObsidianConnector: 'setObsidianConnector',
+    ...(process.platform === 'darwin' && { setMacConnector: 'setMacConnector' }),
     addMcpConnector: 'addMcpConnector',
     saveConnectorCredentials: 'saveConnectorCredentials',
     testConnector: 'testConnector',

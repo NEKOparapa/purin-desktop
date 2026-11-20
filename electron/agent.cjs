@@ -14,9 +14,18 @@ const { saveHistoryFile, readHistoryImage } = require('./history.cjs')
 const { ChatHistory } = require('./chat-history.cjs')
 const { availableTools, secureTransport, TerminalToolClient } = require('./terminal-tools.cjs')
 const { detectObsidianVaults, inspectVault, runObsidianTool } = require('./obsidian-connector.cjs')
+const { macConnectors, runMacTool } = require('./mac-connectors.cjs')
 const { notificationPath, pageRoute, validatePage, deliverPending } = require('./notifications.cjs')
 const memory = require('./memory.cjs')
 const captureVersion = 6
+
+function connectorHandlers(p) {
+  const handlers = Object.fromEntries(
+    macConnectors(p.macConnectorIds).filter(row => row.enabled).map(({ id }) => [id, runMacTool]),
+  )
+  if (p.obsidianEnabled) handlers.obsidian = call => runObsidianTool(p.obsidianVaultPath, call.arguments)
+  return handlers
+}
 
 function read(file, fallback) {
   try {
@@ -243,22 +252,24 @@ class DesktopAgent {
     const obsidianInfo = inspectVault(p.obsidianVaultPath || '')
     p.obsidianVaultPath = obsidianInfo.valid ? obsidianInfo.path : (p.obsidianVaultPath || '')
     p.obsidianEnabled = !!(p.obsidianEnabled && obsidianInfo.valid)
+    const macApps = macConnectors(p.macConnectorIds)
+    p.macConnectorIds = macApps.filter(app => app.enabled).map(app => app.id)
+    p.macSyncPending = new Set(macApps.map(app => app.id))
     if (token && secureTransport(p.url)) {
       const scope = createHash('sha256').update(JSON.stringify([p.url, p.deviceId, token])).digest('hex')
+      const handlers = connectorHandlers(p)
       p.remote = new TerminalToolClient({
         file: path.join(this.dir, 'remote-tools-' + scope + '.json'),
         enabled: p.remoteCommandsEnabled === true,
         tools: availableTools(),
-        extraTools: p.obsidianEnabled ? ['obsidian'] : [],
-        handlers: p.obsidianEnabled
-          ? { obsidian: (call) => runObsidianTool(p.obsidianVaultPath, call.arguments) }
-          : {},
+        extraTools: Object.keys(handlers), handlers,
         post: (route, body) => request(p, route, body, p.controller.signal),
         read, save, onIssue: () => this.publish(),
       })
       void p.remote.poll()
       void this.syncObsidianConnector(p)
       void this.syncTerminalConnector(p)
+      void this.syncMacConnectors(p)
     }
     // Old clients persisted a complete local transcript. Keep outstanding sends
     // so they can still be retried; committed history is loaded from the server.
@@ -327,6 +338,7 @@ class DesktopAgent {
       remoteCommandsEnabled: !!p.remote?.enabled,
       remoteTools: p.remote?.tools || [],
       remoteIssue: p.remote?.issue || '',
+      macConnectors: macConnectors(p.macConnectorIds),
       obsidianEnabled: !!p.obsidianEnabled,
       obsidianVaultPath: p.obsidianVaultPath || '',
       collecting: !!p.collecting,
@@ -402,6 +414,7 @@ class DesktopAgent {
       captureVersion,
       secret,
       remoteCommandsEnabled: same && old.token === credential && !!old.remote?.enabled,
+      macConnectorIds: same && old.token === credential ? old.macConnectorIds : [],
       collecting: same && !!old.collecting,
       appearance: this.appearance,
     }
@@ -809,6 +822,7 @@ class DesktopAgent {
   settings(p = this.profile) {
     return {
       remoteCommandsEnabled: !!p.remote?.enabled,
+      macConnectorIds: p.macConnectorIds,
       obsidianEnabled: !!p.obsidianEnabled,
       obsidianVaultPath: p.obsidianVaultPath || '',
       url: p.url,
@@ -924,6 +938,48 @@ class DesktopAgent {
     return { items: Array.isArray(data.items) ? data.items : [], obsidian }
   }
 
+  setMacConnector({ id, enabled, connectionRevision } = {}) {
+    const p = this.profile
+    if (!macConnectors().some(app => app.id === id)) throw new Error('本机没有此 Mac 连接器')
+    if (p.revision !== connectionRevision || typeof enabled !== 'boolean') throw new Error('连接已更改，请重新打开连接器设置')
+    if (!p.remote) throw new Error('Mac 连接器需要通过 HTTPS 或本机地址连接设备')
+    const ids = p.macConnectorIds.filter(value => value !== id)
+    if (enabled) ids.push(id)
+    this.savePreferences({ macConnectorIds: ids })
+    p.macConnectorIds = ids
+    const handlers = connectorHandlers(p)
+    p.remote.setExtraTools(Object.keys(handlers), handlers)
+    p.macSyncPending.add(id)
+    p.macSyncRetryAt = 0
+    void this.syncMacConnectors(p)
+    this.publish()
+  }
+
+  async syncMacConnectors(p) {
+    if (!p.remote || !p.macSyncPending.size || p.macSyncing || Date.now() < (p.macSyncRetryAt || 0)) return
+    p.macSyncing = true
+    try {
+      // Serialize updates so an older enable cannot arrive after a newer disable.
+      while (p.macSyncPending.size && !p.controller.signal.aborted) {
+        const id = p.macSyncPending.values().next().value
+        const app = macConnectors(p.macConnectorIds).find(row => row.id === id)
+        p.macSyncPending.delete(id)
+        if (!app) continue
+        try {
+          await request(p, '/v1/connectors/device-sync', {
+            id, name: app.name, enabled: app.enabled, config: app.enabled ? { tools: [id] } : {},
+          }, p.controller.signal)
+        } catch {
+          p.macSyncPending.add(id)
+          p.macSyncRetryAt = Date.now() + 15000
+          return
+        }
+      }
+    } finally {
+      p.macSyncing = false
+    }
+  }
+
   async setObsidianConnector({ enabled, vaultPath, connectionRevision }) {
     const p = this.profile
     if (typeof enabled !== 'boolean') throw new Error('Obsidian 连接设置无效')
@@ -944,12 +1000,8 @@ class DesktopAgent {
       obsidianVaultPath: p.obsidianVaultPath,
     })
     if (p.remote) {
-      p.remote.setExtraTools(
-        p.obsidianEnabled ? ['obsidian'] : [],
-        p.obsidianEnabled
-          ? { obsidian: (call) => runObsidianTool(p.obsidianVaultPath, call.arguments) }
-          : {},
-      )
+      const handlers = connectorHandlers(p)
+      p.remote.setExtraTools(Object.keys(handlers), handlers)
     }
     await this.syncObsidianConnector(p)
     this.publish()
@@ -1283,6 +1335,7 @@ class DesktopAgent {
   async sync() {
     const p = this.profile
     if (!p.token || p.syncing || p.controller.signal.aborted) return
+    void this.syncMacConnectors(p)
     void this.flushMaterials(p)
     p.syncing = true
     const api = (route, body) => request(p, route, body, p.controller.signal)

@@ -19,6 +19,9 @@ contextBridge.exposeInMainWorld('wintermute', {
   connectorHistory: (cursor) => ipcRenderer.invoke('agent:connectorHistory', cursor),
   chooseObsidianVault: () => ipcRenderer.invoke('agent:chooseObsidianVault'),
   setObsidianConnector: (options) => ipcRenderer.invoke('agent:setObsidianConnector', options),
+  ...(process.platform === 'darwin' && {
+    setMacConnector: options => ipcRenderer.invoke('agent:setMacConnector', options),
+  }),
   addMcpConnector: (payload) => ipcRenderer.invoke('agent:addMcpConnector', payload),
   saveConnectorCredentials: (payload) => ipcRenderer.invoke('agent:saveConnectorCredentials', payload),
   testConnector: (id) => ipcRenderer.invoke('agent:testConnector', id),

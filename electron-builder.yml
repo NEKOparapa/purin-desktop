@@ -20,7 +20,7 @@ mac:
   entitlementsInherit: packaging/entitlements.mac.plist
   extendInfo:
     NSMicrophoneUsageDescription: 在对话中录入语音并转写为可编辑的文字。
-    NSAppleEventsUsageDescription: 读取已同意分享的前台窗口标题。
+    NSAppleEventsUsageDescription: 按你的设置读取前台窗口标题、查看访达选中项、创建备忘录或控制音乐播放。
   category: public.app-category.productivity
   target:
     - target: dmg

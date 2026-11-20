@@ -156,6 +156,7 @@ export function AgentSettings({
             configured={state.configured}
             revision={state.connectionRevision}
             remoteCommandsEnabled={state.remoteCommandsEnabled}
+            macConnectors={state.macConnectors}
             remoteTools={state.remoteTools}
             remoteIssue={state.remoteIssue}
           />
