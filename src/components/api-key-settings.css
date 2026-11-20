@@ -1,45 +1,86 @@
 .api-key-settings {
+  display: grid;
+  gap: 10px;
   min-width: 0;
 }
-.api-key-settings > header,
-.api-key-summary {
+.api-key-settings > header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
-.api-key-settings > header {
-  align-items: flex-start;
-  margin-bottom: 10px;
+.api-key-settings h4 {
+  font-size: 16px;
+  font-weight: 600;
+}
+.api-key-list {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.api-key-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) 4rem;
+  gap: 8px 12px;
+  align-items: center;
+}
+.api-key-labels {
+  padding: 8px 14px;
+  border-radius: 11px 11px 0 0;
+  background: var(--grouped);
+  color: var(--muted);
+  font-size: 12px;
 }
 .api-key-row {
   border-top: 1px solid var(--line);
-  padding: 12px 0;
+  padding: 12px 14px;
 }
-.api-key-summary h3 {
+.api-key-summary h5 {
   font-size: 14px;
   font-weight: 550;
   overflow-wrap: anywhere;
 }
+.api-key-summary > button { justify-self: end; }
 .api-key-summary p {
   font-size: 12px;
   color: var(--muted);
   margin-top: 3px;
 }
-.api-key-summary code {
-  margin-left: 0.4em;
+.api-key-credential {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
 }
-.api-key-row .connection-form {
-  margin-top: 10px;
+.api-key-credential p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  align-items: baseline;
+}
+.api-key-credential [data-configured='true'] { color: var(--online); }
+.api-key-row .api-key-editor {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--grouped);
   grid-template-columns: minmax(0, 1fr) auto;
-  column-gap: 4px;
+  gap: 8px;
   align-items: end;
 }
-.api-key-row .connection-actions,
+.api-key-editor .connection-actions,
+.api-key-shared-note,
 .api-key-validation {
   grid-column: 1 / -1;
 }
-.api-key-row .api-key-visibility {
+.api-key-editor .api-key-visibility {
   align-self: end;
   margin-bottom: 3px;
+}
+.api-key-feedback { margin-top: 8px; }
+@media (max-width: 660px) {
+  .api-key-labels { display: none; }
+  .api-key-row:first-child { border-top: 0; }
+  .api-key-summary { grid-template-columns: minmax(0, 1fr) auto; }
+  .api-key-credential { grid-column: 1; }
+  .api-key-summary > button { grid-column: 2; grid-row: 1 / span 2; }
 }

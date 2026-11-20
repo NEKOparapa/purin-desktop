@@ -17,7 +17,7 @@ function platform(t, value) {
 const ids = ['mac_finder_selection', 'mac_notes_create', 'mac_music_control', 'mac_speak']
 const signal = new AbortController().signal
 
-for (const system of ['win32', 'linux', 'darwin']) {
+for (const [system, expectedPlatform] of [['win32', 'windows'], ['linux', null], ['darwin', 'macos']]) {
   test(system + ' filters saved preferences, synchronization and active tools', async t => {
     platform(t, system)
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wintermute-connectors-'))
@@ -27,21 +27,30 @@ for (const system of ['win32', 'linux', 'darwin']) {
     })
     t.after(() => { agent.close(); fs.rmSync(dir, { recursive: true, force: true }) })
     t.mock.method(globalThis, 'fetch', async (url, options) => {
-      sent.push({ route: new URL(url).pathname, body: JSON.parse(options.body || '{}') })
+      sent.push({ route: new URL(url).pathname, body: JSON.parse(options.body || '{}'), headers: options.headers })
       return Response.json({ call: null })
     })
-    agent.open({ url: 'http://localhost', deviceId: 'desktop', macConnectorIds: [ids[0], 'ios_contacts'] }, 'token')
+    agent.open({
+      url: 'http://localhost', deviceId: 'desktop', deviceName: 'Desktop',
+      installation: 'desktop-installation', macConnectorIds: [ids[0], 'ios_contacts'],
+    }, 'token')
+    assert.equal(agent.state().devicePlatform, expectedPlatform)
+    await agent.connectors()
+    const connectorRequest = sent.find(row => row.route === '/v1/connectors')
+    assert.equal(connectorRequest.headers['X-Device-Platform'] ?? null, expectedPlatform)
     const p = agent.profile
     const toggle = (id, enabled) => agent.setMacConnector({ id, enabled, connectionRevision: p.revision })
+    const apps = agent.state().macConnectors
+    assert.deepEqual(apps.map(app => app.id), ids)
     if (system !== 'darwin') {
-      assert.deepEqual(agent.state().macConnectors, [])
+      assert.ok(apps.every(app => !app.enabled))
       assert.deepEqual(p.remote.activeTools(), [])
       assert.throws(() => toggle(ids[0], true))
       assert.equal((await runMacTool({ tool: ids[0], arguments: {}, timeout_seconds: 5 }, signal)).status, 'failed')
       assert.ok(!sent.some(({ body }) => ids.includes(body.id)))
       return
     }
-    assert.deepEqual(agent.state().macConnectors.map(app => app.id), ids)
+    assert.deepEqual(apps.filter(app => app.enabled).map(app => app.id), [ids[0]])
     assert.deepEqual(p.remote.activeTools(), [ids[0]])
     assert.throws(() => toggle('ios_contacts', true))
     assert.throws(() => agent.setMacConnector({ id: ids[1], enabled: true, connectionRevision: 0 }))

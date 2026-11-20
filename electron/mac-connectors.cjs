@@ -11,9 +11,11 @@ const catalog = [
   { id: 'mac_speak', name: '系统朗读', description: '用 Mac 的系统语音朗读一段短文本。' },
 ]
 
-function macConnectors(enabled = []) {
-  if (process.platform !== 'darwin') return []
-  return catalog.map(row => ({ ...row, enabled: Array.isArray(enabled) && enabled.includes(row.id) }))
+function macConnectors(enabled = [], { includeUnsupported = false } = {}) {
+  const supported = process.platform === 'darwin'
+  if (!supported && !includeUnsupported) return []
+  const enabledIds = supported && Array.isArray(enabled) ? enabled : []
+  return catalog.map(row => ({ ...row, enabled: enabledIds.includes(row.id) }))
 }
 
 function validText(value, max) {

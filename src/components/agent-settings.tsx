@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Activity, Cable, CalendarClock, KeyRound, Palette, Plug } from 'lucide-react'
+import { Activity, Cable, CalendarClock, Palette, Plug } from 'lucide-react'
 import {
   readBrowserAppearance,
   setBrowserAppearance,
@@ -15,12 +15,13 @@ import { DialogContent, DialogTitle } from '@/components/ui/dialog'
 const sections = [
   { id: 'connection', label: '连接', icon: Cable },
   { id: 'connectors', label: '连接器', icon: Plug },
-  { id: 'keys', label: '接口密钥', icon: KeyRound },
   { id: 'memory', label: '记忆整理', icon: CalendarClock },
   { id: 'appearance', label: '外观', icon: Palette },
   { id: 'collection', label: '信息采集', icon: Activity },
 ] as const
 type Section = (typeof sections)[number]['id']
+
+const devicePlatformLabels = { windows: 'Windows', macos: 'macOS' }
 
 export function AgentSettings({
   state,
@@ -44,11 +45,9 @@ export function AgentSettings({
     message: string
   }>()
   const api = window.wintermute
-  const connectionStatus = state.issue
-    ? '连接异常'
-    : state.configured
-      ? '已连接'
-      : '未连接'
+  const connectionState = state.issue ? 'error' : state.configured ? 'connected' : 'disconnected'
+  const connectionStatus = { error: '连接异常', connected: '已连接', disconnected: '未连接' }
+  const showConnection = state.configured && !editing
   const failedMaterial = state.failedMaterial
 
   function editConnection() {
@@ -161,18 +160,6 @@ export function AgentSettings({
             remoteIssue={state.remoteIssue}
           />
         )}
-        {tab === 'keys' && (
-          <ApiKeySettings
-            key={JSON.stringify([
-              state.url,
-              state.deviceId,
-              state.connectionRevision,
-              state.configured,
-            ])}
-            configured={state.configured}
-            revision={state.connectionRevision}
-          />
-        )}
         {tab === 'memory' && (
           <MemoryScheduleSettings
             key={state.connectionRevision}
@@ -211,119 +198,139 @@ export function AgentSettings({
         )}
         {tab === 'connection' && (
           <>
-            <dl className="settings-facts">
-              <div>
-                <dt>连接状态</dt>
-                <dd>{connectionStatus}</dd>
-              </div>
-              {state.configured && !editing && (
-                <>
+            <section className="connection-card" aria-labelledby="device-connection-title">
+              <header className="connection-card-header">
+                <div className="connection-card-heading">
+                  <h4 id="device-connection-title">设备连接</h4>
+                  <span className="connection-status" data-state={connectionState}>
+                    {connectionStatus[connectionState]}
+                  </span>
+                </div>
+                {showConnection && (
+                  <Button type="button" size="sm" variant="outline" onClick={editConnection}>
+                    编辑连接
+                  </Button>
+                )}
+              </header>
+              <dl className="connection-details">
+                {showConnection && (
                   <div>
                     <dt>设备名称</dt>
                     <dd>{state.deviceName}</dd>
                   </div>
-                  <div>
-                    <dt>设备 ID</dt>
-                    <dd>{state.deviceId}</dd>
-                  </div>
-                  <div>
-                    <dt>服务地址</dt>
-                    <dd>{state.url}</dd>
-                  </div>
-                </>
-              )}
-            </dl>
-            {state.issue && (
-              <p className="issue" role="status">
-                {state.issue}
-              </p>
-            )}
-            {state.configured && !editing ? (
-              <div className="connection-actions">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={editConnection}
-                >
-                  编辑连接
-                </Button>
-              </div>
-            ) : (
-              <form
-                className="connection-form"
-                onSubmit={(e) => {
-                  e.preventDefault()
-                  void save()
-                }}
-              >
-                <p className="settings-note">
-                  {api
-                    ? '将本机设备 ID 登记到后端，然后填写对应令牌。'
-                    : '请打开 Wintermute 桌面应用以连接服务。'}
-                </p>
-                <label>
-                  服务地址
-                  <input
-                    type="url"
-                    value={url}
-                    onChange={(e) => setUrl(e.target.value)}
-                    required
-                  />
-                </label>
-                <label>
-                  设备名称
-                  <input value={deviceName} onChange={(e) => setDeviceName(e.target.value)} maxLength={80} required />
-                </label>
-                <label>
-                  设备 ID
-                  <input
-                    value={deviceId}
-                    onChange={(e) => setDeviceId(e.target.value)}
-                    required
-                  />
-                </label>
-                <label>
-                  设备令牌
-                  <input
-                    type="password"
-                    autoComplete="off"
-                    value={token}
-                    onChange={(e) => setToken(e.target.value)}
-                    placeholder={
-                      state.configured &&
-                      state.url === url.trim() &&
-                      state.deviceId === deviceId.trim()
-                        ? '留空以使用当前连接令牌'
-                        : 'Bearer token'
-                    }
-                  />
-                </label>
-                <div className="connection-actions">
-                  <Button type="submit" disabled={!api || busy}>
-                    {busy ? '正在验证…' : '验证并保存'}
-                  </Button>
-                  {editing && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      disabled={busy}
-                      onClick={() => {
-                        setToken('')
-                        setFeedback('')
-                        setEditing(false)
-                      }}
-                    >
-                      取消
-                    </Button>
-                  )}
+                )}
+                <div>
+                  <dt>设备平台</dt>
+                  <dd>
+                    {state.devicePlatform ? devicePlatformLabels[state.devicePlatform] : '未知'}
+                  </dd>
                 </div>
-              </form>
-            )}
-            {feedback && (
-              <p className="settings-note" role="status">
-                {feedback}
-              </p>
-            )}
+                {showConnection && (
+                  <>
+                    <div>
+                      <dt>服务地址</dt>
+                      <dd>{state.url}</dd>
+                    </div>
+                    <div>
+                      <dt>设备 ID</dt>
+                      <dd>{state.deviceId}</dd>
+                    </div>
+                  </>
+                )}
+              </dl>
+              {state.issue && (
+                <p className="issue" role="status">
+                  {state.issue}
+                </p>
+              )}
+              {!showConnection && (
+                <form
+                  className="connection-form connection-editor"
+                  onSubmit={(e) => {
+                    e.preventDefault()
+                    void save()
+                  }}
+                >
+                  <p className="settings-note connection-full-width">
+                    {api
+                      ? '将本机设备 ID 登记到后端，然后填写对应令牌。'
+                      : '请打开 Wintermute 桌面应用以连接服务。'}
+                  </p>
+                  <label className="connection-full-width">
+                    服务地址
+                    <input
+                      type="url"
+                      value={url}
+                      onChange={(e) => setUrl(e.target.value)}
+                      required
+                    />
+                  </label>
+                  <label>
+                    设备名称
+                    <input
+                      value={deviceName}
+                      onChange={(e) => setDeviceName(e.target.value)}
+                      maxLength={80}
+                      required
+                    />
+                  </label>
+                  <label>
+                    设备 ID
+                    <input
+                      value={deviceId}
+                      onChange={(e) => setDeviceId(e.target.value)}
+                      required
+                    />
+                  </label>
+                  <label className="connection-full-width">
+                    设备令牌
+                    <input
+                      type="password"
+                      autoComplete="off"
+                      value={token}
+                      onChange={(e) => setToken(e.target.value)}
+                      placeholder={
+                        state.configured &&
+                        state.url === url.trim() &&
+                        state.deviceId === deviceId.trim()
+                          ? '留空以使用当前连接令牌'
+                          : 'Bearer token'
+                      }
+                    />
+                  </label>
+                  <div className="connection-actions connection-full-width">
+                    <Button type="submit" disabled={!api || busy}>
+                      {busy ? '正在验证…' : '验证并保存'}
+                    </Button>
+                    {editing && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        disabled={busy}
+                        onClick={() => {
+                          setToken('')
+                          setFeedback('')
+                          setEditing(false)
+                        }}
+                      >
+                        取消
+                      </Button>
+                    )}
+                  </div>
+                </form>
+              )}
+              {feedback && (
+                <p className="settings-note" role="status">
+                  {feedback}
+                </p>
+              )}
+            </section>
+            <ApiKeySettings
+              key={JSON.stringify([state.url, state.deviceId, state.connectionRevision])}
+              configured={state.configured}
+              editingConnection={editing}
+              revision={state.connectionRevision}
+            />
           </>
         )}
         {tab === 'collection' && (
@@ -391,53 +398,40 @@ export function AgentSettings({
                 <p role="status">{state.screenshotIssue}</p>
               )}
             </div>
-            {(state.lastMaterial ||
-              state.pendingMaterials > 0 ||
-              state.materialIssue) && (
+            {(state.pendingMaterials > 0 || state.materialIssue) && (
               <dl className="settings-facts" aria-label="材料传送状态">
-                {state.lastMaterial && (
-                  <div>
-                    <dt>最近送达的材料</dt>
-                    <dd>
-                      {state.lastMaterial.label} ·{' '}
-                      {new Date(state.lastMaterial.at).toLocaleString('zh-CN')}
-                    </dd>
-                  </div>
-                )}
-                {(state.pendingMaterials > 0 || state.materialIssue) && (
-                  <div>
-                    <dt>等待上传</dt>
-                    <dd>
-                      {state.pendingMaterials} 项 {state.materialIssue}
-                      {failedMaterial && (
-                        <div className="setting-actions">
-                          <button
-                            type="button"
-                            disabled={!api || busy}
-                            onClick={() =>
-                              void change(() =>
-                                api?.manageFailed(failedMaterial, true),
-                              )
-                            }
-                          >
-                            重试此项
-                          </button>
-                          <button
-                            type="button"
-                            disabled={!api || busy}
-                            onClick={() =>
-                              void change(() =>
-                                api?.manageFailed(failedMaterial, false),
-                              )
-                            }
-                          >
-                            丢弃此项
-                          </button>
-                        </div>
-                      )}
-                    </dd>
-                  </div>
-                )}
+                <div>
+                  <dt>等待上传</dt>
+                  <dd>
+                    {state.pendingMaterials} 项 {state.materialIssue}
+                    {failedMaterial && (
+                      <div className="setting-actions">
+                        <button
+                          type="button"
+                          disabled={!api || busy}
+                          onClick={() =>
+                            void change(() =>
+                              api?.manageFailed(failedMaterial, true),
+                            )
+                          }
+                        >
+                          重试此项
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!api || busy}
+                          onClick={() =>
+                            void change(() =>
+                              api?.manageFailed(failedMaterial, false),
+                            )
+                          }
+                        >
+                          丢弃此项
+                        </button>
+                      </div>
+                    )}
+                  </dd>
+                </div>
               </dl>
             )}
           </>

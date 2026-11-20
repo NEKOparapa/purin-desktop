@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { FolderOpen, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { FolderOpen, Plus, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import type {
@@ -99,6 +99,7 @@ export function ConnectorSettings({
   }
 
   const mcpItems = items.filter((item) => item.tool_type === 'mcp')
+  const canSetMacConnector = Boolean(api.setMacConnector)
 
   async function connectObsidianPath(vaultPath: string) {
     if (!api?.setObsidianConnector || busy) return
@@ -222,7 +223,7 @@ export function ConnectorSettings({
       }
       reload()
     } catch (err) {
-      setError(cleanError(err, '添加远程 MCP 服务器失败'))
+      setError(cleanError(err, '添加 MCP 服务失败'))
     } finally {
       setBusy(false)
     }
@@ -315,10 +316,9 @@ export function ConnectorSettings({
         </p>
       )}
 
-      {/* Desktop App Connectors: Obsidian */}
-      <section className="connector-group" aria-label="桌面应用连接器">
+      <section className="connector-group" aria-label="Windows 连接器">
         <div className="connector-group-header">
-          <h4>桌面应用</h4>
+          <h4>Windows</h4>
         </div>
         <article className="connector-card">
           <div className="connector-card-head">
@@ -440,64 +440,67 @@ export function ConnectorSettings({
         </article>
       </section>
 
-      {api.setMacConnector && macConnectors.length > 0 && (
+      {macConnectors.length > 0 && (
         <section className="connector-group" aria-label="Mac 应用连接器">
-          <div className="connector-group-header"><h4>Mac 应用</h4></div>
-          {macConnectors.map(app => (
+          <div className="connector-group-header">
+            <h4>Mac 应用</h4>
+          </div>
+          {!canSetMacConnector && (
+            <p className="settings-note">这些连接器仅可在 macOS 上启用。</p>
+          )}
+          {macConnectors.map((app) => (
             <article className="connector-card" key={app.id}>
               <div className="connector-card-head">
                 <div>
                   <div className="connector-card-title">
                     <h5>{app.name}</h5>
-                    <Badge variant={app.enabled ? 'default' : 'secondary'}>{app.enabled ? '已启用' : '未启用'}</Badge>
+                    <Badge variant={app.enabled ? 'default' : 'secondary'}>
+                      {app.enabled ? '已启用' : '未启用'}
+                    </Badge>
                   </div>
                   <p className="connector-card-meta">{app.description}</p>
                 </div>
-                <Button type="button" size="sm" variant={app.enabled ? 'ghost' : 'outline'}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={app.enabled ? 'ghost' : 'outline'}
                   aria-label={`${app.enabled ? '关闭' : '启用'}${app.name}`}
-                  disabled={busy || !configured || revision === undefined}
-                  onClick={() => void toggleMacConnector(app)}>
+                  disabled={!canSetMacConnector || busy || !configured || revision === undefined}
+                  onClick={() => void toggleMacConnector(app)}
+                >
                   {app.enabled ? '关闭' : '启用'}
                 </Button>
               </div>
             </article>
           ))}
-          <p className="settings-note">{configured
-            ? '首次调用访达、备忘录或音乐时，macOS 可能会请求自动化权限。'
-            : '连接设备后可启用 Mac 应用。'}</p>
+          {canSetMacConnector && (
+            <p className="settings-note">
+              {configured
+                ? '首次调用访达、备忘录或音乐时，macOS 可能会请求自动化权限。'
+                : '连接设备后可启用 Mac 应用。'}
+            </p>
+          )}
         </section>
       )}
 
-      <section className="connector-group" aria-label="远程 MCP 连接器">
+      <section className="connector-group" aria-label="MCP 服务">
         <div className="connector-group-header">
-          <h4>远程 MCP 服务器</h4>
-          <div className="connector-header-actions">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={loading || busy || !configured}
-              onClick={() => reload()}
-            >
-              <RefreshCw size={14} aria-hidden="true" />
-              刷新
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={busy || !configured}
-              onClick={() => setAddingMcp((prev) => !prev)}
-            >
-              <Plus size={14} aria-hidden="true" />
-              添加 MCP
-            </Button>
-          </div>
+          <h4>MCP 服务</h4>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={busy || !configured}
+            onClick={() => setAddingMcp((prev) => !prev)}
+          >
+            <Plus size={14} aria-hidden="true" />
+            添加 MCP
+          </Button>
         </div>
 
         {!configured && (
           <p className="settings-note">
-            请先在「连接」中连接后端服务，再添加或管理远程 MCP 连接器。
+            请先在「连接」中连接后端服务，再添加或管理 MCP 服务。
           </p>
         )}
 
@@ -612,9 +615,9 @@ export function ConnectorSettings({
           </form>
         )}
 
-        {configured && !loading && mcpItems.length === 0 && !addingMcp && (
+        {configured && !loading && !error && mcpItems.length === 0 && !addingMcp && (
           <p className="settings-note">
-            暂未添加远程 MCP 服务器。点击右上角「添加 MCP」，或直接在对话中让 Agent 使用 ConnectorSetup 登记。
+            暂未添加 MCP 服务。点击右上角「添加 MCP」，或直接在对话中让 Agent 使用 ConnectorSetup 登记。
           </p>
         )}
 

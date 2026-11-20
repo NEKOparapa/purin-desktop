@@ -48,7 +48,7 @@ function chatRow(row, layer = row.layer) {
       layer === 'notification' && { notificationReply: true }),
     ...(row.message_id && {
       messageId: row.message_id,
-      deviceId: row.device_id,
+      deviceId: row.device_id ?? row.terminal_id,
     }),
   }
 }

@@ -196,22 +196,18 @@
   justify-content: center;
   gap: 8px;
 }
-.prompt-list button,
-.chat-prompt-menu [role='menuitem'] {
+.prompt-list button {
   display: flex;
   gap: 8px;
   align-items: center;
   font-size: 13px;
   padding: 7px 12px;
-}
-.prompt-list button {
   border-radius: 20px;
   background: var(--grouped);
   color: var(--muted);
 }
 .prompt-list button:hover,
-.prompt-trigger:hover,
-.chat-prompt-menu [data-highlighted] {
+.composer-tool:hover {
   background: var(--hover);
   color: var(--ink);
 }
@@ -287,6 +283,7 @@
   margin: 8px 0 clamp(10px, 1.8vh, 20px);
 }
 .composer {
+  --composer-content-inset: 12px;
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
@@ -299,7 +296,14 @@
 .composer:focus-within { border-color: var(--control-line); }
 .composer.dragging { outline: 2px dashed var(--primary); outline-offset: 3px; }
 .composer-spacer { flex: 1; }
-.draft-images { order: -2; width: 100%; display: flex; flex-wrap: wrap; gap: 8px; padding: 4px 5px 0; }
+.draft-images {
+  order: -2;
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px var(--composer-content-inset) 0;
+}
 .draft-attachment { position: relative; display: flex; align-items: center; gap: 7px; max-width: min(220px, 100%); min-width: 0; align-self: flex-end; padding: 9px 31px 9px 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
 .draft-attachment > svg { flex: none; color: var(--muted); }
 .draft-attachment span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 13px; }
@@ -320,7 +324,7 @@
   field-sizing: content;
   min-height: 40px;
   max-height: 150px;
-  padding: 8px 9px;
+  padding: 8px var(--composer-content-inset);
   border: 0;
   color: var(--ink);
   outline: 0;
@@ -330,7 +334,7 @@
   line-height: 24px;
 }
 .composer textarea::placeholder { color: var(--quiet); }
-.prompt-trigger,
+.composer-tool,
 .send-button,
 .jump-to-end {
   flex: none;
@@ -340,22 +344,11 @@
   height: 34px;
   border-radius: 50%;
 }
-.prompt-trigger { color: var(--muted); }
+.composer-tool { color: var(--muted); }
 .composer button { width: 40px; height: 40px; }
-.prompt-trigger + textarea { padding-left: 0; }
 .send-button { background: var(--outgoing-bubble); color: white; }
 .send-button:enabled:hover { background: var(--primary); color: var(--on-primary); }
 .send-button:disabled { background: var(--line); color: var(--quiet); }
-.chat-prompt-menu {
-  z-index: 20;
-  min-width: 140px;
-  padding: 4px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  box-shadow: 0 6px 20px var(--popover-shadow);
-}
-.chat-prompt-menu [role='menuitem'] { border-radius: 8px; cursor: pointer; }
 .jump-to-end {
   position: absolute;
   left: 50%;
@@ -536,6 +529,62 @@
 .connection-form {
   display: grid;
   gap: 12px;
+}
+.connection-card {
+  display: grid;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--grouped);
+}
+.connection-card-header,
+.connection-card-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.connection-card-header { justify-content: space-between; }
+.connection-card-header h4 {
+  font-size: 15px;
+  font-weight: 600;
+}
+.connection-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--quiet);
+  font-size: 12px;
+}
+.connection-status::before {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  content: '';
+}
+.connection-status[data-state='connected'] { color: var(--online); }
+.connection-status[data-state='error'] { color: var(--error); }
+.connection-details,
+.connection-editor {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 20px;
+}
+.connection-details { margin: 0; }
+.connection-details dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+.connection-details dd {
+  margin: 3px 0 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+.connection-full-width { grid-column: 1 / -1; }
+@media (max-width: 660px) {
+  .connection-editor { grid-template-columns: minmax(0, 1fr); }
 }
 .settings-facts {
   display: grid;

@@ -138,7 +138,7 @@ export function VoiceInput({
       )}
       <button
         type="button"
-        className="prompt-trigger"
+        className="composer-tool"
         title={label}
         aria-label={label}
         disabled={phase === 'requesting' || phase === 'transcribing'}

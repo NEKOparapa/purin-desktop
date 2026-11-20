@@ -12,11 +12,9 @@ import {
   MessageCircle,
   Mic,
   NotebookPen,
-  Plus,
   SlidersHorizontal,
   X,
 } from 'lucide-react'
-import { DropdownMenu } from 'radix-ui'
 import { Dialog } from '@/components/ui/dialog'
 import { DesktopLayout } from '@/components/desktop-layout'
 import { AgentSettings } from '@/components/agent-settings'
@@ -159,7 +157,6 @@ function Chat({
   const log = useRef<HTMLDivElement>(null)
   const messageNodes = useRef(new Map<string, HTMLDivElement>())
   const input = useRef<HTMLTextAreaElement>(null)
-  const promptSelected = useRef(false)
   const lastMessageId = agent.messages.at(-1)?.id
   const hasMessages = agent.messages.length > 0 || agent.hasEarlier
   const userMessages = agent.messages.filter((m) => m.role === 'user')
@@ -495,7 +492,7 @@ function Chat({
             }}
           />
           <button
-            className="prompt-trigger"
+            className="composer-tool"
             type="button"
             aria-label="添加附件"
             title="添加文件或图片，也可拖入输入框"
@@ -506,48 +503,6 @@ function Chat({
           >
             <Paperclip size={19} />
           </button>
-          {hasMessages && (
-            <DropdownMenu.Root>
-              <DropdownMenu.Trigger asChild>
-                <button
-                  type="button"
-                  className="prompt-trigger"
-                  aria-label="快捷提问"
-                  title="快捷提问"
-                >
-                  <Plus size={19} />
-                </button>
-              </DropdownMenu.Trigger>
-              <DropdownMenu.Portal>
-                <DropdownMenu.Content
-                  className="chat-prompt-menu"
-                  side="top"
-                  align="start"
-                  sideOffset={10}
-                  onCloseAutoFocus={(event) => {
-                    if (promptSelected.current) {
-                      event.preventDefault()
-                      promptSelected.current = false
-                      input.current?.focus()
-                    }
-                  }}
-                >
-                  {prompts.map((p) => (
-                    <DropdownMenu.Item
-                      key={p.label}
-                      onSelect={() => {
-                        promptSelected.current = true
-                        setDraft(p.text)
-                      }}
-                    >
-                      <p.icon size={15} aria-hidden="true" />
-                      {p.label}
-                    </DropdownMenu.Item>
-                  ))}
-                </DropdownMenu.Content>
-              </DropdownMenu.Portal>
-            </DropdownMenu.Root>
-          )}
           <textarea
             aria-label="对话消息"
             aria-description="回车换行，Ctrl + Enter 或 ⌘ + Enter 发送"
@@ -591,7 +546,7 @@ function Chat({
           ) : (
             <button
               type="button"
-              className="prompt-trigger"
+              className="composer-tool"
               title="连接设备后使用语音输入"
               aria-label="语音输入"
               onClick={settings}

@@ -18,6 +18,7 @@ const { macConnectors, runMacTool } = require('./mac-connectors.cjs')
 const { notificationPath, pageRoute, validatePage, deliverPending } = require('./notifications.cjs')
 const memory = require('./memory.cjs')
 const captureVersion = 6
+const devicePlatforms = { win32: 'windows', darwin: 'macos' }
 
 function connectorHandlers(p) {
   const handlers = Object.fromEntries(
@@ -25,6 +26,19 @@ function connectorHandlers(p) {
   )
   if (p.obsidianEnabled) handlers.obsidian = call => runObsidianTool(p.obsidianVaultPath, call.arguments)
   return handlers
+}
+
+function matchChatOutbox(p) {
+  const matches = new Map()
+  if (!p.history.outbox.length) return matches
+  const byMessage = new Map(p.history.outbox.map(row => [row.id, row]))
+  const byEvent = new Map(p.history.outbox.filter(row => row.eventId).map(row => [row.eventId, row]))
+  for (const row of p.chat.messages) {
+    if (row.role !== 'user') continue
+    const local = byEvent.get(row.id) ?? (row.deviceId === p.deviceId ? byMessage.get(row.messageId) : undefined)
+    if (local) matches.set(row.id, local)
+  }
+  return matches
 }
 
 function read(file, fallback) {
@@ -142,6 +156,7 @@ function connection(url, deviceId) {
 }
 
 async function fetchResponse(profile, route, options) {
+  const devicePlatform = devicePlatforms[process.platform]
   const response = await fetch(profile.url + route, {
     ...options,
     redirect: 'error',
@@ -151,6 +166,7 @@ async function fetchResponse(profile, route, options) {
       ...(profile.installation && {
         'X-Device-Instance': profile.installation,
         'X-Device-Name': Buffer.from(profile.deviceName, 'utf8').toString('base64'),
+        ...(devicePlatform && { 'X-Device-Platform': devicePlatform }),
       }),
       ...options.headers,
     },
@@ -332,13 +348,14 @@ class DesktopAgent {
       url: p.url,
       deviceId: p.deviceId,
       deviceName: p.deviceName,
+      devicePlatform: devicePlatforms[process.platform] ?? null,
       connectionRevision: p.revision,
       appearance: this.appearance,
       configured: !!p.token,
       remoteCommandsEnabled: !!p.remote?.enabled,
       remoteTools: p.remote?.tools || [],
       remoteIssue: p.remote?.issue || '',
-      macConnectors: macConnectors(p.macConnectorIds),
+      macConnectors: macConnectors(p.macConnectorIds, { includeUnsupported: true }),
       obsidianEnabled: !!p.obsidianEnabled,
       obsidianVaultPath: p.obsidianVaultPath || '',
       collecting: !!p.collecting,
@@ -359,24 +376,51 @@ class DesktopAgent {
   }
 
   chatMessages(p) {
-    const pending = new Map(p.history.outbox.map(row => [row.id, row]))
-    const byEvent = new Map(p.history.outbox.filter(m => m.eventId).map(m => [m.eventId, m]))
+    const matches = matchChatOutbox(p)
+    const merged = new Set(matches.values())
     const messages = p.chat.messages.map(row => {
       if (row.role !== 'user') return row
-      const local = byEvent.get(row.id) || (row.deviceId === p.deviceId && pending.get(row.messageId))
-      if (!local) return row
-      pending.delete(local.id)
-      return { ...row, id: local.id, status: local.status, error: local.error }
+      const local = matches.get(row.id)
+      if (local) return { ...row, id: local.id, status: local.status, error: local.error }
+      // Keep the same UI key after the matched outbox entry is removed.
+      return row.deviceId === p.deviceId && row.messageId ? { ...row, id: row.messageId } : row
     })
-    return messages.concat([...pending.values()].filter(m => ['queued', 'unsent'].includes(m.status)))
+    const localOnly = p.history.outbox.filter(m => !merged.has(m) && (
+      ['queued', 'unsent'].includes(m.status) ||
+      (m.awaitingHistory ?? ['waiting', 'completed'].includes(m.status))
+    ))
+    return messages.concat(localOnly)
+  }
+
+  async readChat(p, api, more = false) {
+    const changed = await p.chat.read(api, more)
+    if (p !== this.profile || p.controller.signal.aborted) return
+    let outboxChanged = false
+    const merged = new Set(matchChatOutbox(p).values())
+    if (merged.size) {
+      p.history.outbox = p.history.outbox.filter(m => {
+        if (!merged.has(m)) return true
+        // A history row can confirm a send even if its POST receipt was lost.
+        if (m.status === 'completed' || m.status === 'unsent') {
+          outboxChanged = true
+          return false
+        }
+        if (m.awaitingHistory !== false) {
+          m.awaitingHistory = false
+          outboxChanged = true
+        }
+        return true
+      })
+    }
+    if (outboxChanged) this.persist(p)
+    else if (changed || more) this.publish()
   }
 
   async loadEarlier() {
     const p = this.profile
     if (!p.token) return
     const get = route => request(p, route, undefined, p.controller.signal)
-    await p.chat.read(get, true)
-    if (p === this.profile && !p.controller.signal.aborted) this.publish()
+    await this.readChat(p, get, true)
   }
 
   publish() {
@@ -451,18 +495,25 @@ class DesktopAgent {
   }
 
   memorySchedule(options) {
+    const p = this.profile
     let body
     if (options !== undefined) {
-      if (this.profile.revision !== options.connectionRevision) throw new Error('连接已更改')
+      if (p.revision !== options.connectionRevision) throw new Error('连接已更改')
       body = { interval_days: options.interval_days, local_time: options.local_time }
     }
-    return this.requestMemory('/v1/memory/schedule', plan => {
-      if (!Number.isInteger(plan?.interval_days) || typeof plan.local_time !== 'string' ||
-        typeof plan.timezone !== 'string' || typeof plan.next_run_at !== 'string' ||
-        !Number.isFinite(Date.parse(plan.next_run_at)))
-        throw new Error('后端返回的整理计划格式无效')
-      return plan
-    }, body)
+    const result = (p.memorySchedulePending ?? Promise.resolve()).then(() => {
+      if (p !== this.profile || p.controller.signal.aborted) throw new Error('连接已更改')
+      return this.requestMemory('/v1/memory/schedule', plan => {
+        if (!Number.isInteger(plan?.interval_days) || typeof plan.local_time !== 'string' ||
+          typeof plan.timezone !== 'string' || typeof plan.next_run_at !== 'string' ||
+          !Number.isFinite(Date.parse(plan.next_run_at)))
+          throw new Error('后端返回的整理计划格式无效')
+        return plan
+      }, body)
+    })
+    // A reopened settings page reads after any saves queued by the previous one.
+    if (body !== undefined) p.memorySchedulePending = result.then(() => {}, () => {})
+    return result
   }
 
   memoryTree() {
@@ -1356,6 +1407,7 @@ class DesktopAgent {
           m.eventId = receipt.event_id
           m.job = receipt.job_id
           m.status = 'waiting'
+          m.awaitingHistory ??= true
         } catch (error) {
           if (p.controller.signal.aborted) return
           m.status = 'unsent'
@@ -1369,16 +1421,7 @@ class DesktopAgent {
       const results = await Promise.allSettled([
         this.syncDelivery(p, api),
         this.syncQuestions(p, api),
-        p.chat.read(api).then(changed => {
-          if (p.controller.signal.aborted) return
-          // The POST may have reached the server even if its receipt was lost.
-          const accepted = new Set(p.chat.messages.filter(row => row.deviceId === p.deviceId && row.messageId).map(row => row.messageId))
-          const keep = p.history.outbox.filter(m => m.status !== 'unsent' || !accepted.has(m.id))
-          if (keep.length !== p.history.outbox.length) {
-            p.history.outbox = keep
-            this.persist(p)
-          } else if (changed) this.publish()
-        }),
+        this.readChat(p, api),
       ])
       for (const result of results)
         if (result.status === 'rejected') throw result.reason
@@ -1481,7 +1524,7 @@ class DesktopAgent {
     for (const output of inbox.outputs)
       if (output.status !== 'delivered')
         await api('/v1/outputs/' + encodeURIComponent(output.output_id) + '/ack', {})
-    for (const m of p.history.outbox.filter(row => row.status === 'waiting')) {
+    for (const m of p.history.outbox.filter(row => ['waiting', 'completed'].includes(row.status))) {
       let job
       try {
         job = await api('/v1/jobs/' + encodeURIComponent(m.job))
@@ -1489,12 +1532,14 @@ class DesktopAgent {
         if (error.status !== 404) throw error
       }
       if (p.controller.signal.aborted) return
-      if (!job || job.status === 'completed') {
+      if (!p.history.outbox.includes(m)) continue
+      if (!job || (job.status === 'completed' && m.awaitingHistory === false)) {
         p.history.outbox = p.history.outbox.filter(row => row !== m)
         this.persist(p)
-      } else if (job.status === 'failed' || job.status === 'interrupted') {
+      } else if (m.status !== job.status && ['completed', 'failed', 'interrupted'].includes(job.status)) {
         m.status = job.status
         m.eventId ||= job.event_id
+        m.awaitingHistory ??= true
         this.persist(p)
       }
     }

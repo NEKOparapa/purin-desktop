@@ -49,3 +49,45 @@ test('a connection change discards in-flight memory responses', async () => {
     await assert.rejects(pending, /连接已更改/)
   } finally { global.fetch = originalFetch }
 })
+
+test('memory schedule autosaves are applied in order before a new page reads the plan', async t => {
+  const agent = Object.create(DesktopAgent.prototype)
+  agent.profile = {
+    token: 'test', url: 'https://test.invalid', deviceId: 'test', revision: 1,
+    controller: new AbortController(),
+  }
+  const firstStarted = Promise.withResolvers()
+  const finishFirst = Promise.withResolvers()
+  const requests = []
+  let plan = { interval_days: 1, local_time: '03:00', timezone: 'Asia/Shanghai', next_run_at: '2026-11-22T03:00:00+08:00' }
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    assert.equal(new URL(url).pathname, '/v1/memory/schedule')
+    const input = options.method === 'POST' ? JSON.parse(options.body) : null
+    requests.push(input ?? 'read')
+    if (requests.length === 1) {
+      firstStarted.resolve()
+      await finishFirst.promise
+    }
+    if (input) plan = { ...plan, ...input }
+    return Response.json(plan)
+  })
+
+  const firstValues = { interval_days: 12, local_time: '03:00' }
+  const finalValues = { interval_days: 15, local_time: '05:30' }
+  const first = agent.memorySchedule({ ...firstValues, connectionRevision: 1 })
+  await firstStarted.promise
+  const second = agent.memorySchedule({ ...finalValues, connectionRevision: 1 })
+  const reopened = agent.memorySchedule()
+  try {
+    await new Promise(resolve => setImmediate(resolve))
+    assert.deepEqual(requests, [firstValues])
+  } finally {
+    finishFirst.resolve()
+  }
+  const [firstPlan, finalPlan, reopenedPlan] = await Promise.all([first, second, reopened])
+  assert.deepEqual(requests, [firstValues, finalValues, 'read'])
+  assert.equal(firstPlan.interval_days, 12)
+  assert.deepEqual(reopenedPlan, finalPlan)
+  assert.equal(reopenedPlan.interval_days, 15)
+  assert.equal(reopenedPlan.local_time, '05:30')
+})

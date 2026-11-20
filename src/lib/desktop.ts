@@ -305,6 +305,7 @@ export interface ChatMessage {
 }
 export interface AgentState {
   deviceName: string
+  devicePlatform: 'windows' | 'macos' | null
   appearance: Appearance
   url: string
   deviceId: string
@@ -510,6 +511,7 @@ declare global {
 }
 const initial: AgentState = {
   deviceName: '',
+  devicePlatform: null,
   appearance: 'system',
   url: 'http://127.0.0.1:8080',
   deviceId: 'http-desktop',
