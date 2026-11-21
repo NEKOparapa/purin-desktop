@@ -159,7 +159,7 @@ export function DesktopLayout({
               <p className="about-version">桌面版 · {version}</p>
               <DialogDescription>
                 Wintermute 是连接个人 Agent 的桌面客户端。你可以在这里与 Agent
-                对话、回顾记忆，以及查看日程和设备通知。
+                对话、查看日程和设备通知。
               </DialogDescription>
             </DialogContent>
           </Dialog>

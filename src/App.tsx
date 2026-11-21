@@ -4,7 +4,6 @@ import {
   ArrowUp,
   Bell,
   CalendarDays,
-  BookOpen,
   History,
   FileText,
   Paperclip,
@@ -20,7 +19,6 @@ import { DesktopLayout } from '@/components/desktop-layout'
 import { AgentSettings } from '@/components/agent-settings'
 import { ScheduleCalendar } from '@/components/schedule-calendar'
 import type { ChatFileRef, NoticeAlert } from '@/lib/desktop'
-import { MemoryBrowser } from '@/components/memory-browser'
 import { QuestionCards } from '@/components/question-cards'
 import { VoiceInput } from '@/components/voice-input'
 import { Files } from '@/components/history-files'
@@ -37,7 +35,6 @@ import './App.css'
 const pages = [
   { id: 'chat', label: '对话', icon: MessageCircle },
   { id: 'schedule', label: '日程', icon: CalendarDays },
-  { id: 'memory', label: '记忆', icon: BookOpen },
 ] as const
 type Page = (typeof pages)[number]['id']
 const prompts = [
@@ -681,14 +678,6 @@ export default function App() {
               />
             </div>
           </section>
-        )}
-        {page === 'memory' && (
-          <MemoryBrowser
-            connectionRevision={agent.connectionRevision}
-            connectionKey={JSON.stringify([agent.url, agent.deviceId, agent.connectionRevision, connectionVersion])}
-            connected={agent.configured}
-            settings={showSettings}
-          />
         )}
       </main>
       {notice && <aside className="notice-banner" aria-label="新通知" role="status">

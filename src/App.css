@@ -363,12 +363,6 @@
   color: var(--error);
   font-size: 12px;
 }
-.browse-page {
-  overflow: auto;
-  flex: 1;
-  min-height: 0;
-  padding: clamp(24px, 3.5vh, 38px) max(var(--page-inset), calc((100% - var(--page-width)) / 2));
-}
 .page-heading {
   display: flex;
   align-items: baseline;
@@ -718,9 +712,6 @@
   font-size: 12px;
 }
 @media (max-width: 750px) {
-  .browse-page {
-    padding: 32px 18px;
-  }
   .prompt-list {
     gap: 6px;
   }

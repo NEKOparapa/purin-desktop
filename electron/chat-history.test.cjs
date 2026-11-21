@@ -19,6 +19,7 @@ function openChat(t) {
         server.sent = JSON.parse(options.body)
         return Response.json({ event_id: 'evt_first', job_id: 'job_first' })
       case '/v1/history':
+        assert.equal(new URL(url).searchParams.get('view'), 'dialogue')
         return Response.json({ items: server.messages, next_cursor: null })
       case '/v1/jobs/job_first':
         return Response.json({ status: server.job })
@@ -93,10 +94,10 @@ test('history can merge a waiting message before its job completes', async t => 
   const id = server.sent.message_id
   assert.deepEqual(agent.state().messages.map(row => [row.id, row.status]), [[id, 'waiting']])
 
-  const { device_id, ...legacy } = historyMessage(server.sent)
+  const message = historyMessage(server.sent)
   server.messages = [
-    { ...legacy, id: 'evt_other_device', device_id: 'other-device' },
-    { ...legacy, terminal_id: device_id },
+    { ...message, id: 'evt_other_device', device_id: 'other-device' },
+    message,
   ]
   await sync()
   assert.deepEqual(agent.state().messages.map(row => [row.id, row.status]), [

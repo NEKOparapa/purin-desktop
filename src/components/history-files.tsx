@@ -1,4 +1,5 @@
 import { useContext, useEffect, useState } from 'react'
+import './history-files.css'
 import { FileDown } from 'lucide-react'
 import type { HistoryFile } from '@/lib/desktop'
 

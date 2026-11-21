@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Activity, Cable, CalendarClock, Palette, Plug } from 'lucide-react'
+import { Activity, Cable, Palette, Plug } from 'lucide-react'
 import {
   readBrowserAppearance,
   setBrowserAppearance,
@@ -7,15 +7,12 @@ import {
   type Appearance,
 } from '@/lib/desktop'
 import { Button } from '@/components/ui/button'
-import { ApiKeySettings } from '@/components/api-key-settings'
 import { ConnectorSettings } from '@/components/connector-settings'
-import { MemoryScheduleSettings } from '@/components/memory-schedule-settings'
 import { DialogContent, DialogTitle } from '@/components/ui/dialog'
 
 const sections = [
   { id: 'connection', label: '连接', icon: Cable },
   { id: 'connectors', label: '连接器', icon: Plug },
-  { id: 'memory', label: '记忆整理', icon: CalendarClock },
   { id: 'appearance', label: '外观', icon: Palette },
   { id: 'collection', label: '信息采集', icon: Activity },
 ] as const
@@ -36,6 +33,8 @@ export function AgentSettings({
   const [deviceId, setDeviceId] = useState(state.deviceId)
   const [deviceName, setDeviceName] = useState(state.deviceName)
   const [token, setToken] = useState('')
+  const [pairValue, setPairValue] = useState('')
+  const [manual, setManual] = useState(false)
   const [editing, setEditing] = useState(false)
   const [feedback, setFeedback] = useState('')
   const [busy, setBusy] = useState(false)
@@ -55,6 +54,8 @@ export function AgentSettings({
     setDeviceId(state.deviceId)
     setDeviceName(state.deviceName)
     setToken('')
+    setPairValue('')
+    setManual(false)
     setFeedback('')
     setEditing(true)
   }
@@ -95,9 +96,11 @@ export function AgentSettings({
     setBusy(true)
     setFeedback('')
     try {
-      await api.configure({ url, deviceId, token, deviceName })
+      if (manual) await api.configure({ url, deviceId, token, deviceName })
+      else await api.pair({ value: pairValue, serverUrl: url })
       onConnected()
       setToken('')
+      setPairValue('')
       setEditing(false)
       setFeedback('连接已保存')
     } catch (error) {
@@ -105,7 +108,7 @@ export function AgentSettings({
         '连接失败 · ' +
           (error instanceof Error
             ? error.message.replace(/^.*?Error: /, '')
-            : '请检查地址和设备令牌'),
+            : '请检查服务地址和连接凭据'),
       )
     } finally {
       setBusy(false)
@@ -160,13 +163,6 @@ export function AgentSettings({
             remoteIssue={state.remoteIssue}
           />
         )}
-        {tab === 'memory' && (
-          <MemoryScheduleSettings
-            key={state.connectionRevision}
-            configured={state.configured}
-            revision={state.connectionRevision}
-          />
-        )}
         {tab === 'appearance' && (
           <fieldset className="appearance-settings">
             <legend>主题</legend>
@@ -197,141 +193,176 @@ export function AgentSettings({
           </fieldset>
         )}
         {tab === 'connection' && (
-          <>
-            <section className="connection-card" aria-labelledby="device-connection-title">
-              <header className="connection-card-header">
-                <div className="connection-card-heading">
-                  <h4 id="device-connection-title">设备连接</h4>
-                  <span className="connection-status" data-state={connectionState}>
-                    {connectionStatus[connectionState]}
-                  </span>
-                </div>
-                {showConnection && (
-                  <Button type="button" size="sm" variant="outline" onClick={editConnection}>
-                    编辑连接
-                  </Button>
-                )}
-              </header>
-              <dl className="connection-details">
-                {showConnection && (
-                  <div>
-                    <dt>设备名称</dt>
-                    <dd>{state.deviceName}</dd>
-                  </div>
-                )}
-                <div>
-                  <dt>设备平台</dt>
-                  <dd>
-                    {state.devicePlatform ? devicePlatformLabels[state.devicePlatform] : '未知'}
-                  </dd>
-                </div>
-                {showConnection && (
-                  <>
-                    <div>
-                      <dt>服务地址</dt>
-                      <dd>{state.url}</dd>
-                    </div>
-                    <div>
-                      <dt>设备 ID</dt>
-                      <dd>{state.deviceId}</dd>
-                    </div>
-                  </>
-                )}
-              </dl>
-              {state.issue && (
-                <p className="issue" role="status">
-                  {state.issue}
-                </p>
+          <section className="connection-card" aria-labelledby="device-connection-title">
+            <header className="connection-card-header">
+              <div className="connection-card-heading">
+                <h4 id="device-connection-title">设备连接</h4>
+                <span className="connection-status" data-state={connectionState}>
+                  {connectionStatus[connectionState]}
+                </span>
+              </div>
+              {showConnection && (
+                <Button type="button" size="sm" variant="outline" onClick={editConnection}>
+                  编辑连接
+                </Button>
               )}
-              {!showConnection && (
-                <form
-                  className="connection-form connection-editor"
-                  onSubmit={(e) => {
-                    e.preventDefault()
-                    void save()
-                  }}
-                >
-                  <p className="settings-note connection-full-width">
-                    {api
-                      ? '将本机设备 ID 登记到后端，然后填写对应令牌。'
-                      : '请打开 Wintermute 桌面应用以连接服务。'}
-                  </p>
+            </header>
+            <dl className="connection-details">
+              {showConnection && (
+                <div>
+                  <dt>设备名称</dt>
+                  <dd>{state.deviceName}</dd>
+                </div>
+              )}
+              <div>
+                <dt>设备平台</dt>
+                <dd>
+                  {state.devicePlatform ? devicePlatformLabels[state.devicePlatform] : '未知'}
+                </dd>
+              </div>
+              {showConnection && (
+                <>
+                  <div>
+                    <dt>服务地址</dt>
+                    <dd>{state.url}</dd>
+                  </div>
+                  <div>
+                    <dt>设备 ID</dt>
+                    <dd>{state.deviceId}</dd>
+                  </div>
+                </>
+              )}
+            </dl>
+            {state.issue && (
+              <p className="issue" role="status">
+                {state.issue}
+              </p>
+            )}
+            {!showConnection && !manual && (
+              <form
+                className="connection-form connection-editor"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  void save()
+                }}
+              >
+                <label className="connection-full-width">
+                  配对码或链接
+                  <input
+                    value={pairValue}
+                    onChange={(event) => setPairValue(event.target.value)}
+                    placeholder="从后端管理面板复制"
+                    autoComplete="off"
+                    spellCheck={false}
+                    required
+                  />
+                </label>
+                {!pairValue.trim().startsWith('https://') && (
                   <label className="connection-full-width">
                     服务地址
-                    <input
-                      type="url"
-                      value={url}
-                      onChange={(e) => setUrl(e.target.value)}
-                      required
-                    />
+                    <input type="url" value={url} onChange={(event) => setUrl(event.target.value)} />
                   </label>
-                  <label>
-                    设备名称
-                    <input
-                      value={deviceName}
-                      onChange={(e) => setDeviceName(e.target.value)}
-                      maxLength={80}
-                      required
-                    />
-                  </label>
-                  <label>
-                    设备 ID
-                    <input
-                      value={deviceId}
-                      onChange={(e) => setDeviceId(e.target.value)}
-                      required
-                    />
-                  </label>
-                  <label className="connection-full-width">
-                    设备令牌
-                    <input
-                      type="password"
-                      autoComplete="off"
-                      value={token}
-                      onChange={(e) => setToken(e.target.value)}
-                      placeholder={
-                        state.configured &&
-                        state.url === url.trim() &&
-                        state.deviceId === deviceId.trim()
-                          ? '留空以使用当前连接令牌'
-                          : 'Bearer token'
-                      }
-                    />
-                  </label>
-                  <div className="connection-actions connection-full-width">
-                    <Button type="submit" disabled={!api || busy}>
-                      {busy ? '正在验证…' : '验证并保存'}
+                )}
+                <div className="connection-actions connection-full-width">
+                  <Button type="submit" disabled={!api || busy}>
+                    {busy ? '正在配对…' : '配对并连接'}
+                  </Button>
+                  <Button type="button" variant="ghost" disabled={busy} onClick={() => setManual(true)}>
+                    手动配置
+                  </Button>
+                  {editing && (
+                    <Button type="button" variant="ghost" disabled={busy} onClick={() => setEditing(false)}>
+                      取消
                     </Button>
-                    {editing && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        disabled={busy}
-                        onClick={() => {
-                          setToken('')
-                          setFeedback('')
-                          setEditing(false)
-                        }}
-                      >
-                        取消
-                      </Button>
-                    )}
-                  </div>
-                </form>
-              )}
-              {feedback && (
-                <p className="settings-note" role="status">
-                  {feedback}
+                  )}
+                </div>
+              </form>
+            )}
+            {!showConnection && manual && (
+              <form
+                className="connection-form connection-editor"
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  void save()
+                }}
+              >
+                <p className="settings-note connection-full-width">
+                  {api
+                    ? '将本机设备 ID 登记到后端，然后填写对应令牌。'
+                    : '请打开 Wintermute 桌面应用以连接服务。'}
                 </p>
-              )}
-            </section>
-            <ApiKeySettings
-              key={JSON.stringify([state.url, state.deviceId, state.connectionRevision])}
-              configured={state.configured}
-              editingConnection={editing}
-              revision={state.connectionRevision}
-            />
-          </>
+                <label className="connection-full-width">
+                  服务地址
+                  <input
+                    type="url"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    required
+                  />
+                </label>
+                <label>
+                  设备名称
+                  <input
+                    value={deviceName}
+                    onChange={(e) => setDeviceName(e.target.value)}
+                    maxLength={80}
+                    required
+                  />
+                </label>
+                <label>
+                  设备 ID
+                  <input
+                    value={deviceId}
+                    onChange={(e) => setDeviceId(e.target.value)}
+                    required
+                  />
+                </label>
+                <label className="connection-full-width">
+                  设备令牌
+                  <input
+                    type="password"
+                    autoComplete="off"
+                    value={token}
+                    onChange={(e) => setToken(e.target.value)}
+                    placeholder={
+                      state.configured &&
+                      state.url === url.trim() &&
+                      state.deviceId === deviceId.trim()
+                        ? '留空以使用当前连接令牌'
+                        : 'Bearer token'
+                    }
+                  />
+                </label>
+                <div className="connection-actions connection-full-width">
+                  <Button type="submit" disabled={!api || busy}>
+                    {busy ? '正在验证…' : '验证并保存'}
+                  </Button>
+                  <Button type="button" variant="ghost" disabled={busy} onClick={() => setManual(false)}>
+                    使用配对码
+                  </Button>
+                  {editing && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      disabled={busy}
+                      onClick={() => {
+                        setToken('')
+                        setFeedback('')
+                        setEditing(false)
+                      }}
+                    >
+                      取消
+                    </Button>
+                  )}
+                </div>
+              </form>
+            )}
+            {feedback && (
+              <p className="settings-note" role="status">
+                {feedback}
+              </p>
+            )}
+          </section>
         )}
         {tab === 'collection' && (
           <>
@@ -350,8 +381,7 @@ export function AgentSettings({
                 采集桌面活动
               </label>
               <p id="desktop-activity-description">
-                约每秒采样一次，未操作键鼠也会累计前台停留。切走或锁屏后上传本次停留及窗口标题变化，包括短停留。在「记忆
-                → 感知层」可查看原始记录和后端的过滤原因。
+                约每秒采样一次，未操作键鼠也会累计前台停留。切走或锁屏后上传本次停留及窗口标题变化，包括短停留。在后端管理面板的「历史记录 → 感知层」可查看原始记录和后端的过滤原因。
               </p>
               {state.collecting && navigator.platform.startsWith('Mac') && (
                 <p>
@@ -391,8 +421,7 @@ export function AgentSettings({
               </label>
               <p id="screenshot-description">
                 同一应用连续在前台停留满 10
-                分钟时截一张，切换标签页或窗口标题不会重新计时。离开应用后随停留记录上传，可在「记忆
-                → 感知层 → 原始信息」查看。
+                分钟时截一张，切换标签页或窗口标题不会重新计时。离开应用后随停留记录上传，可在后端管理面板的「历史记录 → 感知层 → 原始信息」查看。
               </p>
               {state.screenshotIssue && (
                 <p role="status">{state.screenshotIssue}</p>

@@ -32,18 +32,6 @@ async function main() {
     return data
   }
 
-  const files = await agent.memoryTree()
-  assert.ok(files.some(file => file.path === 'about-user/profile.md'))
-  const document = await agent.memoryFile('about-user/profile.md')
-  assert.equal(document.content, '联通测试🙂')
-  const records = await agent.recordItems()
-  const record = records.items.find(item => item.title === 'smoke-record')
-  assert.ok(record)
-  const first = await agent.recordContent({ id: record.id })
-  assert.equal(first.next_offset, 16000)
-  const last = await agent.recordContent({ id: record.id, offset: first.next_offset })
-  assert.equal(last.next_offset, null)
-  assert.equal(last.text, '🙂结束')
   const schedule = await agent.schedule({
     start: new Date(Date.now() - 86400000).toISOString(),
     end: new Date(Date.now() + 3 * 86400000).toISOString(),
@@ -122,7 +110,7 @@ async function main() {
   })
   const connectors = await api('/v1/connectors')
   assert.ok(connectors.items.some(item => item.id === connector.item.id))
-  console.log('Desktop: chat, history, memory, records, calendar, batched frames/retry, notifications, questions, tools OK')
+  console.log('Desktop: chat, history, calendar, batched frames/retry, notifications, questions, tools OK')
 }
 
 main().catch(error => { console.error(error); process.exitCode = 1 })

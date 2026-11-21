@@ -1,7 +1,7 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const os = require('node:os')
-const { randomUUID, createHash } = require('node:crypto')
+const { randomBytes, randomUUID, createHash } = require('node:crypto')
 const {
   submitMaterial,
   framePath,
@@ -16,7 +16,6 @@ const { availableTools, secureTransport, TerminalToolClient } = require('./termi
 const { detectObsidianVaults, inspectVault, runObsidianTool } = require('./obsidian-connector.cjs')
 const { macConnectors, runMacTool } = require('./mac-connectors.cjs')
 const { notificationPath, pageRoute, validatePage, deliverPending } = require('./notifications.cjs')
-const memory = require('./memory.cjs')
 const captureVersion = 6
 const devicePlatforms = { win32: 'windows', darwin: 'macos' }
 
@@ -135,7 +134,7 @@ function migrateCaptureSettings(dir, configFile, settings) {
   save(configFile, settings)
 }
 
-function connection(url, deviceId) {
+function serviceOrigin(url) {
   const service = new URL(url)
   if (
     !['http:', 'https:'].includes(service.protocol) ||
@@ -146,13 +145,38 @@ function connection(url, deviceId) {
     service.pathname !== '/'
   )
     throw new Error('请输入服务根地址')
+  return service.origin
+}
+
+function connection(url, deviceId) {
   if (
     typeof deviceId !== 'string' ||
     !deviceId.trim() ||
     /[\r\n]/.test(deviceId)
   )
     throw new Error('设备 ID 无效')
-  return { url: service.origin, deviceId: deviceId.trim() }
+  return { url: serviceOrigin(url), deviceId: deviceId.trim() }
+}
+
+function pairingAddress(value, fallback) {
+  const input = value.trim()
+  let code = input
+  let url
+  try {
+    if (!/^[0-9]{5}-?[0-9]{5}$/.test(input)) {
+      const link = new URL(input)
+      code = new URLSearchParams(link.hash.slice(1)).get('wm-pair')
+      link.hash = ''
+      url = serviceOrigin(link.toString())
+    } else {
+      url = serviceOrigin(fallback)
+    }
+  } catch {
+    throw new Error('请粘贴完整配对链接，或填写 HTTPS 服务地址和配对码')
+  }
+  if (!code || !/^[0-9]{5}-?[0-9]{5}$/.test(code) || !url.startsWith('https://'))
+    throw new Error('请粘贴完整配对链接，或填写 HTTPS 服务地址和配对码')
+  return { url, code: code.replace('-', '') }
 }
 
 async function fetchResponse(profile, route, options) {
@@ -433,6 +457,37 @@ class DesktopAgent {
     this.publish()
   }
 
+  async pair({ value, serverUrl }) {
+    const { url, code } = pairingAddress(value, serverUrl)
+    const profile = this.profile
+    const previous = this.pairAttempt
+    const token = previous?.url === url && previous.code === code
+      ? previous.token : randomBytes(32).toString('base64url')
+    this.pairAttempt = { url, code, token }
+    const response = await fetch(url + '/v1/devices/pair', {
+      method: 'POST',
+      redirect: 'error',
+      signal: AbortSignal.timeout(9000),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        code, token, installation: profile.installation,
+        device_type: 'desktop', device_name: profile.deviceName,
+      }),
+    })
+    if (!response.ok) {
+      if (response.status === 403) throw new Error('配对码无效、已过期或已使用')
+      if (response.status === 429) throw new Error('尝试次数过多，请稍后再试')
+      if (response.status === 404) throw new Error('后端尚未启用设备配对')
+      throw new Error('配对失败，请检查服务地址后重试')
+    }
+    const { device_id: deviceId } = await response.json()
+    if (typeof deviceId !== 'string' || !/^desktop-[a-f0-9]{24}$/.test(deviceId))
+      throw new Error('后端返回的设备信息无效')
+    if (this.profile !== profile) throw new Error('连接已更改，请重试')
+    await this.configure({ url, deviceId, token })
+    this.pairAttempt = undefined
+  }
+
   async configure({ url, deviceId, token, deviceName }) {
     const dest = connection(url, deviceId)
     const old = this.profile
@@ -474,115 +529,6 @@ class DesktopAgent {
     this.publish()
     this.sync()
     this.capture()
-  }
-
-  async requestMemory(route, validate, body) {
-    const p = this.profile
-    if (!p.token) throw new Error('请先连接设备')
-    try {
-      const doc = await request(p, route, body, p.controller.signal)
-      if (p !== this.profile || p.controller.signal.aborted) throw new Error('连接已更改')
-      return validate(doc)
-    } catch (error) {
-      if (p !== this.profile || p.controller.signal.aborted) throw new Error('连接已更改')
-      if (error.code === 'memory_unconfigured') throw new Error('后端尚未配置当前用户的记忆目录。')
-      if (error.code === 'memory_file_not_found') throw new Error('档案已不存在，请刷新目录。')
-      if (error.code === 'record_storage_unavailable') throw new Error('暂时无法读取记录原文，请稍后重试。')
-      if (error.status === 404) throw new Error('记录不存在或后端接口不可用，请刷新并确认后端已更新。')
-      if (error instanceof SyntaxError) throw new Error('后端返回的记忆数据格式无效')
-      throw error
-    }
-  }
-
-  memorySchedule(options) {
-    const p = this.profile
-    let body
-    if (options !== undefined) {
-      if (p.revision !== options.connectionRevision) throw new Error('连接已更改')
-      body = { interval_days: options.interval_days, local_time: options.local_time }
-    }
-    const result = (p.memorySchedulePending ?? Promise.resolve()).then(() => {
-      if (p !== this.profile || p.controller.signal.aborted) throw new Error('连接已更改')
-      return this.requestMemory('/v1/memory/schedule', plan => {
-        if (!Number.isInteger(plan?.interval_days) || typeof plan.local_time !== 'string' ||
-          typeof plan.timezone !== 'string' || typeof plan.next_run_at !== 'string' ||
-          !Number.isFinite(Date.parse(plan.next_run_at)))
-          throw new Error('后端返回的整理计划格式无效')
-        return plan
-      }, body)
-    })
-    // A reopened settings page reads after any saves queued by the previous one.
-    if (body !== undefined) p.memorySchedulePending = result.then(() => {}, () => {})
-    return result
-  }
-
-  memoryTree() {
-    return this.requestMemory('/v1/memory/tree', memory.validateTree)
-  }
-
-  memoryFile(path) {
-    return this.requestMemory(memory.fileRoute(path), doc => memory.validateFile(doc, path))
-  }
-
-  recordItems(options) {
-    return this.requestMemory(memory.recordsRoute(options), memory.validateRecords)
-  }
-
-  recordContent(options) {
-    return this.requestMemory(memory.contentRoute(options), page => memory.validateContent(page, options))
-  }
-
-  apiKeys() {
-    return this.requestApiKeys()
-  }
-
-  async updateApiKey(options) {
-    if (this.profile.revision !== options?.connectionRevision)
-      throw new Error('连接已更改，请重新打开接口密钥')
-    if (typeof options.id !== 'string' || !options.id ||
-        typeof options.apiKey !== 'string' || !/^[!-~]{1,4096}$/.test(options.apiKey) ||
-        /\s/.test(options.apiKey))
-      throw new Error('请输入有效的接口密钥')
-    return this.requestApiKeys({ id: options.id, api_key: options.apiKey })
-  }
-
-  async requestApiKeys(body) {
-    const p = this.profile
-    if (!p.token) throw new Error('请先连接设备')
-    if (!secureTransport(p.url))
-      throw new Error('管理接口密钥需要 HTTPS 或本机连接')
-
-    let page
-    try {
-      page = await request(p, '/v1/settings/api-keys', body, p.controller.signal)
-    } catch (error) {
-      if (p !== this.profile || p.controller.signal.aborted)
-        throw new Error('连接已更改，请重新打开接口密钥')
-      if (error.code === 'secure_transport_required')
-        throw new Error('管理接口密钥需要 HTTPS 或本机连接')
-      if (error.status === 401) throw new Error('设备令牌无效，请重新连接')
-      if (error.status === 403) throw new Error('此设备没有管理接口密钥的权限')
-      if (error.status === 404 && error.code === 'unknown_key_id')
-        throw new Error('密钥配置项已变更，请刷新')
-      if ([404, 405].includes(error.status))
-        throw new Error('当前后端不支持接口密钥管理，请更新后端')
-      if (error.status === 400) throw new Error('请输入有效的接口密钥')
-      if (error.status === 503) throw new Error('后端暂时无法读写接口密钥')
-      if (error instanceof SyntaxError) throw new Error('后端返回的密钥设置格式无效')
-      if (!error.status) throw new Error('无法连接后端，请检查连接后重试')
-      throw new Error('管理接口密钥失败，请刷新后重试')
-    }
-    if (p !== this.profile || p.controller.signal.aborted)
-      throw new Error('连接已更改，请重新打开接口密钥')
-    if (!Array.isArray(page?.items) || !page.items.every(item =>
-      typeof item?.id === 'string' && item.id &&
-      Array.isArray(item.usages) && item.usages.every(label => typeof label === 'string') &&
-      typeof item.configured === 'boolean' &&
-      (item.configured
-        ? typeof item.masked === 'string' && /^••••(?:[!-~]{4})?$/u.test(item.masked)
-        : item.masked === null)))
-      throw new Error('后端返回的密钥设置格式无效')
-    return page.items.map(({ id, usages, configured, masked }) => ({ id, usages, configured, masked }))
   }
 
   async notificationPage(cursor) {
@@ -686,160 +632,13 @@ class DesktopAgent {
     }
   }
 
-  async terminalToolHistory(cursor) {
-    const p = this.profile
-    if (!p.token) throw new Error('请先连接设备')
-    const query = new URLSearchParams({ limit: '20' })
-    if (cursor !== undefined) {
-      if (typeof cursor !== 'string' || !cursor || cursor.length > 2048)
-        throw new Error('无效的调用记录分页位置')
-      query.set('cursor', cursor)
-    }
-    const page = await request(p, '/v1/terminal-tools/history?' + query, undefined, p.controller.signal)
-    if (p !== this.profile) throw new Error('连接已更改')
-    const invalid = '后端返回的设备调用记录格式有误'
-    if (!Array.isArray(page?.items) ||
-        !(page.next_cursor === null || (typeof page.next_cursor === 'string' && page.next_cursor)))
-      throw new Error(invalid)
-    const items = page.items.map(item => {
-      if (!item || typeof item.id !== 'string' || typeof item.device_id !== 'string' ||
-          typeof item.tool !== 'string' || !item.arguments || typeof item.arguments !== 'object' ||
-          Array.isArray(item.arguments) ||
-          !['queued', 'running', 'succeeded', 'failed', 'timed_out', 'expired'].includes(item.status) ||
-          !Number.isInteger(item.timeout_seconds) || !Number.isFinite(Date.parse(item.created_at)) ||
-          ![item.started_at, item.completed_at].every(at => at === null || Number.isFinite(Date.parse(at))) ||
-          typeof item.stdout !== 'string' || typeof item.stderr !== 'string' ||
-          (item.exit_code !== null && !Number.isInteger(item.exit_code)) || typeof item.truncated !== 'boolean')
-        throw new Error(invalid)
-      const { id, device_id, tool, timeout_seconds, status, created_at, started_at,
-        completed_at, stdout, stderr, exit_code, truncated } = item
-      return { id, device_id, tool, arguments: item.arguments, timeout_seconds,
-        status, created_at, started_at, completed_at, stdout, stderr, exit_code, truncated }
-    })
-    return { items, next_cursor: page.next_cursor }
-  }
-
-  async history({ view, cursor, groupId }) {
-    const p = this.profile
-    if (!p.token) throw new Error('请先连接设备')
-    if (
-      ![
-        'conversation',
-        'notification',
-        'perception',
-        'slice',
-        'chat',
-        'timeline',
-      ].includes(view)
-    )
-      throw new Error('未知的历史视图')
-    const query = new URLSearchParams({ limit: '40' })
-    if (cursor != null) {
-      if (typeof cursor !== 'string' || !cursor || cursor.length > 2048)
-        throw new Error('无效的历史分页位置')
-      query.set('cursor', cursor)
-    }
-    const get = (route) => request(p, route, undefined, p.controller.signal)
-    if (groupId !== undefined) {
-      if (
-        view !== 'slice' ||
-        typeof groupId !== 'string' ||
-        !/^[\w:-]{1,256}$/.test(groupId)
-      )
-        throw new Error('无效的截图活动')
-      return get(
-        '/v1/history/screenshot-groups/' +
-          encodeURIComponent(groupId) +
-          '?' +
-          query,
-      )
-    }
-    query.set('view', view)
-    const projection = { slice: 'slicetimeline', timeline: 'merged' }[view]
-    if (projection && (!cursor || cursor.startsWith(projection + ':'))) {
-      query.set('view', projection)
-      try {
-        return await get('/v1/history?' + query)
-      } catch (error) {
-        if (cursor || error.status !== 400 || error.code !== 'invalid_query') throw error
-        query.set('view', view)
-      }
-    }
-    if (view === 'slice') {
-      query.set('grouped', '1')
-      try {
-        return await get('/v1/history?' + query)
-      } catch (error) {
-        if (error.status !== 400 || error.code !== 'invalid_query') throw error
-        query.delete('grouped')
-      }
-    }
-    return get('/v1/history?' + query)
-  }
-
-  async compression({ kind, layer, id, activity, cursor, record }) {
-    const p = this.profile
-    if (!p.token) throw new Error('请先连接设备')
-    const query = new URLSearchParams({ limit: '40' })
-    if (cursor !== undefined) {
-      if (typeof cursor !== 'string' || !cursor || cursor.length > 2048)
-        throw new Error('无效的分页位置')
-      query.set('cursor', cursor)
-    }
-    let path = '/v1/history/compression'
-    if (kind === 'list' && ['perception', 'slice'].includes(layer)) {
-      query.set('layer', layer)
-    } else if (kind === 'trace') {
-      if (typeof id !== 'string' || !/^(?:round-\d{1,19}|history-\d{1,19}-\d{1,10})$/.test(id))
-        throw new Error('无效的时间轴记录')
-      path = '/v1/history/traces/' + id
-    } else if (kind === 'source' || kind === 'batch' || kind === 'stages') {
-      if (
-        typeof id !== 'string' ||
-        !id ||
-        id.length > 512 ||
-        /[\\/]/.test(id) ||
-        Array.from(id).some((ch) => ch.charCodeAt(0) < 32) ||
-        id === '..' ||
-        id === '.'
-      )
-        throw new Error('无效的记录编号')
-      if (kind === 'stages') {
-        path = '/v1/history/perceptions/' + encodeURIComponent(id) + '/stages'
-        if (record === true) path += '?record=1'
-      } else if (kind === 'source') {
-        path += '/sources'
-        if (activity === true) query.set('activity', '1')
-      }
-      if (kind !== 'stages') path += '/' + encodeURIComponent(id)
-    } else {
-      throw new Error('未知的压缩记录类型')
-    }
-    try {
-      return await request(
-        p,
-        kind === 'stages' ? path : path + '?' + query,
-        undefined,
-        p.controller.signal,
-      )
-    } catch (error) {
-      if (error.status === 404)
-        throw new Error(
-          kind === 'stages' ? '后端未提供这条记录的压缩过程。请确认后端已更新，再刷新记录。' : kind === 'list'
-            ? '当前后端未提供压缩对照，请升级后端后刷新。'
-            : '找不到这条记录。如使用旧后端，请升级后再查看详情。',
-        )
-      throw error
-    }
-  }
-
   downloadHistoryFile(file, choosePath) {
     const p = this.profile
     if (!p.token) throw new Error('请先连接设备')
     const token = p.token
     return saveHistoryFile(file, choosePath, (id) => {
       if (p !== this.profile || p.token !== token)
-        throw new Error('连接已更改，请重新打开记忆')
+        throw new Error('连接已更改，请重新打开对话')
       return fetchResponse(p, '/v1/history/files/' + encodeURIComponent(id), {
         signal: AbortSignal.any([
           p.controller.signal,
@@ -852,7 +651,7 @@ class DesktopAgent {
   async previewHistoryImage({ id, connectionRevision }) {
     const p = this.profile
     if (!p.token) throw new Error('请先连接设备')
-    if (connectionRevision !== p.revision) throw new Error('连接已更改，请重新打开记忆')
+    if (connectionRevision !== p.revision) throw new Error('连接已更改，请重新打开对话')
     if (typeof id !== 'string' || !/^[\w:-]{1,256}$/.test(id))
       throw new Error('无效的截图编号')
     try {
@@ -860,11 +659,11 @@ class DesktopAgent {
         signal: AbortSignal.any([p.controller.signal, AbortSignal.timeout(30000)]),
       })
       const bytes = await readHistoryImage(response)
-      if (p !== this.profile) throw new Error('连接已更改，请重新打开记忆')
+      if (p !== this.profile) throw new Error('连接已更改，请重新打开对话')
       return bytes
     } catch (error) {
       if (p !== this.profile || p.controller.signal.aborted)
-        throw new Error('连接已更改，请重新打开记忆')
+        throw new Error('连接已更改，请重新打开对话')
       if (error.status === 404) throw new Error('后端找不到这张截图')
       throw error
     }
@@ -929,18 +728,6 @@ class DesktopAgent {
       )
     } catch {
       /* Backend may be offline or not upgraded yet. */
-    }
-  }
-
-  async connectorHistory(cursor) {
-    const p = this.profile
-    if (!p.token) throw new Error('请先连接设备')
-    const query = cursor ? '?cursor=' + encodeURIComponent(cursor) : ''
-    const data = await request(p, '/v1/connectors/history' + query, undefined, p.controller.signal)
-    if (p !== this.profile || p.controller.signal.aborted) throw new Error('连接已更改')
-    return {
-      items: Array.isArray(data.items) ? data.items : [],
-      next_cursor: typeof data.next_cursor === 'string' ? data.next_cursor : null,
     }
   }
 

@@ -408,7 +408,7 @@ export function ConnectorSettings({
                 <Badge variant="outline">device</Badge>
               </div>
               <p className="connector-card-meta">
-                开启后，主 Agent 可以当前用户权限在本机运行命令（高权限，关闭会立即中止正在运行的命令）。调用记录可在「记忆 → 连接器」中查看。
+                开启后，主 Agent 可以当前用户权限在本机运行命令（高权限，关闭会立即中止正在运行的命令）。调用记录可在后端管理面板的「历史记录 → 连接器」中查看。
               </p>
             </div>
             <div className="connector-card-actions">

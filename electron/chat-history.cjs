@@ -1,8 +1,7 @@
 // Keep only pages the user has opened. Each poll replaces the current head,
 // even when it is empty or belongs to a newly created server database.
-async function readPage(api, view, previous, more) {
-  if (more && !previous?.next) return previous
-  const query = new URLSearchParams({ view, limit: '50' })
+async function readPage(api, previous, more) {
+  const query = new URLSearchParams({ view: 'dialogue', limit: '50' })
   if (more) query.set('cursor', previous.next)
   const { items, next_cursor: next } = await api('/v1/history?' + query)
   if (
@@ -37,7 +36,7 @@ async function readPage(api, view, previous, more) {
   return { items, next }
 }
 
-function chatRow(row, layer = row.layer) {
+function chatRow(row) {
   return {
     id: row.id,
     role: row.role,
@@ -45,35 +44,18 @@ function chatRow(row, layer = row.layer) {
     ...(row.role === 'user' && Array.isArray(row.files) && row.files.length && { files: row.files }),
     at: row.occurred_at ?? null,
     ...(row.role === 'assistant' &&
-      layer === 'notification' && { notificationReply: true }),
+      row.layer === 'notification' && { notificationReply: true }),
     ...(row.message_id && {
       messageId: row.message_id,
-      deviceId: row.device_id ?? row.terminal_id,
+      deviceId: row.device_id,
     }),
   }
-}
-
-// Older servers expose the two journals separately. Each answer follows its
-// triggering input; the journal stores its input time, but no answer time.
-function legacyRows(page, showInputs) {
-  const rows = []
-  let order = null
-  for (const item of [...page.items].reverse()) {
-    if (item.role === 'user') order = Date.parse(item.occurred_at)
-    if (item.role === 'assistant' || (showInputs && item.role === 'user'))
-      rows.push({
-        message: chatRow(item, showInputs ? 'conversation' : 'notification'),
-        order: Date.parse(item.occurred_at) || order || 0,
-      })
-  }
-  return rows
 }
 
 class ChatHistory {
   messages = []
   hasEarlier = false
-  #pages = {}
-  #probeDialogueAt = 0
+  #page
   #reading
   async read(api, more = false) {
     if (this.#reading) {
@@ -90,45 +72,16 @@ class ChatHistory {
   }
   async #update(api, more) {
     if (more && !this.hasEarlier) return false
+    const page = await readPage(api, this.#page, more)
+    this.#page = page
+    const messages = [...page.items].reverse().map(chatRow)
+    const hasEarlier = Boolean(page.next)
     if (
-      !this.#pages.conversation ||
-      (!more && Date.now() >= this.#probeDialogueAt)
-    ) {
-      if (this.#pages.conversation) this.#probeDialogueAt = Date.now() + 60_000
-      try {
-        const page = await readPage(api, 'dialogue', this.#pages.dialogue, more)
-        this.#pages = { dialogue: page }
-        return this.#apply(
-          [...page.items].reverse().map((item) => chatRow(item)),
-          !!page.next,
-        )
-      } catch (error) {
-        if (more || error.status !== 400 || error.code !== 'invalid_query')
-          throw error
-        this.#probeDialogueAt = Date.now() + 60_000
-      }
-    }
-    const [conversation, notification] = await Promise.all(
-      ['conversation', 'notification'].map((view) =>
-        readPage(api, view, this.#pages[view], more),
-      ),
-    )
-    this.#pages = { conversation, notification }
-    const ordered = [
-      ...legacyRows(conversation, true),
-      ...legacyRows(notification, false),
-    ]
-      .sort((a, b) => a.order - b.order)
-      .map((row) => row.message)
-    return this.#apply(ordered, !!(conversation.next || notification.next))
-  }
-  #apply(messages, more) {
-    if (
-      this.hasEarlier === more &&
+      this.hasEarlier === hasEarlier &&
       JSON.stringify(this.messages) === JSON.stringify(messages)
     )
       return false
-    this.hasEarlier = more
+    this.hasEarlier = hasEarlier
     this.messages = messages
     return true
   }
