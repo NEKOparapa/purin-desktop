@@ -2,19 +2,17 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   ArrowDown,
   ArrowUp,
-  CalendarDays,
-  History,
+  CookingPot,
   FileText,
   Paperclip,
-  ListChecks,
-  MessageCircle,
   Mic,
-  NotebookPen,
-  SlidersHorizontal,
+  Sun,
   X,
 } from 'lucide-react'
 import { Dialog } from '@/components/ui/dialog'
-import { DesktopLayout } from '@/components/desktop-layout'
+import { DesktopLayout, type Page, type Panel } from '@/components/desktop-layout'
+import { Mascot } from '@/components/mascot'
+import { useTypingActivity } from '@/lib/use-typing-activity'
 import { AgentSettings } from '@/components/agent-settings'
 import { ScheduleCalendar } from '@/components/schedule-calendar'
 import type { ChatFileRef, NoticeAlert } from '@/lib/desktop'
@@ -27,27 +25,13 @@ import {
   prepareAttachment,
   type DraftAttachment,
 } from '@/lib/chat-media'
-import { ChatJumpBar } from '@/components/chat-jump-bar'
 import { useAgent, type AgentState, type ChatMessage } from '@/lib/desktop'
 import './App.css'
 
-const pages = [
-  { id: 'chat', label: '对话', icon: MessageCircle },
-  { id: 'schedule', label: '日程', icon: CalendarDays },
-] as const
-type Page = (typeof pages)[number]['id']
+const assistantName = 'Wintermute'
 const prompts = [
-  { label: '回顾今天', text: '帮我回顾一下今天的活动。', icon: History },
-  {
-    label: '整理会议',
-    text: '帮我整理最近一次会议的决定和下一步行动。',
-    icon: NotebookPen,
-  },
-  {
-    label: '梳理待办',
-    text: '根据我们最近聊过的事，帮我梳理接下来的待办。',
-    icon: ListChecks,
-  },
+  { label: '聊聊今天', text: '我想跟你聊聊今天发生的事。', icon: Sun },
+  { label: '想想晚饭', text: '今晚吃点什么好呢？', icon: CookingPot },
 ]
 const timestamp = new Intl.DateTimeFormat('zh-CN', {
   month: 'long',
@@ -79,7 +63,7 @@ function Message({
   return (
     <article
       className={'message ' + message.role}
-      aria-label={user ? '你' : 'Wintermute'}
+      aria-label={user ? '你' : assistantName}
     >
       <div
         className="message-bubble"
@@ -129,6 +113,7 @@ function Chat({
   visible: boolean
 }) {
   const [draft, setDraft] = useState('')
+  const activity = useTypingActivity()
   const [attachments, setAttachments] = useState<DraftAttachment[]>([])
   const [readingFiles, setReadingFiles] = useState(false)
   const [uploading, setUploading] = useState('')
@@ -140,58 +125,13 @@ function Chat({
   const [issue, setIssue] = useState('')
   const [loadingEarlier, setLoadingEarlier] = useState(false)
   const [atBottom, setAtBottom] = useState(true)
-  const [activeJumpId, setActiveJumpId] = useState<string | null>(null)
   const follow = useRef(true)
   const log = useRef<HTMLDivElement>(null)
-  const messageNodes = useRef(new Map<string, HTMLDivElement>())
   const input = useRef<HTMLTextAreaElement>(null)
   const lastMessageId = agent.messages.at(-1)?.id
   const hasMessages = agent.messages.length > 0 || agent.hasEarlier
-  const userMessages = agent.messages.filter((m) => m.role === 'user')
-  const jumpItems = userMessages.length > 0 ? userMessages : agent.messages
-  const effectiveActiveJumpId = atBottom
-    ? (jumpItems.at(-1)?.id ?? null)
-    : (activeJumpId ?? jumpItems.at(-1)?.id ?? null)
   const olderAnchor = useRef<{ height: number; position: number } | null>(null)
 
-  function syncActiveJump(el: HTMLDivElement, isBottom: boolean) {
-    if (!jumpItems.length) return
-    if (isBottom) {
-      setActiveJumpId(jumpItems.at(-1)?.id ?? null)
-      return
-    }
-    const scrollerTop = el.getBoundingClientRect().top
-    const pivot = scrollerTop + Math.min(180, el.clientHeight * 0.32)
-    let current = jumpItems[0].id
-    for (const item of jumpItems) {
-      const node = messageNodes.current.get(item.id)
-      if (!node) continue
-      if (node.getBoundingClientRect().top <= pivot) {
-        current = item.id
-      } else {
-        break
-      }
-    }
-    setActiveJumpId(current)
-  }
-
-  function jumpToMessage(id: string) {
-    const el = log.current
-    const node = messageNodes.current.get(id)
-    if (!el || !node) return
-    const isLast = id === jumpItems.at(-1)?.id
-    follow.current = isLast
-    setAtBottom(isLast)
-    setActiveJumpId(id)
-    const offset =
-      node.getBoundingClientRect().top -
-      el.getBoundingClientRect().top +
-      el.scrollTop
-    el.scrollTo({
-      top: Math.max(0, offset - 96),
-      behavior: 'smooth',
-    })
-  }
   async function earlier() {
     if (loadingEarlier || !log.current || !window.wintermute) return
     olderAnchor.current = {
@@ -220,6 +160,7 @@ function Chat({
   }, [agent.messages.length, lastMessageId, visible, loadingEarlier, draft])
   function fillPrompt(text: string) {
     setDraft(text)
+    activity.noteInput()
     input.current?.focus()
   }
   async function addFiles(files: File[]) {
@@ -256,6 +197,7 @@ function Chat({
       return
     }
     setSending(true)
+    activity.stop()
     setIssue('')
     follow.current = true
     const text = draft
@@ -308,91 +250,82 @@ function Chat({
   const status =
     issue || (agent.issue && '连接异常，将自动重试 · ' + agent.issue)
   return (
-    <section className="chat" aria-label="与 Wintermute 对话">
-      <header className="chat-identity">
-        <span className="chat-avatar" aria-hidden="true" />
-        <span className="chat-name">Wintermute</span>
-      </header>
+    <section
+      className="chat"
+      data-empty={!hasMessages}
+      aria-label={`与 ${assistantName} 对话`}
+    >
+      <button
+        className="assistant-avatar"
+        type="button"
+        aria-label="进入桌宠模式"
+        title={window.wintermute ? '收起对话，进入桌宠模式' : '在桌面应用中使用桌宠'}
+        disabled={!window.wintermute}
+        onClick={() => {
+          void window.wintermute?.enterPetMode().catch(() =>
+            setIssue('桌宠暂时无法打开，请再试一次。'),
+          )
+        }}
+      >
+        <Mascot
+          listening={activity.typing || voiceBusy}
+          thinking={sending || agent.awaitingReply}
+          replyReceivedAt={agent.replyReceivedAt}
+        />
+      </button>
+      <span className="assistant-name">{assistantName}</span>
       {hasMessages ? (
-        <>
-          <ChatJumpBar
-            items={jumpItems}
-            activeId={effectiveActiveJumpId}
-            onJump={jumpToMessage}
-          />
-          <div
-            className="message-scroller"
-            ref={log}
-            role="log"
-            aria-label="消息记录"
-            onScroll={() => {
-              const el = log.current
-              if (!el) return
-              const isBottom =
-                el.scrollHeight - el.scrollTop - el.clientHeight < 64
-              follow.current = isBottom
-              setAtBottom(isBottom)
-              syncActiveJump(el, isBottom)
-            }}
-          >
-            <div className="thread">
-              {agent.hasEarlier && (
-                <button
-                  className="earlier-messages"
-                  disabled={loadingEarlier}
-                  onClick={earlier}
-                >
-                  {loadingEarlier ? '正在读取…' : '加载更早消息'}
-                </button>
-              )}
-              {agent.messages.map((message, i) => {
-                const at = Date.parse(message.at ?? '')
-                const previous = Date.parse(agent.messages[i - 1]?.at ?? '')
-                const showTime =
-                  Number.isFinite(at) &&
-                  (!Number.isFinite(previous) ||
-                    Math.abs(at - previous) >= 5 * 60_000 ||
-                    new Date(at).toDateString() !==
-                      new Date(previous).toDateString())
-                return (
-                  <div
-                    key={message.id}
-                    ref={(node) => {
-                      if (node) messageNodes.current.set(message.id, node)
-                      else messageNodes.current.delete(message.id)
-                    }}
-                  >
-                    {showTime && (
-                      <time
-                        className="chat-timestamp"
-                        dateTime={message.at ?? undefined}
-                      >
-                        {timestamp.format(at)}
-                      </time>
-                    )}
-                    <HistoryConnection.Provider
-                      value={agent.connectionRevision}
-                    >
-                      <Message message={message} at={at} retry={retry} />
-                    </HistoryConnection.Provider>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        </>
-      ) : (
-        <div className="welcome">
-          <h1>有什么想聊的？</h1>
-          <div className="prompt-list">
-            {prompts.map((p) => (
-              <button key={p.label} onClick={() => fillPrompt(p.text)}>
-                <p.icon size={15} aria-hidden="true" />
-                {p.label}
+        <div
+          className="message-scroller"
+          ref={log}
+          role="log"
+          aria-label="消息记录"
+          onScroll={(event) => {
+            const el = event.currentTarget
+            const isBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 64
+            follow.current = isBottom
+            setAtBottom(isBottom)
+          }}
+        >
+          <div className="thread">
+            {agent.hasEarlier && (
+              <button
+                className="earlier-messages"
+                disabled={loadingEarlier}
+                onClick={earlier}
+              >
+                {loadingEarlier ? '正在读取…' : '加载更早消息'}
               </button>
-            ))}
+            )}
+            {agent.messages.map((message, i) => {
+              const at = Date.parse(message.at ?? '')
+              const previous = Date.parse(agent.messages[i - 1]?.at ?? '')
+              const showTime =
+                Number.isFinite(at) &&
+                (!Number.isFinite(previous) ||
+                  Math.abs(at - previous) >= 5 * 60_000 ||
+                  new Date(at).toDateString() !==
+                    new Date(previous).toDateString())
+              return (
+                <div key={message.id}>
+                  {showTime && (
+                    <time
+                      className="chat-timestamp"
+                      dateTime={message.at ?? undefined}
+                    >
+                      {timestamp.format(at)}
+                    </time>
+                  )}
+                  <HistoryConnection.Provider value={agent.connectionRevision}>
+                    <Message message={message} at={at} retry={retry} />
+                  </HistoryConnection.Provider>
+                </div>
+              )
+            })}
           </div>
         </div>
+      ) : (
+        <h1 className="welcome">今天过得怎么样？</h1>
       )}
       <div className="write-area">
         <QuestionCards questions={agent.questions} />
@@ -494,11 +427,16 @@ function Chat({
           <textarea
             aria-label="对话消息"
             aria-description="回车换行，Ctrl + Enter 或 ⌘ + Enter 发送"
-            placeholder={dragging ? '松开以添加附件' : '发送消息，或拖入文件'}
+            placeholder={dragging ? '松开以添加附件' : '想说点什么？'}
             rows={1}
             ref={input}
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(e) => {
+              setDraft(e.target.value)
+              activity.noteInput()
+            }}
+            onCompositionUpdate={activity.noteInput}
+            onBlur={activity.stop}
             onKeyDown={(e) => {
               if (
                 e.key === 'Enter' &&
@@ -569,13 +507,28 @@ function Chat({
           </p>
         )}
       </div>
+      {!hasMessages && (
+        <div className="prompt-list" aria-label="聊天话题" role="group">
+          {prompts.map(({ label, text, icon: Icon }) => (
+            <button type="button" key={label} onClick={() => fillPrompt(text)}>
+              <Icon size={15} aria-hidden="true" />
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
     </section>
   )
 }
 
 export default function App() {
   const [page, setPage] = useState<Page>('chat')
-  const [dialog, setDialog] = useState<'settings' | 'about' | null>(null)
+  const [panel, setPanel] = useState<Panel>('navigation')
+  const [panelOpen, setPanelOpen] = useState(false)
+  useEffect(() => window.wintermute?.onPetSettings(() => {
+    setPanel('settings')
+    setPanelOpen(true)
+  }), [])
   const [connectionVersion, setConnectionVersion] = useState(0)
   const agent = useAgent()
   const [lastAlert,setNotice]=useState<(NoticeAlert & {version:number})|null>(null)
@@ -584,7 +537,7 @@ export default function App() {
   function openNotice(alert: NoticeAlert) {
     setFocusNotice(alert)
     setPage('schedule')
-    setDialog(null)
+    setPanelOpen(false)
     setNotice(null)
   }
   useEffect(()=>{
@@ -600,89 +553,89 @@ export default function App() {
     })
     return ()=>{clearTimeout(timer);stop?.()}
   },[agent.url,agent.deviceId,connectionVersion])
-  const showSettings = () => setDialog('settings')
+  function showPanel(next: Panel) {
+    setPanel(next)
+    setPanelOpen(true)
+  }
+  const showSettings = () => showPanel('settings')
   return (
-    <DesktopLayout aboutOpen={dialog === 'about'} onAboutChange={(open) => setDialog(open ? 'about' : null)}>
-      <aside className="sidebar" id="app-sidebar">
-        <nav id="main-navigation" className="nav-list" aria-label="主导航">
-          {pages.map((p) => (
-            <button
-              key={p.id}
-              className="nav-item"
-              aria-label={p.label}
-              aria-current={page === p.id ? 'page' : undefined}
-              title={p.label}
-              onClick={() => {
-                if (page !== p.id) {
-                  setPage(p.id)
-                  setFocusNotice(null)
-                }
-              }}
-            >
-              <p.icon size={18} aria-hidden="true" />
-              <span>{p.label}</span>
-            </button>
-          ))}
-        </nav>
-        <button
-          className="nav-item settings-link"
-          onClick={showSettings}
-          title="设备设置"
-          aria-label="设备设置"
-        >
-          <SlidersHorizontal size={18} aria-hidden="true" />
-          <span>设置</span>
-        </button>
-      </aside>
-      <main className="workspace">
-        <div className="chat-host" hidden={page !== 'chat'}>
-          <Chat
-            key={JSON.stringify([agent.url, agent.deviceId, agent.connectionRevision])}
-            agent={agent}
-            settings={showSettings}
-            visible={page === 'chat'}
-          />
-        </div>
-        {page === 'schedule' && (
-          <section
-            aria-labelledby="schedule-heading"
-            className="schedule-page"
-            key={JSON.stringify([
-              agent.url,
-              agent.deviceId,
-              connectionVersion,
-              agent.configured,
-            ])}
-          >
-            <div className="schedule-inner">
-              <header className="page-heading">
-                <h1 id="schedule-heading">日程</h1>
-              </header>
-              <ScheduleCalendar
-                connected={agent.configured}
-                settings={showSettings}
-                focusNotice={
-                  focusNotice?.url === agent.url && focusNotice.deviceId === agent.deviceId
-                    ? focusNotice
-                    : null
-                }
-              />
-            </div>
-          </section>
-        )}
-      </main>
-      {notice && <aside className="notice-banner" aria-label="新通知" role="status">
-        <button onClick={()=>openNotice(notice)}><strong>{notice.title}</strong><span>{notice.body}</span></button>
-        <button aria-label="关闭提醒" onClick={()=>setNotice(null)}><X size={15}/></button>
-      </aside>}
-      <Dialog open={dialog === 'settings'} onOpenChange={(open) => setDialog(open ? 'settings' : null)}>
-        {dialog === 'settings' && (
+    <Dialog
+      open={panelOpen}
+      onOpenChange={(open) =>
+        open ? showPanel('navigation') : setPanelOpen(false)
+      }
+    >
+      <DesktopLayout
+        page={page}
+        panel={panel}
+        onPanelChange={showPanel}
+        onNavigate={(next) => {
+          if (page !== next) {
+            setFocusNotice(null)
+            setPage(next)
+          }
+        }}
+        settings={
           <AgentSettings
             state={agent}
             onConnected={() => setConnectionVersion((version) => version + 1)}
           />
+        }
+      >
+        <main className="workspace">
+          <div className="chat-host" hidden={page !== 'chat'}>
+            <Chat
+              key={JSON.stringify([
+                agent.url,
+                agent.deviceId,
+                agent.connectionRevision,
+              ])}
+              agent={agent}
+              settings={showSettings}
+              visible={page === 'chat'}
+            />
+          </div>
+          {page === 'schedule' && (
+            <section
+              aria-labelledby="schedule-heading"
+              className="schedule-page"
+              key={JSON.stringify([
+                agent.url,
+                agent.deviceId,
+                connectionVersion,
+                agent.configured,
+              ])}
+            >
+              <div className="schedule-inner">
+                <header className="page-heading">
+                  <h1 id="schedule-heading">日程</h1>
+                </header>
+                <ScheduleCalendar
+                  connected={agent.configured}
+                  settings={showSettings}
+                  focusNotice={
+                    focusNotice?.url === agent.url &&
+                    focusNotice.deviceId === agent.deviceId
+                      ? focusNotice
+                      : null
+                  }
+                />
+              </div>
+            </section>
+          )}
+        </main>
+        {notice && (
+          <aside className="notice-banner" aria-label="新通知" role="status">
+            <button onClick={() => openNotice(notice)}>
+              <strong>{notice.title}</strong>
+              <span>{notice.body}</span>
+            </button>
+            <button aria-label="关闭提醒" onClick={() => setNotice(null)}>
+              <X size={15} />
+            </button>
+          </aside>
         )}
-      </Dialog>
-    </DesktopLayout>
+      </DesktopLayout>
+    </Dialog>
   )
 }

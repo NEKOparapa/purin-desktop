@@ -111,6 +111,8 @@ export interface AgentState {
     window_title?: string
   } | null
   hasEarlier: boolean
+  awaitingReply: boolean
+  replyReceivedAt: number
   messages: ChatMessage[]
   questions: PendingQuestion[]
 }
@@ -188,10 +190,39 @@ export interface ConnectorMutationResult {
   tool_count: number | null
   verify_error: string | null
 }
+export interface PetSnapshot {
+  session: number
+  workArea: { width: number; height: number }
+  anchor: { x: number; y: number }
+  preferredSide: 'left' | 'right'
+  appearance: Appearance
+  configured: boolean
+  connectionRevision: number
+  reply: { id: string; text: string } | null
+  awaitingReply: boolean
+  replyReceivedAt: number
+  waiting: boolean
+  issue: string
+}
+export interface PetBridge {
+  state(): Promise<PetSnapshot>
+  send(text: string, revision: number): Promise<void>
+  setRegion(region: { x: number; y: number; width: number; height: number }, session: number): Promise<void>
+  move(x: number, y: number, session: number): Promise<void>
+  drop(session: number): Promise<void>
+  restore(settings?: boolean): Promise<void>
+  subscribe(
+    callback: (state: PetSnapshot) => void,
+    onPosition: (position: Pick<PetSnapshot, 'session' | 'anchor' | 'workArea'>) => void,
+  ): () => void
+}
 declare global {
   interface Window {
+    wintermutePet?: PetBridge
     wintermute?: {
       initialAppearance: Appearance
+      enterPetMode(): Promise<void>
+      onPetSettings(callback: () => void): () => void
       state(): Promise<AgentState>
       configure(settings: Connection): Promise<void>
       pair(options: { value: string; serverUrl: string }): Promise<void>
@@ -265,6 +296,8 @@ const initial: AgentState = {
   issue: '',
   sampleIssue: '',
   hasEarlier: false,
+  awaitingReply: false,
+  replyReceivedAt: 0,
   messages: [],
   questions: [],
   lastSpan: null,

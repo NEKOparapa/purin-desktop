@@ -1,0 +1,39 @@
+.mascot {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  pointer-events: none;
+  background: url('../assets/mascot-poses.webp') no-repeat;
+  /* Seven poses, twelve frames each. */
+  background-size: 1200% 700%;
+  animation: mascot-frames 1.8s steps(12, jump-none) infinite;
+}
+.mascot[data-mood='idle'] {
+  animation: mascot-frames 3s steps(12, jump-none) infinite,
+    mascot-idles 18s step-end infinite;
+}
+.mascot[data-mood='listening'] { background-position-y: 50%; }
+.mascot[data-mood='thinking'] { background-position-y: calc(100% * 4 / 6); }
+.mascot[data-mood='speaking'] {
+  background-position-y: calc(100% * 5 / 6);
+  animation-duration: .8s;
+}
+.mascot[data-mood='carried'] {
+  background-position-y: 100%;
+  animation-duration: 1s;
+}
+@keyframes mascot-frames {
+  from { background-position-x: 0%; }
+  to { background-position-x: 100%; }
+}
+@keyframes mascot-idles {
+  0%, 100% { background-position-y: 0%; }
+  33.3333% { background-position-y: calc(100% / 6); }
+  66.6667% { background-position-y: calc(100% * 2 / 6); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mascot[data-mood] {
+    animation: none;
+    background-position-x: 45.454545%;
+  }
+}

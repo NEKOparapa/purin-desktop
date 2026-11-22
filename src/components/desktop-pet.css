@@ -1,0 +1,169 @@
+:root[data-window='pet'],
+:root[data-window='pet'] body {
+  min-width: 0;
+  background: transparent;
+  overflow: clip;
+}
+.pet-shell {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+}
+.pet-head {
+  position: absolute;
+  left: var(--pet-x, 50%);
+  top: var(--pet-y, 42px);
+  translate: -50% -50%;
+  display: grid;
+  place-items: center;
+  width: 94px;
+  height: 73px;
+}
+.pet-avatar {
+  display: grid;
+  place-items: center;
+  width: 61px;
+  height: 69px;
+  border-radius: 45%;
+  user-select: none;
+  touch-action: none;
+  cursor: grab;
+}
+.pet-avatar:active { cursor: grabbing; }
+@media (prefers-reduced-motion: no-preference) {
+  .pet-avatar .mascot {
+    transform-origin: 50% 88%;
+    transition: transform 320ms linear(0, .75 22%, 1.45 43%, .88 67%, 1.03 85%, 1);
+  }
+  .pet-avatar .mascot[data-mood='carried'] {
+    transform: translateY(-3px) scale(.96, 1.06);
+    transition: transform 110ms ease-out;
+  }
+}
+.pet-bubble button,
+.pet-composer button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  color: var(--muted);
+}
+.pet-bubble {
+  --paper: light-dark(#fffaf0, #39302c);
+  --outline: light-dark(#715544, #e0bfa6);
+  position: absolute;
+  left: var(--bubble-x);
+  top: var(--bubble-y);
+  width: max-content;
+  display: flex;
+  flex-direction: column;
+  max-height: var(--bubble-max-height, none);
+  max-width: min(264px, calc(var(--work-width, 320px) - 16px));
+  padding: 10px 29px 11px 15px;
+  border: 2px solid var(--outline);
+  border-radius: 22px 24px 21px 18px / 20px 18px 24px 22px;
+  background: var(--paper);
+  box-shadow: 2px 3px 0 light-dark(#65483145, #0007);
+}
+.pet-bubble::before,
+.pet-bubble::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+  width: 17px;
+  height: 15px;
+  top: var(--tail-y, 22px);
+  left: -16px;
+  clip-path: polygon(100% 0, 0 85%, 100% 100%);
+  background: var(--outline);
+}
+.pet-bubble::after {
+  width: 14px;
+  height: 10px;
+  left: -11px;
+  margin-top: 3px;
+  background: var(--paper);
+}
+[data-bubble-side='left'] .pet-bubble::before,
+[data-bubble-side='left'] .pet-bubble::after {
+  left: auto;
+  right: -16px;
+  scale: -1 1;
+}
+[data-bubble-side='left'] .pet-bubble::after {
+  right: -11px;
+}
+:is([data-bubble-side='below'], [data-bubble-side='above']) .pet-bubble::before,
+:is([data-bubble-side='below'], [data-bubble-side='above']) .pet-bubble::after {
+  top: -13px;
+  left: var(--tail-x);
+  margin: 0;
+  clip-path: polygon(0 100%, 70% 0, 100% 100%);
+}
+:is([data-bubble-side='below'], [data-bubble-side='above']) .pet-bubble::after {
+  top: -8px;
+  left: calc(var(--tail-x) + 2px);
+  width: 13px;
+}
+[data-bubble-side='above'] .pet-bubble::before { top: auto; bottom: -13px; scale: 1 -1; }
+[data-bubble-side='above'] .pet-bubble::after { top: auto; bottom: -8px; scale: 1 -1; }
+.pet-bubble p {
+  position: relative;
+  max-height: clamp(32px, calc(var(--work-height, 640px) - 252px), 160px);
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.pet-bubble button {
+  position: absolute;
+  top: 5px;
+  right: 4px;
+}
+.pet-composer {
+  position: absolute;
+  top: var(--composer-top, 80px);
+  left: var(--composer-left);
+  width: min(316px, calc(var(--work-width, 340px) - 16px));
+  border: 1px solid var(--control-line);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 2px 4px var(--popover-shadow);
+  display: flex;
+  gap: 3px;
+  padding: 7px;
+  align-items: flex-end;
+}
+.pet-composer:focus-within {
+  border-color: var(--primary);
+}
+.pet-composer textarea {
+  flex: 1;
+  field-sizing: content;
+  resize: none;
+  min-height: 28px;
+  max-height: 88px;
+  outline: none;
+  padding: 3px 4px;
+  line-height: 22px;
+  font-size: 14px;
+}
+.pet-composer textarea::placeholder {
+  color: var(--quiet);
+}
+.pet-composer .pet-send {
+  color: var(--on-primary);
+  background: var(--primary);
+}
+.pet-composer .pet-send:disabled {
+  color: var(--quiet);
+  background: var(--line);
+}
+.pet-composer .pet-connect {
+  width: auto;
+  padding-inline: 6px;
+  color: var(--primary);
+  font-size: 13px;
+}

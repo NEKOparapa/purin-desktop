@@ -4,6 +4,34 @@ const os = require('node:os')
 const path = require('node:path')
 const test = require('node:test')
 const { DesktopAgent } = require('./agent.cjs')
+const { ChatHistory } = require('./chat-history.cjs')
+
+test('mascot reacts to incoming replies once, excluding startup history and pagination', async () => {
+  const chat = new ChatHistory()
+  const reply = id => ({ id, role: 'assistant', text: id })
+  const load = (items, next_cursor = null) => async () => ({ items, next_cursor })
+  await chat.read(load([reply('old')], 'older'))
+  await chat.read(load([reply('older')]), true)
+  assert.equal(chat.replyReceivedAt, 0)
+  await chat.read(load([reply('new'), reply('old')], 'older'))
+  const arrival = chat.replyReceivedAt
+  assert.ok(arrival > 0)
+  await chat.read(load([reply('new'), reply('old')], 'older'))
+  assert.equal(chat.replyReceivedAt, arrival)
+  chat.sent('another-turn')
+  await chat.read(load([reply('new'), reply('old')], 'older'))
+  assert.equal(chat.replyReceivedAt, 0)
+})
+
+test('a reply to a new local send can arrive with the initial history', async () => {
+  const chat = new ChatHistory()
+  chat.sent('first')
+  await chat.read(async () => ({ items: [
+    { id: 'response', role: 'assistant', text: '你好' },
+    { id: 'request', role: 'user', message_id: 'first', text: '嗨' },
+  ], next_cursor: null }))
+  assert.ok(chat.replyReceivedAt > 0)
+})
 
 function openChat(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wintermute-chat-history-'))

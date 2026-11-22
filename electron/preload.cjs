@@ -6,6 +6,12 @@ contextBridge.exposeInMainWorld('wintermute', {
       .find((arg) => arg.startsWith('--wintermute-appearance='))
       ?.split('=')[1] || 'system',
   state: () => ipcRenderer.invoke('agent:state'),
+  enterPetMode: () => ipcRenderer.invoke('agent:enterPetMode'),
+  onPetSettings(callback) {
+    const listener = () => callback()
+    ipcRenderer.on('pet:open-settings', listener)
+    return () => ipcRenderer.removeListener('pet:open-settings', listener)
+  },
   loadEarlier: () => ipcRenderer.invoke('agent:loadEarlier'),
   schedule: (options) => ipcRenderer.invoke('agent:schedule', options),
   connectors: () => ipcRenderer.invoke('agent:connectors'),

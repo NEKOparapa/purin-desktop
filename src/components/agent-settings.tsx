@@ -8,7 +8,7 @@ import {
 } from '@/lib/desktop'
 import { Button } from '@/components/ui/button'
 import { ConnectorSettings } from '@/components/connector-settings'
-import { DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { DialogTitle } from '@/components/ui/dialog'
 
 const sections = [
   { id: 'connection', label: '连接', icon: Cable },
@@ -116,10 +116,7 @@ export function AgentSettings({
   }
 
   return (
-    <DialogContent
-      className="detail-dialog settings-dialog"
-      aria-describedby={undefined}
-    >
+    <>
       <div className="settings-sidebar">
         <DialogTitle>设备设置</DialogTitle>
         <nav className="nav-list" aria-label="设置分类">
@@ -471,6 +468,6 @@ export function AgentSettings({
           </p>
         )}
       </section>
-    </DialogContent>
+    </>
   )
 }

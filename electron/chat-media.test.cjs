@@ -4,6 +4,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 const { DesktopAgent } = require('./agent.cjs')
+const { ChatHistory } = require('./chat-history.cjs')
 
 test('attachment-only drafts retain their pictures, names and document references across both types of retry', t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wintermute-chat-'))
@@ -14,7 +15,7 @@ test('attachment-only drafts retain their pictures, names and document reference
   })
   const agent = Object.create(DesktopAgent.prototype)
   const history = { outbox: [] }
-  agent.profile = { token: 'local', controller: new AbortController(), file, history }
+  agent.profile = { token: 'local', controller: new AbortController(), file, history, chat: new ChatHistory() }
   agent.sync = agent.publish = () => {}
   const images = ['data:image/jpeg;base64,/9j/']
   const imageNames = ['截图.png']

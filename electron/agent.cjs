@@ -1,4 +1,5 @@
 const fs = require('node:fs')
+const { read, save } = require('./json-file.cjs')
 const path = require('node:path')
 const os = require('node:os')
 const { randomBytes, randomUUID, createHash } = require('node:crypto')
@@ -38,20 +39,6 @@ function matchChatOutbox(p) {
     if (local) matches.set(row.id, local)
   }
   return matches
-}
-
-function read(file, fallback) {
-  try {
-    return JSON.parse(fs.readFileSync(file, 'utf8'))
-  } catch (error) {
-    if (error.code === 'ENOENT') return fallback
-    throw error
-  }
-}
-
-function save(file, value) {
-  fs.writeFileSync(file + '.tmp', JSON.stringify(value), { mode: 0o600 })
-  fs.renameSync(file + '.tmp', file)
 }
 
 function recordWindow(profile, sample, at, target) {
@@ -368,6 +355,8 @@ class DesktopAgent {
 
   state() {
     const p = this.profile
+    const messages = this.chatMessages(p)
+    const last = messages.at(-1)
     return {
       url: p.url,
       deviceId: p.deviceId,
@@ -393,7 +382,9 @@ class DesktopAgent {
       issue: p.issue,
       sampleIssue: p.sampleIssue,
       lastSpan: p.history.lastSpan ?? null,
-      messages: this.chatMessages(p),
+      messages,
+      awaitingReply: last?.role === 'user' && ['queued', 'waiting'].includes(last.status),
+      replyReceivedAt: p.chat.replyReceivedAt,
       hasEarlier: p.chat.hasEarlier,
       questions: p.questions || [],
     }
@@ -1151,8 +1142,10 @@ class DesktopAgent {
       p.history.outbox.pop()
       throw error
     }
+    p.chat.sent(entry.id)
     this.publish()
     this.sync()
+    return entry.id
   }
 
   retry(id) {

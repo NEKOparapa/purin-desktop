@@ -6,6 +6,7 @@ const {
   session,
   ipcMain,
   safeStorage,
+  screen,
   nativeTheme,
   dialog,
 } = require('electron')
@@ -17,27 +18,38 @@ const {
   captureForegroundWindow,
   enableWindowCapture,
 } = require('./foreground-capture.cjs')
-let agent, appWindow
+const { createDesktopPet } = require('./desktop-pet.cjs')
+let agent, appWindow, desktopPet
 
 function windowBackground() {
-  return nativeTheme.shouldUseDarkColors ? '#16171b' : '#ffffff'
+  return nativeTheme.shouldUseDarkColors ? '#211f1e' : '#fbf9f5'
 }
 
 function windowControls() {
   return {
-    // Match the sidebar behind the native caption buttons.
-    color: nativeTheme.shouldUseDarkColors ? '#1e1f23' : '#f4f4f6',
-    symbolColor: nativeTheme.shouldUseDarkColors ? '#f1f2f5' : '#20222a',
-    height: 32,
+    // Let the native buttons share the background of the page or its modal overlay.
+    color: '#00000000',
+    symbolColor: nativeTheme.shouldUseDarkColors ? '#f3eee8' : '#362f29',
+    height: 44,
   }
 }
 
+function loadRenderer(win) {
+  if (app.isPackaged || process.argv.includes('--preview'))
+    return win.loadFile(path.join(__dirname, '../dist/index.html'))
+  return win.loadURL('http://127.0.0.1:5173')
+}
+
 function createWindow() {
+  const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea
+  const width = Math.min(560, Math.floor(area.width * 0.9))
+  const height = Math.min(680, Math.floor(area.height * 0.9))
   const win = new BrowserWindow({
-    width: 1440,
-    height: 960,
-    minWidth: 860,
-    minHeight: 680,
+    width, height,
+    x: area.x + Math.round((area.width - width) / 2),
+    y: area.y + Math.round((area.height - height) / 2),
+    minWidth: Math.min(380, width),
+    minHeight: Math.min(460, height),
     title: 'Wintermute',
     titleBarStyle: 'hidden',
     titleBarOverlay: process.platform === 'darwin' ? true : windowControls(),
@@ -54,11 +66,11 @@ function createWindow() {
   appWindow = win
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   win.webContents.on('will-navigate', (event) => event.preventDefault())
-  if (app.isPackaged || process.argv.includes('--preview')) {
-    win.loadFile(path.join(__dirname, '../dist/index.html'))
-  } else {
-    win.loadURL('http://127.0.0.1:5173')
-  }
+  win.on('closed', () => {
+    desktopPet?.destroy()
+    appWindow = null
+  })
+  void loadRenderer(win)
 }
 
 function presentNotifications(items, profile) {
@@ -78,9 +90,7 @@ function presentNotifications(items, profile) {
       const notice = new Notification({ title, body: detail.slice(0, 200) })
       notice.on('click', () => {
         if (agent.profile !== profile || win.isDestroyed()) return
-        if (win.isMinimized()) win.restore()
-        win.show()
-        win.focus()
+        desktopPet.restore()
         send(true)
       })
       notice.on('failed', () => send(false))
@@ -109,11 +119,13 @@ function start() {
         nativeTheme.themeSource = state.appearance
       if (appWindow && !appWindow.isDestroyed())
         appWindow.webContents.send('agent:changed', state)
+      desktopPet?.publish(state)
     },
     captureForegroundWindow,
     presentNotifications,
   )
   nativeTheme.themeSource = agent.appearance
+  desktopPet = createDesktopPet(agent, () => appWindow, loadRenderer)
   nativeTheme.on('updated', () => {
     if (!appWindow || appWindow.isDestroyed()) return
     appWindow.setBackgroundColor(windowBackground())
@@ -121,6 +133,7 @@ function start() {
       appWindow.setTitleBarOverlay(windowControls())
   })
   const actions = {
+    enterPetMode: () => desktopPet.enter(),
     downloadHistoryFile: file => agent.downloadHistoryFile(file, chooseAttachmentPath),
     downloadNotificationFile: file => agent.downloadNotificationFile(file, chooseAttachmentPath),
     async chooseObsidianVault() {
@@ -201,23 +214,25 @@ function start() {
   )
   createWindow()
   app.on('activate', () => {
-    if (!BrowserWindow.getAllWindows().length) createWindow()
+    if (!appWindow) createWindow()
+    else desktopPet.restore()
   })
 }
 
 if (app.requestSingleInstanceLock()) {
   app.on('second-instance', () => {
     if (appWindow && !appWindow.isDestroyed()) {
-      if (appWindow.isMinimized()) appWindow.restore()
-      appWindow.show()
-      appWindow.focus()
+      desktopPet.restore()
     } else if (app.isReady()) createWindow()
   })
   app.whenReady().then(start)
 } else {
   app.quit()
 }
-app.on('before-quit', () => agent?.close())
+app.on('before-quit', () => {
+  desktopPet?.destroy()
+  agent?.close()
+})
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })

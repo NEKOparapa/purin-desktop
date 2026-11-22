@@ -53,8 +53,15 @@ function chatRow(row) {
 class ChatHistory {
   messages = []
   hasEarlier = false
+  replyReceivedAt = 0
+  #firstSendId
   #page
   #reading
+  get loaded() { return this.#page !== undefined }
+  sent(id) {
+    this.replyReceivedAt = 0
+    if (!this.loaded) this.#firstSendId ??= id
+  }
   async read(api, more = false) {
     if (this.#reading) {
       if (!more) return this.#reading
@@ -71,6 +78,20 @@ class ChatHistory {
   async #update(api, more) {
     if (more && !this.hasEarlier) return false
     const page = await readPage(api, this.#page, more)
+    if (!more) {
+      const replyIndex = page.items.findIndex(row => row.role === 'assistant')
+      const reply = page.items[replyIndex]
+      const previous = this.#page?.items
+      if (reply?.id !== previous?.find(row => row.role === 'assistant')?.id) {
+        // On the initial sync only a reply following a send in this session is new.
+        const fresh = reply && (previous
+          ? !previous.some(row => row.id === reply.id)
+          : this.#firstSendId && page.items.slice(replyIndex + 1).some(row =>
+            row.role === 'user' && row.message_id === this.#firstSendId))
+        this.replyReceivedAt = fresh ? Date.now() : 0
+      }
+      this.#firstSendId = undefined
+    }
     this.#page = page
     const messages = [...page.items].reverse().map(chatRow)
     const hasEarlier = Boolean(page.next)
