@@ -60,7 +60,6 @@
   --on-primary: light-dark(#ffffff, #10243a);
   --focus: var(--primary);
   --online: light-dark(#29627b, #92cff2);
-  --notification: light-dark(#88570b, #f3c584);
   --error: light-dark(#ab3048, #ffaaa9);
   --scrim: light-dark(#14192b42, #06070b99);
   --popover-shadow: light-dark(#171a3029, #00000055);

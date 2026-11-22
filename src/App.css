@@ -255,15 +255,6 @@
   color: #fff;
   background: var(--outgoing-bubble);
 }
-.message.notification header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 3px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--notification);
-}
 .message footer {
   margin: 4px 8px 0;
   max-width: 88%;

@@ -43,8 +43,6 @@ function chatRow(row) {
     text: row.text,
     ...(row.role === 'user' && Array.isArray(row.files) && row.files.length && { files: row.files }),
     at: row.occurred_at ?? null,
-    ...(row.role === 'assistant' &&
-      row.layer === 'notification' && { notificationReply: true }),
     ...(row.message_id && {
       messageId: row.message_id,
       deviceId: row.device_id,

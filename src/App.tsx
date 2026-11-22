@@ -2,7 +2,6 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   ArrowDown,
   ArrowUp,
-  Bell,
   CalendarDays,
   History,
   FileText,
@@ -77,23 +76,15 @@ function Message({
   retry: (id: string) => void
 }) {
   const user = message.role === 'user'
-  const notice = message.notificationReply
-  const author = user ? '你' : notice ? 'Wintermute · 通知回复' : 'Wintermute'
   return (
     <article
-      className={'message ' + (notice ? 'notification' : message.role)}
-      aria-label={author}
+      className={'message ' + message.role}
+      aria-label={user ? '你' : 'Wintermute'}
     >
       <div
         className="message-bubble"
         title={Number.isFinite(at) ? timestamp.format(at) : undefined}
       >
-        {notice && (
-          <header>
-            <Bell size={13} aria-hidden="true" />
-            {author}
-          </header>
-        )}
         {message.files && <Files files={message.files} />}
         {!message.files &&
           message.documents?.map((doc, i) => (

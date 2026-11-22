@@ -69,7 +69,6 @@ export interface ChatMessage {
   files?: HistoryFile[]
   id: string
   role: 'user' | 'assistant'
-  notificationReply?: boolean
   text: string
   at: string | null
   status?:
