@@ -91,13 +91,13 @@ export function AgentSettings({
     }
   }
 
-  async function save() {
+  async function save(value = pairValue) {
     if (!api || busy) return
     setBusy(true)
     setFeedback('')
     try {
       if (manual) await api.configure({ url, deviceId, token, deviceName })
-      else await api.pair({ value: pairValue, serverUrl: url })
+      else await api.pair({ value })
       onConnected()
       setToken('')
       setPairValue('')
@@ -244,22 +244,24 @@ export function AgentSettings({
                 }}
               >
                 <label className="connection-full-width">
-                  配对码或链接
+                  配对链接
                   <input
                     value={pairValue}
                     onChange={(event) => setPairValue(event.target.value)}
+                    disabled={busy}
+                    onPaste={(event) => {
+                      const link = event.clipboardData.getData('text').trim()
+                      if (!/^https:\/\/[^\s/?#@]+\/?#wm-pair=\d{5}-?\d{5}$/.test(link)) return
+                      event.preventDefault()
+                      setPairValue(link)
+                      void save(link)
+                    }}
                     placeholder="从后端管理面板复制"
                     autoComplete="off"
                     spellCheck={false}
                     required
                   />
                 </label>
-                {!pairValue.trim().startsWith('https://') && (
-                  <label className="connection-full-width">
-                    服务地址
-                    <input type="url" value={url} onChange={(event) => setUrl(event.target.value)} />
-                  </label>
-                )}
                 <div className="connection-actions connection-full-width">
                   <Button type="submit" disabled={!api || busy}>
                     {busy ? '正在配对…' : '配对并连接'}
@@ -285,7 +287,7 @@ export function AgentSettings({
               >
                 <p className="settings-note connection-full-width">
                   {api
-                    ? '将本机设备 ID 登记到后端，然后填写对应令牌。'
+                    ? '填写已有连接的服务地址、设备 ID 和令牌。'
                     : '请打开 Wintermute 桌面应用以连接服务。'}
                 </p>
                 <label className="connection-full-width">
@@ -335,7 +337,7 @@ export function AgentSettings({
                     {busy ? '正在验证…' : '验证并保存'}
                   </Button>
                   <Button type="button" variant="ghost" disabled={busy} onClick={() => setManual(false)}>
-                    使用配对码
+                    使用配对链接
                   </Button>
                   {editing && (
                     <Button

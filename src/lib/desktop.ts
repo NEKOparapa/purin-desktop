@@ -225,7 +225,7 @@ declare global {
       onPetSettings(callback: () => void): () => void
       state(): Promise<AgentState>
       configure(settings: Connection): Promise<void>
-      pair(options: { value: string; serverUrl: string }): Promise<void>
+      pair(options: { value: string }): Promise<void>
       connectors(): Promise<ConnectorsSnapshot>
       setMacConnector?(options: {
         id: string

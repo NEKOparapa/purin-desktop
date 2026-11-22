@@ -145,25 +145,18 @@ function connection(url, deviceId) {
   return { url: serviceOrigin(url), deviceId: deviceId.trim() }
 }
 
-function pairingAddress(value, fallback) {
-  const input = value.trim()
-  let code = input
-  let url
+function pairingAddress(value) {
   try {
-    if (!/^[0-9]{5}-?[0-9]{5}$/.test(input)) {
-      const link = new URL(input)
-      code = new URLSearchParams(link.hash.slice(1)).get('wm-pair')
+    const link = new URL(value.trim())
+    const match = /^#wm-pair=([0-9]{5}-?[0-9]{5})$/.exec(link.hash)
+    if (link.protocol === 'https:' && match) {
       link.hash = ''
-      url = serviceOrigin(link.toString())
-    } else {
-      url = serviceOrigin(fallback)
+      return { url: serviceOrigin(link.href), code: match[1].replace('-', '') }
     }
   } catch {
-    throw new Error('请粘贴完整配对链接，或填写 HTTPS 服务地址和配对码')
+    // Invalid URLs and non-root service addresses use the same input error.
   }
-  if (!code || !/^[0-9]{5}-?[0-9]{5}$/.test(code) || !url.startsWith('https://'))
-    throw new Error('请粘贴完整配对链接，或填写 HTTPS 服务地址和配对码')
-  return { url, code: code.replace('-', '') }
+  throw new Error('请粘贴管理页生成的完整配对链接')
 }
 
 async function fetchResponse(profile, route, options) {
@@ -448,25 +441,36 @@ class DesktopAgent {
     this.publish()
   }
 
-  async pair({ value, serverUrl }) {
-    const { url, code } = pairingAddress(value, serverUrl)
+  async pair({ value }) {
+    const { url, code } = pairingAddress(value)
     const profile = this.profile
     const previous = this.pairAttempt
-    const token = previous?.url === url && previous.code === code
-      ? previous.token : randomBytes(32).toString('base64url')
-    this.pairAttempt = { url, code, token }
+    const attempt = previous?.url === url && previous.code === code
+      ? previous : { url, code, token: randomBytes(32).toString('base64url'),
+        id: 'desktop-' + randomBytes(12).toString('hex') }
+    this.pairAttempt = attempt
+    const { token } = attempt
+    const platform = devicePlatforms[process.platform]
     const response = await fetch(url + '/v1/devices/pair', {
       method: 'POST',
       redirect: 'error',
       signal: AbortSignal.timeout(9000),
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Device-ID': attempt.id,
+        ...(platform && { 'X-Device-Platform': platform }),
+      },
       body: JSON.stringify({
         code, token, installation: profile.installation,
         device_type: 'desktop', device_name: profile.deviceName,
       }),
     })
     if (!response.ok) {
-      if (response.status === 403) throw new Error('配对码无效、已过期或已使用')
+      if (response.status === 409) {
+        if (this.pairAttempt === attempt) this.pairAttempt = undefined
+        throw new Error('设备 ID 冲突，请重新配对')
+      }
+      if (response.status === 403) throw new Error('配对链接无效、已过期或已使用')
       if (response.status === 429) throw new Error('尝试次数过多，请稍后再试')
       if (response.status === 404) throw new Error('后端尚未启用设备配对')
       throw new Error('配对失败，请检查服务地址后重试')
