@@ -183,8 +183,9 @@ function PetChat({ api, state }: { api: PetBridge; state: PetSnapshot }) {
       el.style.setProperty('--bubble-x', layout.bubbleX + 'px')
       el.style.setProperty('--bubble-y', layout.bubbleY + 'px')
       el.style.setProperty('--bubble-max-height', layout.bubbleMaxHeight + 'px')
-      el.style.setProperty('--tail-x', layout.tailX + 'px')
-      el.style.setProperty('--tail-y', layout.tailY + 'px')
+      if (layout.outline) {
+        el.style.setProperty('--bubble-outline', `path("${layout.outline.path}") border-box`)
+      }
       void api
         .setRegion(layout.region, state.session)
         .catch(() => {
@@ -207,6 +208,7 @@ function PetChat({ api, state }: { api: PetBridge; state: PetSnapshot }) {
     state.preferredSide,
     editing,
     showBubble,
+    message,
   ])
   useLayoutEffect(() => {
     if (editing) input.current?.focus({ preventScroll: true })

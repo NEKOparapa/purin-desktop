@@ -17,27 +17,42 @@ function pageRoute(cursor, pending = false) {
   return '/v1/notifications?' + query
 }
 
+function validNotice(n) {
+  return (
+    typeof n?.id === 'string' &&
+    idPattern.test(n.id) &&
+    typeof n.title === 'string' &&
+    typeof n.body === 'string' &&
+    Array.isArray(n.attachments) &&
+    n.attachments.every(
+      (a) =>
+        a &&
+        typeof a.id === 'string' &&
+        idPattern.test(a.id) &&
+        typeof a.name === 'string' &&
+        Number.isSafeInteger(a.size_bytes) &&
+        a.size_bytes >= 0,
+    )
+  )
+}
+
+function validCalendarNotice(n) {
+  return (
+    validNotice(n) &&
+    Number.isFinite(Date.parse(n.notify_at)) &&
+    Array.isArray(n.target_names) &&
+    n.target_names.every((name) => typeof name === 'string') &&
+    typeof n.in_inbox === 'boolean' &&
+    ['scheduled', 'sent', 'partial', 'failed'].includes(n.status)
+  )
+}
+
 function validatePage(page) {
   if (
     !Array.isArray(page?.items) ||
     !(page.next_cursor === null || typeof page.next_cursor === 'string') ||
     !page.items.every(
-      (n) =>
-        typeof n?.id === 'string' &&
-        idPattern.test(n.id) &&
-        typeof n.title === 'string' &&
-        typeof n.body === 'string' &&
-        Number.isFinite(Date.parse(n.created_at)) &&
-        Array.isArray(n.attachments) &&
-        n.attachments.every(
-          (a) =>
-            a &&
-            typeof a.id === 'string' &&
-            idPattern.test(a.id) &&
-            typeof a.name === 'string' &&
-            Number.isSafeInteger(a.size_bytes) &&
-            a.size_bytes >= 0,
-        ),
+      (n) => validNotice(n) && Number.isFinite(Date.parse(n.created_at)),
     )
   ) {
     throw new Error('后端返回的通知格式无效')
@@ -91,4 +106,10 @@ async function deliverPending({ request, inFlight, save, present, active }) {
   }
 }
 
-module.exports = { notificationPath, pageRoute, validatePage, deliverPending }
+module.exports = {
+  notificationPath,
+  pageRoute,
+  validatePage,
+  validCalendarNotice,
+  deliverPending,
+}

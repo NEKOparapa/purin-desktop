@@ -20,10 +20,12 @@ export function setBrowserAppearance(mode: Appearance) {
 
 export interface DeviceFile { id: string; name: string; size_bytes: number; content_type: string }
 export interface DeviceNotice {
-  id: string; title: string; body: string; created_at: string; expires_at: string | null;
+  id: string; title: string; body: string; created_at: string | null; expires_at: string | null;
+  notify_at: string; targets: string[]; target_names: string[]; in_inbox: boolean;
+  status: 'scheduled' | 'sent' | 'partial' | 'failed';
   received_at: string | null; read_at: string | null; expired: boolean; attachments: DeviceFile[]
 }
-export interface NoticeAlert { id: string; title: string; body: string; open: boolean; deviceId: string; url: string }
+export interface NoticeAlert { id: string; title: string; body: string; open: boolean; deviceId: string; url: string; notifyAt: string }
 export interface ChatFileRef {
   id: string
   name: string
@@ -43,7 +45,8 @@ export interface ScheduleEntry {
   title: string
   content: string | null
   trigger_at: string
-  action: 'notify_agent'
+  action: 'notify_agent' | 'notify_device'
+  notification?: DeviceNotice
   status: 'scheduled' | 'triggered'
 }
 
@@ -82,6 +85,7 @@ export interface ChatMessage {
   error?: string
 }
 export interface AgentState {
+  hasUnreadNotifications: boolean
   deviceName: string
   devicePlatform: 'windows' | 'macos' | null
   appearance: Appearance
@@ -277,6 +281,7 @@ declare global {
   }
 }
 const initial: AgentState = {
+  hasUnreadNotifications: false,
   deviceName: '',
   devicePlatform: null,
   appearance: 'system',

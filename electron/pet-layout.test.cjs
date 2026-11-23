@@ -81,3 +81,35 @@ test('the editor and bubble stay visible and separate at edges and corners', () 
     }
   }
 })
+
+test('the visible balloon and its directed tail clear the editor after dragging or resizing', () => {
+  const reply = { width: 252, height: 180 }
+  const cases = [
+    { width: 1024, x: 36, y: 42, side: 'right' },
+    { width: 1024, x: 988, y: 278, side: 'left' },
+    { width: 360, x: 105, y: 42, side: 'below' },
+    { width: 360, x: 255, y: 278, side: 'above' },
+  ]
+  for (const { width, x, y, side } of cases) {
+    for (const editorHeight of [44, 104]) {
+      const editor = { ...composer, height: editorHeight }
+      const p = layoutPet({ width, height: 320 }, { x, y }, 'right', editor, reply)
+      assert.equal(p.side, side)
+      const { base, tip } = p.outline
+      const dx = x - p.bubbleX - base.x, dy = y - p.bubbleY - base.y
+      const tx = tip.x - base.x, ty = tip.y - base.y
+      assert.ok(Math.abs(tx * dy - ty * dx) < 1e-7, 'tip aligns with the pet')
+      assert.ok(tx * dx + ty * dy > 0, 'tip points towards the pet')
+
+      const h = Math.min(reply.height, p.bubbleMaxHeight)
+      if (width === 360) assert.ok(h < reply.height, 'long reply scrolls in the available space')
+      const left = p.bubbleX + Math.min(0, tip.x), right = p.bubbleX + Math.max(reply.width, tip.x)
+      const top = p.bubbleY + Math.min(0, tip.y), bottom = p.bubbleY + Math.max(h, tip.y)
+      assert.ok(right + 3 <= p.composerLeft || left - 3 >= p.composerLeft + editor.width ||
+        bottom + 3 <= p.composerTop || top - 3 >= p.composerTop + editor.height,
+        'outline and shadow clear the composer')
+      assert.ok(left >= p.region.x && top >= p.region.y)
+      assert.ok(right <= p.region.x + p.region.width && bottom <= p.region.y + p.region.height)
+    }
+  }
+})

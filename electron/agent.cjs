@@ -16,7 +16,7 @@ const { ChatHistory } = require('./chat-history.cjs')
 const { availableTools, secureTransport, TerminalToolClient } = require('./terminal-tools.cjs')
 const { detectObsidianVaults, inspectVault, runObsidianTool } = require('./obsidian-connector.cjs')
 const { macConnectors, runMacTool } = require('./mac-connectors.cjs')
-const { notificationPath, pageRoute, validatePage, deliverPending } = require('./notifications.cjs')
+const { notificationPath, pageRoute, validatePage, validCalendarNotice, deliverPending } = require('./notifications.cjs')
 const captureVersion = 6
 const devicePlatforms = { win32: 'windows', darwin: 'macos' }
 
@@ -358,6 +358,7 @@ class DesktopAgent {
       connectionRevision: p.revision,
       appearance: this.appearance,
       configured: !!p.token,
+      hasUnreadNotifications: !!p.hasUnreadNotifications,
       remoteCommandsEnabled: !!p.remote?.enabled,
       remoteTools: p.remote?.tools || [],
       remoteIssue: p.remote?.issue || '',
@@ -539,10 +540,28 @@ class DesktopAgent {
     }
   }
 
-  readNotification(id) {
+  async readNotification(id) {
     const p = this.profile
     if (!p.token) throw new Error('请先连接设备')
-    return request(p, notificationPath(id) + '/read', {}, p.controller.signal)
+    const result = await request(p, notificationPath(id) + '/read', {}, p.controller.signal)
+    if (p === this.profile) void this.refreshUnreadNotifications(p)
+    return result
+  }
+
+  async refreshUnreadNotifications(p) {
+    const revision = p.unreadRevision = (p.unreadRevision ?? 0) + 1
+    p.nextUnreadCheck = Date.now() + 30_000
+    try {
+      const page = validatePage(await request(p, '/v1/notifications?unread=1&limit=1', undefined, p.controller.signal))
+      if (p !== this.profile || revision !== p.unreadRevision) return
+      const unread = page.items.length > 0
+      if (unread !== !!p.hasUnreadNotifications) {
+        p.hasUnreadNotifications = unread
+        this.publish()
+      }
+    } catch {
+      // Keep the last confirmed state until the next inbox check.
+    }
   }
 
   downloadNotificationFile({notificationId, file}, choosePath) {
@@ -562,12 +581,20 @@ class DesktopAgent {
     if (!p.token || !this.presentNotifications || p.pollingNotifications ||
         Date.now() < (p.nextNotificationsPoll ?? 0) || p.controller.signal.aborted) return
     p.pollingNotifications = true
+    if (Date.now() >= (p.nextUnreadCheck ?? 0)) void this.refreshUnreadNotifications(p)
     try {
       await deliverPending({
         request: (route, body) => request(p, route, body, p.controller.signal),
         inFlight: p.history.notificationReceipts ??= [],
         save: () => this.persist(p),
-        present: items => this.presentNotifications(items, p),
+        present: items => {
+          p.unreadRevision = (p.unreadRevision ?? 0) + 1
+          if (!p.hasUnreadNotifications) {
+            p.hasUnreadNotifications = true
+            this.publish()
+          }
+          return this.presentNotifications(items, p)
+        },
         active: () => p === this.profile && !p.controller.signal.aborted,
       })
     } catch (error) {
@@ -591,7 +618,7 @@ class DesktopAgent {
       Date.parse(start) >= Date.parse(end)
     )
       throw new Error('无效的日历时间范围')
-    const query = new URLSearchParams({ start, end, limit: '100' })
+    const query = new URLSearchParams({ start, end, limit: '100', include_notifications: '1' })
     if (cursor !== undefined) {
       if (typeof cursor !== 'string' || !cursor || cursor.length > 2048)
         throw new Error('无效的日历分页位置')
@@ -613,6 +640,7 @@ class DesktopAgent {
             typeof item?.id === 'string' &&
             typeof item.title === 'string' &&
             typeof item.action === 'string' &&
+            (item.action !== 'notify_device' || validCalendarNotice(item.notification)) &&
             (item.content == null || typeof item.content === 'string') &&
             isInstant(item.trigger_at) &&
             ['scheduled', 'triggered'].includes(item.status),
@@ -621,8 +649,8 @@ class DesktopAgent {
         throw new Error('日历数据格式有误，请检查后端版本。')
       return page
     } catch (error) {
-      if (error.status === 404)
-        throw new Error('当前后端未提供日历，请升级后端后刷新。')
+      if (error.status === 404 || error.status === 400)
+        throw new Error('当前后端未提供按日通知，请升级后端后刷新。')
       throw error
     }
   }

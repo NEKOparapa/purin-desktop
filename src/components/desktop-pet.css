@@ -51,8 +51,9 @@
 }
 .pet-bubble {
   --paper: light-dark(#fffaf0, #39302c);
-  --outline: light-dark(#715544, #e0bfa6);
+  --ink-line: light-dark(#705342, #d7b89e);
   position: absolute;
+  isolation: isolate;
   left: var(--bubble-x);
   top: var(--bubble-y);
   width: max-content;
@@ -60,56 +61,22 @@
   flex-direction: column;
   max-height: var(--bubble-max-height, none);
   max-width: min(264px, calc(var(--work-width, 320px) - 16px));
-  padding: 10px 29px 11px 15px;
-  border: 2px solid var(--outline);
-  border-radius: 22px 24px 21px 18px / 20px 18px 24px 22px;
-  background: var(--paper);
-  box-shadow: 2px 3px 0 light-dark(#65483145, #0007);
+  padding: 12px 33px 13px 16px;
 }
-.pet-bubble::before,
-.pet-bubble::after {
+.pet-bubble::before {
   content: '';
   position: absolute;
+  inset: 0;
+  z-index: -1;
   pointer-events: none;
-  width: 17px;
-  height: 15px;
-  top: var(--tail-y, 22px);
-  left: -16px;
-  clip-path: polygon(100% 0, 0 85%, 100% 100%);
-  background: var(--outline);
-}
-.pet-bubble::after {
-  width: 14px;
-  height: 10px;
-  left: -11px;
-  margin-top: 3px;
   background: var(--paper);
+  border: 2px solid var(--ink-line);
+  border-radius: 19px;
+  border-shape: var(--bubble-outline);
+  box-shadow: 2px 3px 0 light-dark(#6f503c45, #0007);
 }
-[data-bubble-side='left'] .pet-bubble::before,
-[data-bubble-side='left'] .pet-bubble::after {
-  left: auto;
-  right: -16px;
-  scale: -1 1;
-}
-[data-bubble-side='left'] .pet-bubble::after {
-  right: -11px;
-}
-:is([data-bubble-side='below'], [data-bubble-side='above']) .pet-bubble::before,
-:is([data-bubble-side='below'], [data-bubble-side='above']) .pet-bubble::after {
-  top: -13px;
-  left: var(--tail-x);
-  margin: 0;
-  clip-path: polygon(0 100%, 70% 0, 100% 100%);
-}
-:is([data-bubble-side='below'], [data-bubble-side='above']) .pet-bubble::after {
-  top: -8px;
-  left: calc(var(--tail-x) + 2px);
-  width: 13px;
-}
-[data-bubble-side='above'] .pet-bubble::before { top: auto; bottom: -13px; scale: 1 -1; }
-[data-bubble-side='above'] .pet-bubble::after { top: auto; bottom: -8px; scale: 1 -1; }
 .pet-bubble p {
-  position: relative;
+  min-height: 0;
   max-height: clamp(32px, calc(var(--work-height, 640px) - 252px), 160px);
   overflow-y: auto;
   white-space: pre-wrap;

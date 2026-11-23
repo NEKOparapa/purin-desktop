@@ -1,138 +1,77 @@
-.notice-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-.notice-toolbar h2 {
-  font-size: 17px;
-  font-weight: 600;
-}
-.notice-toggle {
-  padding: 4px 6px;
-  color: var(--primary);
-  font-size: 13px;
-  border-radius: 6px;
-}
-.notice-toggle:hover {
-  background: var(--hover);
-}
-.notice-list button:focus-visible {
-  outline-offset: -2px;
-}
-.notice-more,
-.notice-banner button,
-.notice-details button {
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--ink);
-  border-radius: 7px;
-}
-.notice-empty {
-  font-size: 14px;
-  color: var(--muted);
-  padding: 8px 0;
-}
-.notice-error {
-  color: var(--error);
-  font-size: 14px;
-}
-.notice-entry {
-  border-bottom: 1px solid var(--line);
-}
-.notice-summary {
-  background: transparent;
-  border: 0;
-  text-align: left;
-  color: var(--ink);
-  display: grid;
-  grid-template-columns: 6px minmax(0, 1fr) auto;
+.notice-entry .notice-summary {
   width: 100%;
-  align-items: center;
-  column-gap: 10px;
-  padding: 9px 4px;
+  grid-template-columns: var(--time-column) minmax(0, 1fr) 14px;
+  border-radius: 4px;
+  text-align: left;
 }
-.notice-summary::before {
-  content: '';
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-}
-.notice-entry[data-unread='true'] .notice-summary::before {
-  background: var(--primary);
-}
-.notice-title,
-.notice-meta,
-.notice-meta span {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.notice-summary:hover strong {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 .notice-heading {
   min-width: 0;
-  display: grid;
-  gap: 3px;
+  display: block;
 }
 .notice-preview {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--muted);
-  font-size: 13px;
 }
-.notice-title small {
-  flex: none;
+.notice-unread {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin: 0 0 3px 6px;
+  border-radius: 50%;
+  background: var(--primary);
 }
-.notice-heading strong {
+.notice-delivery small {
+  font-size: inherit;
   overflow-wrap: anywhere;
-  font-size: 14px;
-  font-weight: 550;
 }
-.notice-heading small,
-.notice-meta,
-.notice-details small {
-  font-size: 12px;
+.notice-delivery svg {
+  display: inline;
+  vertical-align: -2px;
+  margin-right: 3px;
+}
+.notice-chevron {
+  align-self: start;
+  margin-top: 5px;
   color: var(--quiet);
 }
-.notice-entry[data-unread='true'] .notice-heading strong {
-  font-weight: 650;
-}
-.notice-meta {
-  flex-shrink: 0;
-}
-.notice-meta .rotated {
+.notice-summary[aria-expanded='true'] .notice-chevron {
   transform: rotate(180deg);
 }
 .notice-details {
-  margin: 0 16px 16px 28px;
+  margin: 0 0 16px calc(var(--time-column) + var(--entry-gap));
+  font-size: 14px;
 }
 .notice-details p {
-  font-size: 14px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  margin: 0 0 12px;
   line-height: 1.65;
 }
 .notice-details ul {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
   list-style: none;
   padding: 0;
-  margin: 0;
+  margin: 8px 0 0;
 }
 .notice-details button {
-  display: flex;
-  gap: 8px;
+  display: inline-flex;
   align-items: center;
-  padding: 7px 11px;
+  gap: 8px;
+  max-width: 100%;
+  padding: 5px 0;
   color: var(--primary);
-  overflow-wrap: anywhere;
 }
-.notice-more {
-  display: block;
-  margin: 18px auto;
-  padding: 7px 14px;
+.notice-details button span {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.notice-details small {
+  color: var(--muted);
+  font-size: 12px;
 }
 .notice-banner {
   position: fixed;
@@ -145,18 +84,23 @@
   gap: 12px;
   background: var(--surface);
   border: 1px solid var(--control-line);
-  border-radius: 12px;
-  box-shadow: 0 6px 24px var(--popover-shadow);
-  padding: 12px;
+  border-radius: 14px;
+  box-shadow: 0 10px 30px var(--popover-shadow);
+  padding: 12px 14px;
 }
+
 .notice-banner button {
   border: 0;
+  background: transparent;
+  color: var(--ink);
   text-align: left;
   min-width: 0;
 }
+
 .notice-banner button:first-child {
   flex: 1;
 }
+
 .notice-banner strong,
 .notice-banner span {
   display: block;
@@ -164,22 +108,9 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .notice-banner span {
   font-size: 13px;
   color: var(--muted);
   margin-top: 4px;
-}
-.notice-summary:hover,
-.notice-details button:hover,
-.notice-more:hover {
-  background: var(--hover);
-}
-@container (max-width: 460px) {
-  .notice-summary {
-    grid-template-columns: 6px minmax(0, 1fr);
-    row-gap: 4px;
-  }
-  .notice-meta {
-    grid-column: 2;
-  }
 }

@@ -10,7 +10,7 @@ import {
   X,
 } from 'lucide-react'
 import { Dialog } from '@/components/ui/dialog'
-import { DesktopLayout, type Page, type Panel } from '@/components/desktop-layout'
+import { DesktopLayout, type Page } from '@/components/desktop-layout'
 import { Mascot } from '@/components/mascot'
 import { useTypingActivity } from '@/lib/use-typing-activity'
 import { AgentSettings } from '@/components/agent-settings'
@@ -128,9 +128,25 @@ function Chat({
   const follow = useRef(true)
   const log = useRef<HTMLDivElement>(null)
   const input = useRef<HTMLTextAreaElement>(null)
+  const compactLine = useRef<HTMLSpanElement>(null)
+  const [wraps, setWraps] = useState(false)
+  const hasLineBreak = draft.includes('\n')
+  const expanded = hasLineBreak || wraps
   const lastMessageId = agent.messages.at(-1)?.id
   const hasMessages = agent.messages.length > 0 || agent.hasEarlier
   const olderAnchor = useRef<{ height: number; position: number } | null>(null)
+
+  useLayoutEffect(() => {
+    const line = compactLine.current!
+    // The probe keeps the width between the buttons even when the editor spans the form.
+    const observer = new ResizeObserver(([entry]) => {
+      setWraps(
+        entry.contentRect.height > parseFloat(getComputedStyle(line).lineHeight),
+      )
+    })
+    observer.observe(line)
+    return () => observer.disconnect()
+  }, [])
 
   async function earlier() {
     if (loadingEarlier || !log.current || !window.wintermute) return
@@ -150,14 +166,14 @@ function Chat({
     }
   }
   useLayoutEffect(() => {
-    if (!loadingEarlier && olderAnchor.current && log.current) {
+    if (visible && !loadingEarlier && olderAnchor.current && log.current) {
       const anchor = olderAnchor.current
       log.current.scrollTop =
         anchor.position + log.current.scrollHeight - anchor.height
       olderAnchor.current = null
     } else if (visible && follow.current && log.current)
       log.current.scrollTop = log.current.scrollHeight
-  }, [agent.messages.length, lastMessageId, visible, loadingEarlier, draft])
+  }, [agent.messages.length, lastMessageId, visible, loadingEarlier, draft, expanded])
   function fillPrompt(text: string) {
     setDraft(text)
     activity.noteInput()
@@ -344,6 +360,7 @@ function Chat({
         )}
         <form
           className={'composer' + (dragging ? ' dragging' : '')}
+          data-expanded={expanded}
           onDragOver={(event) => {
             if (event.dataTransfer.types.includes('Files')) {
               event.preventDefault()
@@ -424,6 +441,9 @@ function Chat({
           >
             <Paperclip size={19} />
           </button>
+          <span className="composer-line" ref={compactLine} aria-hidden="true">
+            {hasLineBreak ? '' : draft}
+          </span>
           <textarea
             aria-label="对话消息"
             aria-description="回车换行，Ctrl + Enter 或 ⌘ + Enter 发送"
@@ -451,45 +471,46 @@ function Chat({
               }
             }}
           />
-          <span className="composer-spacer" />
-          {visible &&
-          agent.configured &&
-          agent.connectionRevision !== undefined ? (
-            <VoiceInput
-              revision={agent.connectionRevision}
-              onBusy={setVoiceBusy}
-              onError={setIssue}
-              onText={(text) => {
-                setDraft(
-                  (current) =>
-                    current +
-                    (current && !/\s$/.test(current) ? ' ' : '') +
-                    text,
-                )
-                input.current?.focus()
-              }}
-            />
-          ) : (
+          <div className="composer-actions">
+            {visible &&
+            agent.configured &&
+            agent.connectionRevision !== undefined ? (
+              <VoiceInput
+                revision={agent.connectionRevision}
+                onBusy={setVoiceBusy}
+                onError={setIssue}
+                onText={(text) => {
+                  setDraft(
+                    (current) =>
+                      current +
+                      (current && !/\s$/.test(current) ? ' ' : '') +
+                      text,
+                  )
+                  input.current?.focus()
+                }}
+              />
+            ) : (
+              <button
+                type="button"
+                className="composer-tool"
+                title="连接设备后使用语音输入"
+                aria-label="语音输入"
+                onClick={settings}
+              >
+                <Mic size={19} />
+              </button>
+            )}
             <button
-              type="button"
-              className="composer-tool"
-              title="连接设备后使用语音输入"
-              aria-label="语音输入"
-              onClick={settings}
+              className="send-button"
+              type="submit"
+              aria-label="发送对话消息"
+              aria-keyshortcuts="Control+Enter Meta+Enter"
+              title="发送消息（Ctrl + Enter 或 ⌘ + Enter）"
+              disabled={!canSend}
             >
-              <Mic size={19} />
+              <ArrowUp size={19} strokeWidth={2} />
             </button>
-          )}
-          <button
-            className="send-button"
-            type="submit"
-            aria-label="发送对话消息"
-            aria-keyshortcuts="Control+Enter Meta+Enter"
-            title="发送消息（Ctrl + Enter 或 ⌘ + Enter）"
-            disabled={!canSend}
-          >
-            <ArrowUp size={19} strokeWidth={2} />
-          </button>
+          </div>
         </form>
         {uploading && (
           <p className="upload-status" role="status">
@@ -523,10 +544,8 @@ function Chat({
 
 export default function App() {
   const [page, setPage] = useState<Page>('chat')
-  const [panel, setPanel] = useState<Panel>('navigation')
   const [panelOpen, setPanelOpen] = useState(false)
   useEffect(() => window.wintermute?.onPetSettings(() => {
-    setPanel('settings')
     setPanelOpen(true)
   }), [])
   const [connectionVersion, setConnectionVersion] = useState(0)
@@ -553,22 +572,12 @@ export default function App() {
     })
     return ()=>{clearTimeout(timer);stop?.()}
   },[agent.url,agent.deviceId,connectionVersion])
-  function showPanel(next: Panel) {
-    setPanel(next)
-    setPanelOpen(true)
-  }
-  const showSettings = () => showPanel('settings')
+  const showSettings = () => setPanelOpen(true)
   return (
-    <Dialog
-      open={panelOpen}
-      onOpenChange={(open) =>
-        open ? showPanel('navigation') : setPanelOpen(false)
-      }
-    >
+    <Dialog open={panelOpen} onOpenChange={setPanelOpen}>
       <DesktopLayout
         page={page}
-        panel={panel}
-        onPanelChange={showPanel}
+        unread={agent.hasUnreadNotifications}
         onNavigate={(next) => {
           if (page !== next) {
             setFocusNotice(null)
@@ -607,7 +616,7 @@ export default function App() {
               ])}
             >
               <div className="schedule-inner">
-                <header className="page-heading">
+                <header className="sr-only">
                   <h1 id="schedule-heading">日程</h1>
                 </header>
                 <ScheduleCalendar
