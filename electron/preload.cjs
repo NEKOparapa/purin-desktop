@@ -46,6 +46,7 @@ contextBridge.exposeInMainWorld('wintermute', {
   setCollection: (enabled) => ipcRenderer.invoke('agent:collection', enabled),
   setRemoteCommands: (options) => ipcRenderer.invoke('agent:remoteCommands', options),
   setScreenshots: (options) => ipcRenderer.invoke('agent:screenshots', options),
+  setTextInput: (options) => ipcRenderer.invoke('agent:textInput', options),
   setAppearance: (mode) => ipcRenderer.invoke('agent:appearance', mode),
   manageFailed: (id, retry) =>
     ipcRenderer.invoke('agent:manageFailed', { id, retry }),

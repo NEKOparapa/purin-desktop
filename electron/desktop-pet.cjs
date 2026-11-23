@@ -161,6 +161,9 @@ function createDesktopPet(agent, getChatWindow, loadRenderer) {
       await ready
       if (!active || session !== current || chat.isDestroyed()) return
       publish(agent.state())
+      // The Windows floating level follows the taskbar's Z order, which can drop
+      // the pet behind the active application when the chat hides or the pet moves.
+      if (process.platform === 'win32') pet.setAlwaysOnTop(true, 'pop-up-menu')
       pet.showInactive()
       chat.hide()
     } catch (error) {

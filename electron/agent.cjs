@@ -9,7 +9,9 @@ const {
   removeMaterialFiles,
   desktopWindowRoute,
 } = require('./materials.cjs')
-const { advanceWindowSpan } = require('./window-spans.cjs')
+const { advanceWindowSpan, appendInputSegments } = require('./window-spans.cjs')
+const { TextInputTracker } = require('./text-input-tracker.cjs')
+const { sampleWindowsFocusedInput, closeInputProbe } = require('./text-input-probe.cjs')
 const { screenshotDwellMs, saveVisitScreenshot } = require('./visit-screenshot.cjs')
 const { saveHistoryFile, readHistoryImage } = require('./history.cjs')
 const { ChatHistory } = require('./chat-history.cjs')
@@ -41,10 +43,18 @@ function matchChatOutbox(p) {
   return matches
 }
 
-function recordWindow(profile, sample, at, target) {
+function recordWindow(profile, sample, at, target, inputTracker) {
   const history = profile.history
   const previous = history.windowSpan
-  const { active, finished } = advanceWindowSpan(previous, sample, at)
+  const { active, finished } = advanceWindowSpan(previous, sample, at, {
+    onBeforeFinish(span, finishEnd) {
+      if (!inputTracker) return
+      const flushed = inputTracker.flush(span.id, new Date(finishEnd))
+      if (flushed && profile.textInputEnabled) {
+        appendInputSegments(span, [flushed], finishEnd)
+      }
+    },
+  })
   if (finished) {
     const frames = previous.frames ?? []
     history.materials.push({
@@ -61,6 +71,8 @@ function recordWindow(profile, sample, at, target) {
     if (profile.screenshotsEnabled && target && target.pid !== process.pid && !active.screenshotAttempted)
       active.screenshotDueAt ??= at.getTime() + screenshotDwellMs
     else delete active.screenshotDueAt
+  } else {
+    inputTracker?.reset()
   }
   return finished
 }
@@ -202,10 +214,20 @@ async function request(profile, route, body, signal) {
 }
 
 class DesktopAgent {
-  constructor(dir, secure, sample, notify, screenshot, presentNotifications) {
+  constructor(
+    dir,
+    secure,
+    sample,
+    notify,
+    screenshot,
+    presentNotifications,
+    sampleInput = sampleWindowsFocusedInput,
+  ) {
     this.dir = dir
     this.secure = secure
     this.sample = sample
+    this.sampleInput = sampleInput
+    this.inputTracker = new TextInputTracker()
     this.presentNotifications = presentNotifications
     this.screenshot = screenshot
     this.notify = notify
@@ -240,12 +262,14 @@ class DesktopAgent {
     this.pollTimer = setInterval(() => this.sync(), 2200)
     if (presentNotifications) this.notificationTimer = setInterval(() => this.pollNotifications(), 5000)
     this.captureTimer = setInterval(() => this.capture(), 1000)
+    this.inputTimer = setInterval(() => this.captureInputTick(), 400)
     this.sync()
     this.capture()
   }
 
   open(settings, token) {
     this.finishWindow()
+    this.inputTracker?.reset()
     this.profile?.remote?.close()
     this.profile?.controller.abort()
     this.profile?.captureController.abort()
@@ -303,6 +327,9 @@ class DesktopAgent {
     p.history.materials ??= []
     p.screenshotsEnabled = !!(p.collecting && p.screenshotsEnabled)
     p.screenshotEpoch = 0
+    p.textInputEnabled = !!(p.collecting && p.textInputEnabled)
+    p.textInputIssue = ''
+    p.activeForegroundPid = 0
     // An interrupted visit from the former title sampler may hold provisional frames.
     // Keep at most one eligible image; already queued requests retain their original payload.
     const recovered = p.history.windowSpan
@@ -317,6 +344,11 @@ class DesktopAgent {
     if (!p.screenshotsEnabled && (p.history.windowSpan?.frames?.length ||
         p.history.materials.some(item => item.frames?.length))) {
       this.dropAutomatic(p, 'screenshot')
+      save(p.file, p.history)
+    }
+    if (!p.textInputEnabled && (p.history.windowSpan?.inputSegments?.length ||
+        p.history.materials.some(item => item.body?.value?.input_segments?.length))) {
+      this.dropAutomatic(p, 'textInput')
       save(p.file, p.history)
     }
     // A crash between saving the JPEG and committing its queue entry can leave an orphan.
@@ -368,6 +400,8 @@ class DesktopAgent {
       collecting: !!p.collecting,
       screenshotsEnabled: !!p.screenshotsEnabled,
       screenshotIssue: p.screenshotIssue || '',
+      textInputEnabled: !!p.textInputEnabled,
+      textInputIssue: p.textInputIssue || '',
       pendingMaterials: p.history.materials.length,
       materialIssue: p.materialIssue || '',
       lastMaterial: p.history.lastMaterial || null,
@@ -705,6 +739,7 @@ class DesktopAgent {
       secret: p.secret,
       collecting: !!p.collecting,
       screenshotsEnabled: !!p.screenshotsEnabled,
+      textInputEnabled: !!p.textInputEnabled,
       appearance: this.appearance,
       captureVersion,
     }
@@ -935,6 +970,7 @@ class DesktopAgent {
     this.savePreferences({
       collecting: enabled,
       screenshotsEnabled: enabled && !!p.screenshotsEnabled,
+      textInputEnabled: enabled && !!p.textInputEnabled,
     })
     p.collecting = enabled
     p.captureController.abort()
@@ -944,7 +980,13 @@ class DesktopAgent {
       p.screenshotsEnabled = false
       p.screenshotEpoch++
       p.screenshotIssue = ''
+      p.textInputEnabled = false
+      p.textInputIssue = ''
+      p.activeForegroundPid = 0
+      this.inputTracker?.reset()
       this.dropAutomatic(p, 'screenshot')
+      this.dropAutomatic(p, 'textInput')
+      closeInputProbe()
       this.clearActivity(p)
     }
     this.persist(p)
@@ -970,16 +1012,38 @@ class DesktopAgent {
     this.persist(p)
   }
 
+  setTextInput({ enabled }) {
+    const p = this.profile
+    if (!p.token || typeof enabled !== 'boolean')
+      throw new Error('文本输入采集设置无效')
+    if (enabled && !p.collecting)
+      throw new Error('请先开启桌面活动采集')
+    this.savePreferences({
+      textInputEnabled: enabled,
+    })
+    p.textInputEnabled = enabled
+    p.textInputIssue = ''
+    this.inputTracker?.reset()
+    if (!enabled) {
+      p.activeForegroundPid = 0
+      this.dropAutomatic(p, 'textInput')
+      closeInputProbe()
+    }
+    this.persist(p)
+  }
+
   finishWindow() {
     const p = this.profile
     if (!p?.history.windowSpan || p.controller.signal.aborted) return
-    recordWindow(p, null, new Date())
+    recordWindow(p, null, new Date(), undefined, this.inputTracker)
     this.persist(p)
   }
 
   clearActivity(p) {
     this.dropAutomatic(p, 'window')
     p.history.windowSpan = null
+    p.activeForegroundPid = 0
+    this.inputTracker?.reset()
   }
 
   // Remove queued observations when their source is disconnected.
@@ -993,12 +1057,31 @@ class DesktopAgent {
         delete p.history.windowSpan.frames
       }
     }
+    if (source === 'textInput') {
+      if (p.history.windowSpan) {
+        delete p.history.windowSpan.inputSegments
+        delete p.history.windowSpan.omittedInputSegments
+      }
+    }
     for (const item of p.history.materials) {
       if (item.frames && (source === 'screenshot' || item.source === source)) {
         if (p.uploading === item) p.uploadController?.abort()
         removed.push(...item.frames)
         delete item.frames
         // A revoked attachment or old endpoint error must not block the dwell.
+        item.attempts = 0
+        item.rejected = false
+        item.retryAt = 0
+        item.error = ''
+      }
+      if (
+        source === 'textInput' &&
+        item.body?.value &&
+        (item.body.value.input_segments || item.body.value.input_segments_omitted)
+      ) {
+        if (p.uploading === item) p.uploadController?.abort()
+        delete item.body.value.input_segments
+        delete item.body.value.input_segments_omitted
         item.attempts = 0
         item.rejected = false
         item.retryAt = 0
@@ -1389,13 +1472,15 @@ class DesktopAgent {
         after.foreground_app !== value.foreground_app
       ) {
         const { target: nextTarget, ...nextValue } = after
-        const finished = recordWindow(p, nextValue, new Date(), nextTarget)
+        const finished = recordWindow(p, nextValue, new Date(), nextTarget, this.inputTracker)
         if (finished) this.persist(p)
         else save(p.file, p.history)
         return
       }
       const title = after.window_title === value.window_title ? value.window_title : undefined
-      if (after.window_title !== value.window_title) recordWindow(p, after, new Date(), after.target)
+      if (after.window_title !== value.window_title) {
+        recordWindow(p, after, new Date(), after.target, this.inputTracker)
+      }
       span.frames = [saveVisitScreenshot(p, jpegBase64, occurredAt, title)]
       save(p.file, p.history)
       if (p.screenshotIssue) {
@@ -1410,22 +1495,100 @@ class DesktopAgent {
     }
   }
 
+  async captureInputTick() {
+    const p = this.profile
+    if (
+      process.platform !== 'win32' ||
+      !p.token ||
+      !p.collecting ||
+      !p.textInputEnabled ||
+      p.capturing ||
+      p.samplingInput ||
+      p.captureController.signal.aborted
+    )
+      return
+    const span = p.history.windowSpan
+    const pid = p.activeForegroundPid
+    if (!span || !pid || pid === process.pid) return
+    p.samplingInput = true
+    const spanId = span.id
+    const title = span.title || ''
+    const signal = p.captureController.signal
+    try {
+      const input = await this.sampleInput(pid, span.app)
+      if (
+        signal.aborted ||
+        p !== this.profile ||
+        !p.textInputEnabled ||
+        p.history.windowSpan?.id !== spanId
+      )
+        return
+      const now = new Date()
+      const segments = this.inputTracker.observe(
+        spanId,
+        p.history.windowSpan.title || title,
+        input,
+        now,
+      )
+      if (segments.length) {
+        p.history.windowSpan.lastSeen = now.toISOString()
+        appendInputSegments(p.history.windowSpan, segments, p.history.windowSpan.lastSeen)
+        save(p.file, p.history)
+      }
+    } catch {
+      /* Fast input poll failure must not disturb window tracking. */
+    } finally {
+      p.samplingInput = false
+    }
+  }
+
   async capture() {
     const p = this.profile
     const signal = p.captureController.signal
     if (!p.token || !p.collecting || p.capturing || signal.aborted) return
     p.capturing = true
     try {
-      const { target, ...value } = p.screenshotsEnabled
-        ? await this.sample(true)
-        : await this.sample()
+      const observedSample =
+        p.screenshotsEnabled || p.textInputEnabled
+          ? await this.sample({
+              withTarget: !!p.screenshotsEnabled,
+              withTextInput: !!p.textInputEnabled,
+            })
+          : await this.sample()
+      const { target, input, input_issue: inputIssue, pid, ...value } = observedSample || {}
       if (signal.aborted) return
       const now = new Date()
       const previous = p.history.windowSpan
-      const finished = recordWindow(p, value, now, target)
+      const finished = recordWindow(p, value, now, target, this.inputTracker)
+      const active = p.history.windowSpan
+      p.activeForegroundPid = active && Number.isInteger(pid) && pid > 0 ? pid : 0
+      let inputAdded = false
+      if (p.textInputEnabled) {
+        if (active && (!pid || pid !== process.pid)) {
+          const segments = this.inputTracker.observe(
+            active.id,
+            active.title || '',
+            input || null,
+            now,
+          )
+          if (segments.length) {
+            inputAdded = appendInputSegments(active, segments, active.lastSeen)
+          }
+        } else {
+          this.inputTracker.reset()
+        }
+        const nextIssue = typeof inputIssue === 'string' ? inputIssue : ''
+        if (p.textInputIssue !== nextIssue) {
+          p.textInputIssue = nextIssue
+          this.publish()
+        }
+      }
       if (finished) this.persist(p)
-      else if ((previous || p.history.windowSpan) &&
-        (previous?.id !== p.history.windowSpan?.id || now >= (p.nextCheckpoint || 0))) {
+      else if (
+        inputAdded ||
+        ((previous || active) &&
+          (previous?.id !== active?.id || now >= (p.nextCheckpoint || 0)))
+      ) {
         save(p.file, p.history)
         p.nextCheckpoint = now.getTime() + 15_000
       }
@@ -1453,10 +1616,13 @@ class DesktopAgent {
 
   close() {
     this.finishWindow()
+    this.inputTracker?.reset()
+    closeInputProbe()
     clearInterval(this.remoteTimer)
     this.profile.remote?.close()
     clearInterval(this.pollTimer)
     clearInterval(this.captureTimer)
+    clearInterval(this.inputTimer)
     clearInterval(this.notificationTimer)
     this.profile.controller.abort()
     this.profile.captureController.abort()

@@ -102,6 +102,8 @@ export interface AgentState {
   obsidianVaultPath?: string
   screenshotsEnabled: boolean
   screenshotIssue: string
+  textInputEnabled: boolean
+  textInputIssue: string
   pendingMaterials: number
   failedMaterial: string | null
   materialIssue: string
@@ -113,6 +115,12 @@ export interface AgentState {
     duration_seconds: number
     foreground_app: string
     window_title?: string
+    input_segments?: {
+      occurred_at: string
+      ended_at?: string
+      text: string
+      window_title?: string
+    }[]
   } | null
   hasEarlier: boolean
   awaitingReply: boolean
@@ -274,6 +282,9 @@ declare global {
       setScreenshots(options: {
         enabled: boolean
       }): Promise<void>
+      setTextInput(options: {
+        enabled: boolean
+      }): Promise<void>
       manageFailed(id: string, retry: boolean): Promise<void>
       setAppearance(mode: Appearance): Promise<void>
       subscribe(callback: (state: AgentState) => void): () => void
@@ -294,6 +305,8 @@ const initial: AgentState = {
   remoteIssue: '',
   screenshotsEnabled: false,
   screenshotIssue: '',
+  textInputEnabled: false,
+  textInputIssue: '',
   pendingMaterials: 0,
   failedMaterial: null,
   materialIssue: '',

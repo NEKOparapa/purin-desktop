@@ -2,6 +2,11 @@ const { execFile, spawn } = require('node:child_process')
 const { createInterface } = require('node:readline')
 const { promisify } = require('node:util')
 const { powerMonitor } = require('electron')
+const {
+  sampleWindowsFocusedInput,
+  macInputScript,
+  isMacAccessibilityGranted,
+} = require('./text-input-probe.cjs')
 const run = promisify(execFile)
 
 const windowsProbe = `
@@ -103,18 +108,30 @@ if (front && front.kCGWindowOwnerPID === result.pid) {
 }
 `
 
-async function sampleActivity(withTarget = false) {
+async function sampleActivity(options = false) {
+  const withTarget = typeof options === 'boolean' ? options : Boolean(options?.withTarget)
+  const withTextInput =
+    typeof options === 'object' && options !== null && Boolean(options.withTextInput)
   // Keep checking for a locked session, but count foreground dwell without input.
   const state = powerMonitor.getSystemIdleState(1)
   const value = { activity: state === 'idle' ? 'active' : state }
   if (value.activity !== 'active') return value
   if (process.platform !== 'win32' && process.platform !== 'darwin') return value
+  const macInputAllowed = withTextInput && process.platform === 'darwin'
+    ? isMacAccessibilityGranted()
+    : false
+  if (withTextInput && process.platform === 'darwin' && !macInputAllowed) {
+    value.input_issue = '请在 macOS 系统设置的“隐私与安全性 → 辅助功能”中允许 Wintermute'
+  }
   try {
     const { stdout } = process.platform === 'win32'
       ? await windowsObservation()
       : await run('/usr/bin/osascript', [
           '-l', 'JavaScript', '-e',
-          macProbe + (withTarget ? macTarget : '') + '\nJSON.stringify(result)',
+          macProbe +
+            (withTarget ? macTarget : '') +
+            (macInputAllowed ? macInputScript(process.pid) : '') +
+            '\nJSON.stringify(result)',
         ], { timeout: 5000, maxBuffer: 64 * 1024 })
     const observation = JSON.parse(stdout)
     const clean = (text, limit) =>
@@ -125,6 +142,9 @@ async function sampleActivity(withTarget = false) {
         : ''
     const app = clean(observation.foreground_app, 256)
     if (app) value.foreground_app = app
+    if (Number.isInteger(observation.pid) && observation.pid > 0) {
+      value.pid = observation.pid
+    }
     if (
       withTarget &&
       observation.pid > 0 &&
@@ -140,6 +160,18 @@ async function sampleActivity(withTarget = false) {
     if (typeof observation.window_title === 'string') {
       const title = clean(observation.window_title, 512)
       if (title) value.window_title = title
+    }
+    if (withTextInput) {
+      if (process.platform === 'win32' && observation.pid > 0 && observation.pid !== process.pid) {
+        try {
+          const input = await sampleWindowsFocusedInput(observation.pid, app)
+          if (input) value.input = input
+        } catch {
+          /* Text input sampling failure must not interrupt window tracking. */
+        }
+      } else if (process.platform === 'darwin' && observation.input && typeof observation.input === 'object') {
+        value.input = observation.input
+      }
     }
   } catch {
     /* Activity remains available if the frontmost app cannot be read. */

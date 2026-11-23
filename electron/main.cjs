@@ -18,6 +18,7 @@ const {
   captureForegroundWindow,
   enableWindowCapture,
 } = require('./foreground-capture.cjs')
+const { enableTextInputCapture } = require('./text-input-probe.cjs')
 const { createDesktopPet } = require('./desktop-pet.cjs')
 let agent, appWindow, desktopPet
 
@@ -151,6 +152,14 @@ function start() {
         if (agent.profile !== profile) throw new Error('连接已更改')
       }
       agent.setScreenshots(options)
+    },
+    async textInput(options) {
+      if (options?.enabled && !agent.state().textInputEnabled) {
+        const profile = agent.profile
+        enableTextInputCapture()
+        if (agent.profile !== profile) throw new Error('连接已更改')
+      }
+      agent.setTextInput(options)
     },
   }
   for (const [channel, method] of Object.entries({
