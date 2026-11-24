@@ -19,6 +19,7 @@ function normalizeInputSegment(segment, spanStartMs, spanEndMs, lastEndMs) {
     occurred_at: occurredAt,
     ...(endMs > startMs && { ended_at: endedAt }),
     text: segment.text.trim(),
+    ...(Number.isInteger(segment.field_length) && { field_length: segment.field_length }),
     ...(segment.window_title && { window_title: segment.window_title }),
   }
 }

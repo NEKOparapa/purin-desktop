@@ -422,7 +422,7 @@ export function AgentSettings({
                 采集前台文本输入
               </label>
               <p id="text-input-description">
-                通过系统辅助功能接口读取前台焦点输入框的文本变化，按时间切分为输入文本段并随停留记录上传。自动跳过密码框及总长度超过 500 字的文本，并在本机正则抹除疑似密钥、Token、银行卡号和验证码。
+                通过系统辅助功能接口读取前台输入框的文本变化，跳过密码框，入队前遮盖疑似凭据、银行卡号和验证码。后端过滤空文本和超过 500 字的输入，并将保留的文本归到对应的窗口停留。
               </p>
               {state.textInputIssue && (
                 <p role="status">{state.textInputIssue}</p>

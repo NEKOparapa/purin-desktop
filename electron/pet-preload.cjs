@@ -1,12 +1,12 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
 // macOS forwards mouse movement while the transparent margins pass clicks through.
-let region, session, inside
+let shape, session, inside
 if (process.platform === 'darwin') {
   window.addEventListener('mousemove', ({ clientX, clientY }) => {
-    if (!region) return
-    const hit = clientX >= region.x && clientX < region.x + region.width &&
-      clientY >= region.y && clientY < region.y + region.height
+    if (!shape) return
+    const hit = shape.some(r => clientX >= r.x && clientX < r.x + r.width &&
+      clientY >= r.y && clientY < r.y + r.height)
     if (inside === hit) return
     inside = hit
     void ipcRenderer.invoke('pet:cursor', session).catch(() => {})
@@ -18,11 +18,11 @@ contextBridge.exposeInMainWorld('wintermutePet', {
   move: (x, y, session) => ipcRenderer.invoke('pet:move', { x, y, session }),
   drop: session => ipcRenderer.invoke('pet:drop', session),
   send: (text, revision) => ipcRenderer.invoke('pet:send', { text, revision }),
-  setRegion: (next, requestSession) => {
-    region = next
+  setRegion: (bounds, nextShape, requestSession) => {
+    shape = nextShape
     session = requestSession
     inside = undefined
-    return ipcRenderer.invoke('pet:setRegion', { ...next, session })
+    return ipcRenderer.invoke('pet:setRegion', { bounds, shape, session })
   },
   restore: (settings = false) => ipcRenderer.invoke('pet:restore', settings),
   subscribe(callback, onPosition) {

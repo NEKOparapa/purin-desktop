@@ -69,7 +69,12 @@ async function submitMaterial(p, item, request, uploadSignal) {
   if (item.kind !== 'perception' || item.body?.state_key !== 'desktop.window_span')
     throw new Error('无效的桌面停留记录')
   if (item.frames?.length) return submitWindow(p, item, request, signal)
-  return request(p, '/v1/perceptions', item.body, signal)
+  try {
+    return await request(p, '/v1/perceptions', item.body, signal)
+  } catch (error) {
+    if (error.status !== 413) throw error
+    return request(p, desktopWindowRoute + '/metadata', item.body, signal)
+  }
 }
 
 module.exports = { submitMaterial, framePath, removeMaterialFiles, desktopWindowRoute }

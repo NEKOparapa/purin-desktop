@@ -56,6 +56,9 @@ function recordWindow(profile, sample, at, target, inputTracker) {
     },
   })
   if (finished) {
+    const platform = devicePlatforms[process.platform]
+    if (platform) finished.value.device_platform = platform
+    finished.value.device_name = profile.deviceName
     const frames = previous.frames ?? []
     history.materials.push({
       id: finished.event_id,

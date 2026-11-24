@@ -1,6 +1,7 @@
 'use strict'
 
-const MAX_INPUT_LENGTH = 500
+// Bound native accessibility reads and the offline queue independently of the server's text rules.
+const MAX_SAMPLE_LENGTH = 1000
 const PLACEHOLDER = {
   secret: '[已脱敏:密钥]',
   token: '[已脱敏:Token]',
@@ -206,28 +207,14 @@ function redactSensitiveText(text, options = {}) {
   return result
 }
 
-function filterInputText(rawText, options = {}) {
-  if (typeof rawText !== 'string') return { ok: false, reason: 'empty' }
-  const rawTrimmed = rawText.replace(/\r\n?/g, '\n').trim()
-  if (!rawTrimmed) return { ok: false, reason: 'empty' }
-  if (codePointLength(rawTrimmed) > MAX_INPUT_LENGTH) {
-    return { ok: false, reason: 'too_long' }
-  }
-  const normalized = rawTrimmed.replace(/[\p{Cc}\p{Cs}\s]+/gu, ' ').trim()
-  if (!normalized) return { ok: false, reason: 'empty' }
-  if (codePointLength(normalized) > MAX_INPUT_LENGTH) {
-    return { ok: false, reason: 'too_long' }
-  }
+function protectQueuedText(text, options) {
+  const normalized = text.replace(/[\p{Cc}\p{Cs}\s]+/gu, ' ').trim()
   const redacted = redactSensitiveText(normalized, options)
-  return {
-    ok: true,
-    text: redacted,
-    redacted: redacted !== normalized,
-  }
+  return redacted === normalized ? text : redacted
 }
 
 module.exports = {
-  MAX_INPUT_LENGTH,
+  MAX_SAMPLE_LENGTH,
   PLACEHOLDER,
   codePointLength,
   isPasswordHint,
@@ -235,5 +222,5 @@ module.exports = {
   passesLuhn,
   isLikelyBankCard,
   redactSensitiveText,
-  filterInputText,
+  protectQueuedText,
 }

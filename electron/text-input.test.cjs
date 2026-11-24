@@ -7,9 +7,8 @@ const os = require('node:os')
 const path = require('node:path')
 
 const {
-  MAX_INPUT_LENGTH,
+  MAX_SAMPLE_LENGTH,
   PLACEHOLDER,
-  filterInputText,
   isPasswordHint,
   isVerificationCodeHint,
   redactSensitiveText,
@@ -17,27 +16,37 @@ const {
 const { TextInputTracker } = require('./text-input-tracker.cjs')
 const { advanceWindowSpan, appendInputSegments, maxInputSegments } = require('./window-spans.cjs')
 const { DesktopAgent } = require('./agent.cjs')
+const { submitMaterial } = require('./materials.cjs')
 
-test('length filter allows up to 500 code points and rejects 501+', () => {
-  const exactAscii = 'a'.repeat(MAX_INPUT_LENGTH)
-  const overAscii = 'a'.repeat(MAX_INPUT_LENGTH + 1)
-  assert.deepEqual(filterInputText(exactAscii), {
-    ok: true,
-    text: exactAscii,
-    redacted: false,
-  })
-  assert.deepEqual(filterInputText(overAscii), { ok: false, reason: 'too_long' })
+test('large visits retry through the desktop metadata route with the same queued payload', async () => {
+  const body = { event_id: 'visit-1', state_key: 'desktop.window_span', value: {
+    device_name: '电脑', device_platform: 'windows',
+  } }
+  const profile = { controller: new AbortController() }
+  const routes = []
+  const receipt = await submitMaterial(profile, { kind: 'perception', body }, async (_p, route, payload) => {
+    assert.equal(payload, body)
+    routes.push(route)
+    if (route === '/v1/perceptions') throw Object.assign(new Error('too large'), { status: 413 })
+    return { event_id: 'accepted' }
+  }, new AbortController().signal)
+  assert.deepEqual(routes, ['/v1/perceptions', '/v1/perceptions/desktop-window/metadata'])
+  assert.deepEqual(receipt, { event_id: 'accepted' })
+})
 
-  const exactChinese = '中'.repeat(MAX_INPUT_LENGTH)
-  const overChinese = '中'.repeat(MAX_INPUT_LENGTH + 1)
-  assert.equal(filterInputText(exactChinese).ok, true)
-  assert.deepEqual(filterInputText(overChinese), { ok: false, reason: 'too_long' })
-
-  // Surrogate-pair emoji counts as 1 code point each, not 2 UTF-16 code units.
-  const exactEmoji = '🚀'.repeat(MAX_INPUT_LENGTH)
-  const overEmoji = '🚀'.repeat(MAX_INPUT_LENGTH + 1)
-  assert.equal(filterInputText(exactEmoji).ok, true)
-  assert.deepEqual(filterInputText(overEmoji), { ok: false, reason: 'too_long' })
+test('ordinary input reaches the backend with whitespace and the peak field length', () => {
+  const tracker = new TextInputTracker()
+  const observe = text => tracker.observe('visit', 'QQ', { editable: true, text })
+  observe('')
+  observe('🚀'.repeat(501))
+  observe('好的\n  谢谢')
+  const [segment] = observe('')
+  assert.equal(segment.text, '好的\n  谢谢')
+  assert.equal(segment.field_length, 501)
+  observe('再见')
+  assert.equal(observe('')[0].field_length, 2)
+  observe('🚀'.repeat(MAX_SAMPLE_LENGTH + 1))
+  assert.deepEqual(observe(''), [])
 })
 
 test('redacts suspected API keys, private keys, passwords and URL credentials', () => {
@@ -159,7 +168,7 @@ test('tracker coalesces IME typing, emits on submit, ignores pre-existing text a
   )
 })
 
-test('tracker handles pause flush delta, 500-char suppression, password skip and title switch', () => {
+test('tracker handles pause flush delta, native sample bounds, password skip and title switch', () => {
   const tracker = new TextInputTracker({ pauseFlushMs: 3000 })
   const spanId = 'span-2'
   const t = (sec) => new Date(Date.parse('2026-11-23T10:00:00.000Z') + sec * 1000)
@@ -177,7 +186,7 @@ test('tracker handles pause flush delta, 500-char suppression, password skip and
   assert.equal(second.length, 1)
   assert.equal(second[0].text, '第二段内容')
 
-  // Growing beyond 500 chars mid-typing discards uncommitted draft and suppresses until cleared.
+  // An oversized native sample discards the unfinished draft until the field is cleared.
   tracker.observe(spanId, '编辑器', { editable: true, field_id: 'doc', text: '' }, t(10))
   tracker.observe(spanId, '编辑器', { editable: true, field_id: 'doc', text: 'x'.repeat(490) }, t(11))
   assert.deepEqual(
@@ -298,6 +307,8 @@ test('DesktopAgent records, redacts, flushes and clears foreground text input se
     assert.equal(agent.profile.history.materials.length, 1)
     const span = agent.profile.history.materials[0].body.value
     assert.equal(span.foreground_app, 'WeChat')
+    assert.equal(span.device_name, '测试设备')
+    assert.equal(span.device_platform, { win32: 'windows', darwin: 'macos' }[process.platform])
     assert.equal(span.input_segments.length, 1)
     assert.equal(span.input_segments[0].text, `验证码 ${PLACEHOLDER.code}，明天见`)
     assert.equal(span.input_segments[0].window_title, '张三')

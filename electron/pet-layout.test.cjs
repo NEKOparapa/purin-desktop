@@ -49,6 +49,27 @@ test('opening the editor expands the hit region around the same avatar center', 
   }
 })
 
+test('the compact window accepts clicks on its parts and passes the gaps through', () => {
+  const anchor = { x: 720, y: 42 }
+  const area = { width: 1440, height: 900 }
+  const idle = layoutPet(area, anchor, 'right')
+  assert.deepEqual(idle.shape, [{ x: 0, y: 0, width: idle.region.width, height: idle.region.height }])
+  assert.ok(idle.region.width <= 104 && idle.region.height <= 80)
+  for (const side of ['left', 'right']) {
+    const { region, shape, composerLeft, composerTop, bubbleX, bubbleY } =
+      layoutPet(area, anchor, side, composer, { width: 252, height: 180 })
+    const hits = (x, y) => shape.some(r =>
+      x >= region.x + r.x && x < region.x + r.x + r.width &&
+      y >= region.y + r.y && y < region.y + r.y + r.height)
+    assert.ok(hits(anchor.x, anchor.y))
+    assert.ok(hits(composerLeft + 10, composerTop + 10))
+    assert.ok(hits(bubbleX + 10, bubbleY + 10))
+    const belowEditor = composerTop + composer.height + 12
+    assert.ok(belowEditor < region.y + region.height)
+    assert.equal(hits(anchor.x, belowEditor), false)
+  }
+})
+
 test('a dragged position survives display relocation and fits a resized work area', () => {
   const workArea = { x: -1600, y: -200, width: 1600, height: 900 }
   const display = { id: 23, workArea }

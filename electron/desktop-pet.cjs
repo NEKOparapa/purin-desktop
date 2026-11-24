@@ -3,12 +3,22 @@ const path = require('node:path')
 const { save } = require('./json-file.cjs')
 const { readPosition, petAnchor, positionAt } = require('./pet-position.cjs')
 
+function sameRect(a, b) {
+  return a?.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height
+}
+
+function fits(rect, area) {
+  return rect && [rect.x, rect.y, rect.width, rect.height].every(Number.isSafeInteger) &&
+    rect.width > 0 && rect.height > 0 && rect.x >= area.x && rect.y >= area.y &&
+    rect.x + rect.width <= area.x + area.width && rect.y + rect.height <= area.y + area.height
+}
+
 function createDesktopPet(agent, getChatWindow, loadRenderer) {
   let pet, ready, displayId, enteredAt, lastSentId, historyReady, revision
   const earlierReplies = new Set()
   let session = 0
   let active = false
-  let region, ignoringMouse
+  let nativeBounds, shape, ignoringMouse
   let bubbleKey, preferredSide = 'right'
   const positionFile = path.join(agent.dir, 'pet-position.json')
   let position = readPosition(positionFile)
@@ -35,22 +45,27 @@ function createDesktopPet(agent, getChatWindow, loadRenderer) {
   }
 
   function updateMouseTarget() {
-    if (process.platform !== 'darwin' || !region || !pet || pet.isDestroyed()) return
+    if (process.platform !== 'darwin' || !shape || !pet || pet.isDestroyed()) return
     const cursor = screen.getCursorScreenPoint()
     const bounds = pet.getContentBounds()
     const x = cursor.x - bounds.x, y = cursor.y - bounds.y
-    const ignore = !dragging && (x < region.x || x >= region.x + region.width ||
-      y < region.y || y >= region.y + region.height)
+    const ignore = !dragging && !shape.some(r => x >= r.x && x < r.x + r.width &&
+      y >= r.y && y < r.y + r.height)
     if (ignore === ignoringMouse) return
     ignoringMouse = ignore
     pet.setIgnoreMouseEvents(ignore, { forward: true })
   }
 
-  function setRegion(x, y, width, height) {
-    if (region?.x === x && region.y === y && region.width === width && region.height === height) return
-    region = { x, y, width, height }
+  function setRegion(bounds, nextShape, force = false) {
+    const moved = force || !sameRect(nativeBounds, bounds)
+    const resized = nativeBounds?.width !== bounds.width || nativeBounds?.height !== bounds.height
+    const changed = shape?.length !== nextShape.length || nextShape.some((r, i) => !sameRect(shape[i], r))
+    if (!moved && !changed) return
+    if (moved) pet.setBounds(bounds)
+    nativeBounds = bounds
+    shape = nextShape
     if (process.platform === 'darwin') updateMouseTarget()
-    else pet.setShape([region])
+    else if (resized || changed || force) pet.setShape(shape)
   }
 
   function resetConversation(state) {
@@ -89,7 +104,7 @@ function createDesktopPet(agent, getChatWindow, loadRenderer) {
     }
     return {
       session, appearance: state.appearance, configured: state.configured,
-      workArea: { width: area.width, height: area.height }, anchor, preferredSide,
+      workArea: area, anchor, preferredSide,
       connectionRevision: state.connectionRevision,
       awaitingReply: state.awaitingReply,
       replyReceivedAt: state.replyReceivedAt,
@@ -126,9 +141,16 @@ function createDesktopPet(agent, getChatWindow, loadRenderer) {
     if (active || !chat || chat.isDestroyed()) return
     resetConversation(agent.state())
     displayId = position?.displayId ?? screen.getDisplayMatching(chat.getBounds()).id
-    // Only visible content accepts input. Keep its coordinate system stationary during a drag.
-    const bounds = workArea()
-    region = undefined
+    const area = workArea()
+    const anchor = petAnchor(area, position)
+    const left = Math.max(0, anchor.x - 52), top = Math.max(0, anchor.y - 40)
+    const bounds = {
+      x: area.x + left, y: area.y + top,
+      width: Math.min(area.width, anchor.x + 52) - left,
+      height: Math.min(area.height, anchor.y + 40) - top,
+    }
+    nativeBounds = undefined
+    shape = undefined
     ignoringMouse = undefined
     const current = ++session
     active = true
@@ -153,11 +175,8 @@ function createDesktopPet(agent, getChatWindow, loadRenderer) {
           if (active) restore()
         })
         ready = loadRenderer(pet)
-      } else pet.setBounds(bounds)
-      const anchor = petAnchor(bounds, position)
-      const left = Math.max(0, anchor.x - 52), top = Math.max(0, anchor.y - 40)
-      setRegion(left, top, Math.min(bounds.width, anchor.x + 52) - left,
-        Math.min(bounds.height, anchor.y + 40) - top)
+      }
+      setRegion(bounds, [{ x: 0, y: 0, width: bounds.width, height: bounds.height }])
       await ready
       if (!active || session !== current || chat.isDestroyed()) return
       publish(agent.state())
@@ -174,10 +193,11 @@ function createDesktopPet(agent, getChatWindow, loadRenderer) {
 
   const actions = {
     state: () => snapshot(agent.state()),
-    setRegion({ x, y, width, height, session: requestSession }) {
-      if (session !== requestSession || ![x, y, width, height].every(Number.isSafeInteger) ||
-        x < 0 || y < 0 || width <= 0 || height <= 0) return
-      setRegion(x, y, width, height)
+    setRegion({ bounds, shape, session: requestSession }) {
+      if (session !== requestSession || !fits(bounds, workArea()) || !Array.isArray(shape) ||
+        !shape.length || shape.length > 3 ||
+        !shape.every(r => fits(r, { x: 0, y: 0, width: bounds.width, height: bounds.height }))) return
+      setRegion(bounds, shape)
     },
     move({ x, y, session: requestSession }) {
       if (session !== requestSession || ![x, y].every(Number.isSafeInteger)) return
@@ -188,13 +208,11 @@ function createDesktopPet(agent, getChatWindow, loadRenderer) {
       if (dragging && displayId === display.id && position.x === next.x && position.y === next.y) return
       dragging = true
       position = next
-      if (displayId !== display.id) {
-        displayId = display.id
-        pet.setBounds(area)
-      }
-      updateMouseTarget()
+      // A new monitor can use a different scale for the same window-local shape.
+      if (displayId !== display.id) nativeBounds = undefined
+      displayId = display.id
       pet.webContents.send('pet:position', {
-        session, anchor: petAnchor(area, position), workArea: { width: area.width, height: area.height },
+        session, anchor: petAnchor(area, position), workArea: area,
       })
     },
     drop(requestSession) {
@@ -224,8 +242,7 @@ function createDesktopPet(agent, getChatWindow, loadRenderer) {
   function updateDisplay() {
     if (!active) return
     bubbleKey = undefined
-    pet.setBounds(workArea())
-    updateMouseTarget()
+    if (nativeBounds && fits(nativeBounds, workArea())) setRegion(nativeBounds, shape, true)
     publish(agent.state())
   }
   screen.on('display-metrics-changed', updateDisplay)

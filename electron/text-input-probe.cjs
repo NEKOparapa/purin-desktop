@@ -2,7 +2,7 @@
 
 const { spawn } = require('node:child_process')
 const { createInterface } = require('node:readline')
-const { MAX_INPUT_LENGTH } = require('./text-input-filter.cjs')
+const { MAX_SAMPLE_LENGTH } = require('./text-input-filter.cjs')
 
 const windowsInputProbeScript = `
 [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
@@ -24,7 +24,7 @@ namespace Wintermute {
   }
 
   public static class InputProbe {
-    private const int MaxCodePoints = ${MAX_INPUT_LENGTH};
+    private const int MaxCodePoints = ${MAX_SAMPLE_LENGTH};
     private const int MaxUtf16Sample = MaxCodePoints * 2 + 8;
 
     private static readonly AutoResetEvent RequestReady = new AutoResetEvent(false);
@@ -347,7 +347,7 @@ try {
             typeof descAttr === 'string' ? descAttr : '',
           ].join(':')
           const count = readAttr('AXNumberOfCharacters')
-          if (typeof count === 'number' && count > ${MAX_INPUT_LENGTH}) {
+          if (typeof count === 'number' && count > ${MAX_SAMPLE_LENGTH * 2}) {
             result.input = {
               editable: true,
               is_password: false,
@@ -359,7 +359,7 @@ try {
             const raw = readAttr('AXValue')
             if (typeof raw === 'string') {
               const cleaned = raw.replace(/\\r\\n?/g, '\\n').trim()
-              if (Array.from(cleaned).length > ${MAX_INPUT_LENGTH}) {
+              if (Array.from(cleaned).length > ${MAX_SAMPLE_LENGTH}) {
                 result.input = {
                   editable: true,
                   is_password: false,

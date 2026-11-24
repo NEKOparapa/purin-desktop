@@ -1,9 +1,9 @@
 'use strict'
 
 const {
-  MAX_INPUT_LENGTH,
+  MAX_SAMPLE_LENGTH,
   codePointLength,
-  filterInputText,
+  protectQueuedText,
   isPasswordHint,
 } = require('./text-input-filter.cjs')
 
@@ -28,13 +28,6 @@ class TextInputTracker {
     const s = this.state
     if (!s || s.overLimit || !s.dirty) return null
     const current = s.currentText
-    if (codePointLength(current) > MAX_INPUT_LENGTH) {
-      s.overLimit = true
-      s.dirty = false
-      s.startedAt = null
-      s.lastChangedAt = null
-      return null
-    }
     const committed = s.committedText
     let rawToEmit
     if (committed && current.startsWith(committed)) {
@@ -47,7 +40,7 @@ class TextInputTracker {
     const startedAt = s.startedAt
     const lastChangedAt = s.lastChangedAt
     const windowTitle = s.windowTitle
-    const filtered = filterInputText(rawToEmit, { hint: s.hint })
+    const fieldLength = s.peakFieldLength
     if (clearField) {
       s.baselineText = ''
       s.committedText = ''
@@ -58,6 +51,7 @@ class TextInputTracker {
       s.maxLenSinceEdit = 0
       s.shrinkingSteps = 0
       s.overLimit = false
+      s.peakFieldLength = 0
     } else {
       s.baselineText = current
       s.committedText = current
@@ -67,13 +61,14 @@ class TextInputTracker {
       s.maxLenSinceEdit = 0
       s.shrinkingSteps = 0
     }
-    if (!filtered.ok) return null
+    if (!rawToEmit) return null
     const startMs = startedAt ?? lastChangedAt ?? atMs
     const endMs = Math.max(startMs, lastChangedAt ?? atMs)
     return {
       occurred_at: new Date(startMs).toISOString(),
       ...(endMs > startMs && { ended_at: new Date(endMs).toISOString() }),
-      text: filtered.text,
+      text: protectQueuedText(rawToEmit, { hint: s.hint }),
+      field_length: fieldLength,
       ...(windowTitle && { window_title: windowTitle }),
     }
   }
@@ -96,7 +91,8 @@ class TextInputTracker {
     const hint = typeof input.hint === 'string' ? input.hint : ''
     const rawTrimmed =
       typeof input.text === 'string' ? input.text.replace(/\r\n?/g, '\n').trim() : ''
-    const tooLong = Boolean(input.too_long) || codePointLength(rawTrimmed) > MAX_INPUT_LENGTH
+    const length = codePointLength(rawTrimmed)
+    const tooLong = Boolean(input.too_long) || length > MAX_SAMPLE_LENGTH
 
     if (this.state && (this.state.spanId !== spanId || this.state.fieldId !== fieldId)) {
       if (this.state.spanId === spanId) {
@@ -129,6 +125,7 @@ class TextInputTracker {
         startedAt: null,
         lastChangedAt: null,
         overLimit: tooLong,
+        peakFieldLength: length,
         maxLenSinceEdit: 0,
         shrinkingSteps: 0,
       }
@@ -136,6 +133,7 @@ class TextInputTracker {
     }
 
     const s = this.state
+    s.peakFieldLength = Math.max(s.peakFieldLength, length)
     if (hint) s.hint = hint
 
     if (tooLong) {
@@ -152,6 +150,7 @@ class TextInputTracker {
     if (s.overLimit) {
       if (!rawTrimmed) {
         s.overLimit = false
+        s.peakFieldLength = 0
         s.baselineText = ''
         s.committedText = ''
         s.currentText = ''
@@ -194,6 +193,7 @@ class TextInputTracker {
         s.committedText = ''
         s.currentText = ''
       }
+      s.peakFieldLength = 0
       return emitted
     }
 

@@ -1,5 +1,6 @@
 type Size = { width: number; height: number }
 type Point = { x: number; y: number }
+export type PetRect = Point & Size
 type BubbleSide = 'left' | 'right' | 'above' | 'below'
 
 const tailLength = 16
@@ -47,15 +48,21 @@ export function layoutPet(
   const pad = 6
   const tailGap = tailLength + pad
   const { width, height } = viewport
-  let left = anchor.x - 52, right = anchor.x + 52
   let top = anchor.y - 40, bottom = anchor.y + 40
+  const parts: PetRect[] = []
+  function include(left: number, top: number, right: number, bottom: number) {
+    const x = Math.max(0, Math.floor(left)), y = Math.max(0, Math.floor(top))
+    const w = Math.min(width, Math.ceil(right)) - x, h = Math.min(height, Math.ceil(bottom)) - y
+    if (w > 0 && h > 0) parts.push({ x, y, width: w, height: h })
+  }
+  include(anchor.x - 52, top, anchor.x + 52, bottom)
   const editorWidth = composer?.width ?? 0, editorHeight = composer?.height ?? 0
   const composerLeft = clamp(anchor.x - editorWidth / 2, pad, width - editorWidth - pad)
   const editorBelow = bottom + editorHeight + pad <= height
   const composerTop = clamp(editorBelow ? bottom : top - editorHeight, pad, height - editorHeight - pad)
   if (composer) {
-    left = Math.min(left, composerLeft - pad)
-    right = Math.max(right, composerLeft + editorWidth + pad)
+    include(composerLeft - pad, composerTop - pad, composerLeft + editorWidth + pad,
+      composerTop + editorHeight + pad)
     top = Math.min(top, composerTop - pad)
     bottom = Math.max(bottom, composerTop + editorHeight + pad)
   }
@@ -98,18 +105,18 @@ export function layoutPet(
     outline = bubbleOutline({ width: bubble.width, height: visibleHeight }, side, {
       x: anchor.x - bubbleX, y: anchor.y - bubbleY,
     })
-    left = Math.min(left, bubbleX - pad)
-    right = Math.max(right, bubbleX + bubble.width + pad)
-    top = Math.min(top, bubbleY - pad)
-    bottom = Math.max(bottom, bubbleY + visibleHeight + pad)
+    const { tip } = outline
+    include(bubbleX + Math.min(0, tip.x) - pad, bubbleY + Math.min(0, tip.y) - pad,
+      bubbleX + Math.max(bubble.width, tip.x) + pad, bubbleY + Math.max(visibleHeight, tip.y) + pad)
   }
-  const x = Math.max(0, Math.floor(left)), y = Math.max(0, Math.floor(top))
+  const x = Math.min(...parts.map(p => p.x)), y = Math.min(...parts.map(p => p.y))
   return {
     composerLeft, composerTop, bubbleX, bubbleY, bubbleMaxHeight, side,
     outline,
     region: {
-      x, y, width: Math.min(width, Math.ceil(right)) - x,
-      height: Math.min(height, Math.ceil(bottom)) - y,
+      x, y, width: Math.max(...parts.map(p => p.x + p.width)) - x,
+      height: Math.max(...parts.map(p => p.y + p.height)) - y,
     },
+    shape: parts.map(p => ({ ...p, x: p.x - x, y: p.y - y })),
   }
 }

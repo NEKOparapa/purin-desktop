@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { PetRect } from './pet-layout'
 
 export type Appearance = 'system' | 'light' | 'dark'
 const browserAppearanceKey = 'wintermute.appearance'
@@ -204,7 +205,7 @@ export interface ConnectorMutationResult {
 }
 export interface PetSnapshot {
   session: number
-  workArea: { width: number; height: number }
+  workArea: PetRect
   anchor: { x: number; y: number }
   preferredSide: 'left' | 'right'
   appearance: Appearance
@@ -219,7 +220,7 @@ export interface PetSnapshot {
 export interface PetBridge {
   state(): Promise<PetSnapshot>
   send(text: string, revision: number): Promise<void>
-  setRegion(region: { x: number; y: number; width: number; height: number }, session: number): Promise<void>
+  setRegion(bounds: PetRect, shape: PetRect[], session: number): Promise<void>
   move(x: number, y: number, session: number): Promise<void>
   drop(session: number): Promise<void>
   restore(settings?: boolean): Promise<void>

@@ -165,42 +165,45 @@ function PetChat({ api, state }: { api: PetBridge; state: PetSnapshot }) {
     if (!el) return
     el.style.setProperty('--work-width', state.workArea.width + 'px')
     el.style.setProperty('--work-height', state.workArea.height + 'px')
-    el.style.setProperty('--pet-x', state.anchor.x + 'px')
-    el.style.setProperty('--pet-y', state.anchor.y + 'px')
     const resize = () => {
       // Measure the natural bubble before fitting it into the room above or below.
       el.style.removeProperty('--bubble-max-height')
       const layout = layoutPet(
-        { width: el.clientWidth, height: el.clientHeight },
+        { width: state.workArea.width, height: state.workArea.height },
         { x: state.anchor.x, y: state.anchor.y },
         state.preferredSide,
         composer.current?.getBoundingClientRect(),
         bubble.current?.getBoundingClientRect(),
       )
+      // Layout uses display coordinates. The native window encloses just these parts.
+      const { x, y, width, height } = layout.region
       el.dataset.bubbleSide = layout.side
-      el.style.setProperty('--composer-left', layout.composerLeft + 'px')
-      el.style.setProperty('--composer-top', layout.composerTop + 'px')
-      el.style.setProperty('--bubble-x', layout.bubbleX + 'px')
-      el.style.setProperty('--bubble-y', layout.bubbleY + 'px')
+      el.style.setProperty('--pet-x', state.anchor.x - x + 'px')
+      el.style.setProperty('--pet-y', state.anchor.y - y + 'px')
+      el.style.setProperty('--composer-left', layout.composerLeft - x + 'px')
+      el.style.setProperty('--composer-top', layout.composerTop - y + 'px')
+      el.style.setProperty('--bubble-x', layout.bubbleX - x + 'px')
+      el.style.setProperty('--bubble-y', layout.bubbleY - y + 'px')
       el.style.setProperty('--bubble-max-height', layout.bubbleMaxHeight + 'px')
       if (layout.outline) {
         el.style.setProperty('--bubble-outline', `path("${layout.outline.path}") border-box`)
       }
       void api
-        .setRegion(layout.region, state.session)
+        .setRegion({ x: state.workArea.x + x, y: state.workArea.y + y, width, height }, layout.shape, state.session)
         .catch(() => {
           /* Window has closed. */
         })
     }
     resize()
     const observer = new ResizeObserver(resize)
-    observer.observe(el)
     if (composer.current) observer.observe(composer.current)
     if (bubble.current) observer.observe(bubble.current)
     return () => observer.disconnect()
   }, [
     api,
     state.session,
+    state.workArea.x,
+    state.workArea.y,
     state.workArea.width,
     state.workArea.height,
     state.anchor.x,
