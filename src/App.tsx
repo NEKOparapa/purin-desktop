@@ -15,16 +15,14 @@ import { Mascot } from '@/components/mascot'
 import { useTypingActivity } from '@/lib/use-typing-activity'
 import { AgentSettings } from '@/components/agent-settings'
 import { ScheduleCalendar } from '@/components/schedule-calendar'
-import type { ChatFileRef, NoticeAlert } from '@/lib/desktop'
+import type { NoticeAlert } from '@/lib/desktop'
 import { QuestionCards } from '@/components/question-cards'
 import { VoiceInput } from '@/components/voice-input'
 import { Files } from '@/components/history-files'
 import { HistoryConnection } from '@/components/history-viewport'
-import {
-  maxAttachments,
-  prepareAttachment,
-  type DraftAttachment,
-} from '@/lib/chat-media'
+import { DraftAttachments } from '@/components/draft-attachments'
+import { maxAttachments } from '@/lib/chat-media'
+import { useChatAttachments } from '@/lib/use-chat-attachments'
 import { useAgent, type AgentState, type ChatMessage } from '@/lib/desktop'
 import './App.css'
 
@@ -114,10 +112,7 @@ function Chat({
 }) {
   const [draft, setDraft] = useState('')
   const activity = useTypingActivity()
-  const [attachments, setAttachments] = useState<DraftAttachment[]>([])
-  const [readingFiles, setReadingFiles] = useState(false)
-  const [uploading, setUploading] = useState('')
-  const reading = useRef(false)
+  const { attachments, readingFiles, uploading, addFiles, prepareMessage, removeAttachment, clearAttachments } = useChatAttachments()
   const [voiceBusy, setVoiceBusy] = useState(false)
   const [dragging, setDragging] = useState(false)
   const picker = useRef<HTMLInputElement>(null)
@@ -179,26 +174,15 @@ function Chat({
     activity.noteInput()
     input.current?.focus()
   }
-  async function addFiles(files: File[]) {
-    if (!files.length || reading.current || sending) return
-    if (files.length + attachments.length > maxAttachments) {
-      setIssue('每条消息最多可添加 4 个附件。')
-      return
-    }
-    reading.current = true
-    setReadingFiles(true)
+  async function attach(files: File[]) {
+    if (!files.length || readingFiles || sending) return
     setIssue('')
     try {
-      const added: DraftAttachment[] = []
-      for (const file of files) added.push(await prepareAttachment(file))
-      setAttachments((current) => [...current, ...added])
+      await addFiles(files)
     } catch (error) {
       setIssue(
         error instanceof Error ? error.message : '附件读取失败，请重新选择。',
       )
-    } finally {
-      reading.current = false
-      setReadingFiles(false)
     }
   }
   const canSend =
@@ -218,36 +202,16 @@ function Chat({
     follow.current = true
     const text = draft
     try {
-      const documents: ChatFileRef[] = []
-      const images = attachments.filter((a) => a.kind === 'image')
-      for (const item of attachments) {
-        if (item.kind !== 'file') continue
-        let ref = item.uploaded
-        if (!ref) {
-          if (agent.connectionRevision === undefined)
-            throw new Error('设备连接已更改')
-          setUploading(item.name)
-          ref = await window.wintermute.uploadChatFile(
-            item.name,
-            await item.file.arrayBuffer(),
-            agent.connectionRevision,
-          )
-          const uploaded = ref
-          setAttachments((current) =>
-            current.map((a) => (a.id === item.id ? { ...item, uploaded } : a)),
-          )
-        }
-        documents.push(ref)
-      }
+      const { images, documents, imageNames } = await prepareMessage(window.wintermute.uploadChatFile, agent.connectionRevision)
       await window.wintermute.send(
         text,
-        images.map((a) => a.url),
+        images,
         documents,
-        images.map((a) => a.name),
+        imageNames,
         agent.connectionRevision,
       )
       setDraft((current) => (current === text ? '' : current))
-      setAttachments([])
+      clearAttachments()
     } catch (error) {
       setIssue(
         error instanceof Error
@@ -255,7 +219,6 @@ function Chat({
           : '发送失败，请重试。',
       )
     } finally {
-      setUploading('')
       setSending(false)
       input.current?.focus()
     }
@@ -378,54 +341,21 @@ function Chat({
           onDrop={(event) => {
             event.preventDefault()
             setDragging(false)
-            void addFiles(Array.from(event.dataTransfer.files))
+            void attach(Array.from(event.dataTransfer.files))
           }}
           onSubmit={(e) => {
             e.preventDefault()
             void send()
           }}
         >
-          {attachments.length > 0 && (
-            <div className="draft-images" aria-label="待发送附件">
-              {attachments.map((item) => (
-                <div
-                  className={
-                    'draft-attachment ' +
-                    (item.kind === 'image' ? 'with-thumbnail' : '')
-                  }
-                  key={item.id}
-                >
-                  {item.kind === 'image' ? (
-                    <img src={item.url} alt={item.name} />
-                  ) : (
-                    <FileText size={21} aria-hidden="true" />
-                  )}
-                  <span title={item.name}>{item.name}</span>
-                  <button
-                    type="button"
-                    disabled={sending}
-                    aria-label={'移除 ' + item.name}
-                    onClick={() =>
-                      setAttachments((current) =>
-                        current.filter(
-                          (attachment) => attachment.id !== item.id,
-                        ),
-                      )
-                    }
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+          <DraftAttachments items={attachments} sending={sending} remove={removeAttachment} />
           <input
             hidden
             type="file"
             ref={picker}
             multiple
             onChange={(event) => {
-              void addFiles(Array.from(event.target.files ?? []))
+              void attach(Array.from(event.target.files ?? []))
               event.target.value = ''
             }}
           />
@@ -473,10 +403,12 @@ function Chat({
           />
           <div className="composer-actions">
             {visible &&
+            window.wintermute &&
             agent.configured &&
             agent.connectionRevision !== undefined ? (
               <VoiceInput
                 revision={agent.connectionRevision}
+                transcribe={window.wintermute.transcribe}
                 onBusy={setVoiceBusy}
                 onError={setIssue}
                 onText={(text) => {

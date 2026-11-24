@@ -32,6 +32,13 @@ export interface ChatFileRef {
   name: string
 }
 
+export interface ChatAttachments {
+  images: string[]
+  documents: ChatFileRef[]
+  imageNames: string[]
+}
+export type UploadChatFile = (name: string, data: ArrayBuffer, revision: number) => Promise<ChatFileRef>
+
 export interface HistoryFile extends ChatFileRef {
   content_type?: string
   occurred_at?: string
@@ -219,7 +226,9 @@ export interface PetSnapshot {
 }
 export interface PetBridge {
   state(): Promise<PetSnapshot>
-  send(text: string, revision: number): Promise<void>
+  transcribe(audio: ArrayBuffer, connectionRevision: number): Promise<string>
+  uploadChatFile: UploadChatFile
+  send(text: string, revision: number, attachments?: ChatAttachments): Promise<void>
   setRegion(bounds: PetRect, shape: PetRect[], session: number): Promise<void>
   move(x: number, y: number, session: number): Promise<void>
   drop(session: number): Promise<void>
@@ -274,7 +283,7 @@ declare global {
       downloadHistoryFile(file: HistoryFile): Promise<{ saved: boolean }>
       previewHistoryImage(options: { id: string; connectionRevision: number }): Promise<ArrayBuffer>
       loadEarlier(): Promise<void>
-      uploadChatFile(name: string, data: ArrayBuffer, revision: number): Promise<ChatFileRef>
+      uploadChatFile: UploadChatFile
       send(text: string, images?: string[], documents?: ChatFileRef[], imageNames?: string[], revision?: number): Promise<void>
       transcribe(audio: ArrayBuffer, connectionRevision: number): Promise<string>
       retry(id: string): Promise<void>

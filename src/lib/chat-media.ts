@@ -1,6 +1,50 @@
 import type { ChatFileRef } from './desktop'
 
 export const maxAttachments = 4
+const imageTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+const imageName = /\.(?:jpe?g|png|webp|gif)$/i
+const documentTypes = new Set([
+  'application/pdf', 'application/epub+zip', 'application/zip', 'application/x-zip-compressed',
+  'application/json', 'application/xml', 'application/javascript', 'application/markdown',
+  'application/vnd.ms-excel', 'application/vnd.ms-outlook',
+  'audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/x-wav', 'video/mp4',
+])
+const dropExtensions = new Set(
+  'docx xls xlsx pptx pdf epub zip msg csv tsv html htm txt text md markdown json jsonl xml rss atom ipynb mp3 wav m4a mp4'.split(' '),
+)
+
+export function knownChatFileType(type: string) {
+  return imageTypes.includes(type) || documentTypes.has(type) || type.startsWith('text/') ||
+    type.startsWith('application/vnd.openxmlformats-officedocument.') ||
+    type.endsWith('+json') || type.endsWith('+xml')
+}
+
+async function supportsDroppedFile(file: File) {
+  const extension = file.name.split('.').at(-1)?.toLowerCase() ?? ''
+  if (knownChatFileType(file.type) || imageName.test(file.name) || dropExtensions.has(extension)) return true
+  if (file.type && file.type !== 'application/octet-stream') return false
+  // Chromium often has no MIME type for source files or extensionless text.
+  const sample = await file.slice(0, 4096).arrayBuffer()
+  try {
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(sample, { stream: sample.byteLength < file.size })
+    return !!text && Array.from(text).every(ch => ch >= ' ' || '\t\r\n\f'.includes(ch))
+  } catch {
+    return false
+  }
+}
+
+export async function droppedChatFiles(transfer: DataTransfer) {
+  // The drag data store becomes inaccessible as soon as the drop handler yields.
+  const files = Array.from(transfer.items)
+    .filter(item => item.kind === 'file' && !item.webkitGetAsEntry()?.isDirectory)
+    .map(item => item.getAsFile())
+  const accepted: File[] = []
+  for (const file of files) {
+    if (file && await supportsDroppedFile(file)) accepted.push(file)
+    if (accepted.length > maxAttachments) break
+  }
+  return accepted
+}
 
 interface DraftImage {
   kind: 'image'
@@ -22,9 +66,8 @@ export type DraftAttachment =
 export async function prepareAttachment(file: File): Promise<DraftAttachment> {
   if (file.size > 32 * 1024 * 1024)
     throw new Error(file.name + ' 超过单个附件 32 MiB 的限制')
-  if (
-    !['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type)
-  )
+  const untyped = !file.type || file.type === 'application/octet-stream'
+  if (!imageTypes.includes(file.type) && !(untyped && imageName.test(file.name)))
     return { kind: 'file', id: crypto.randomUUID(), name: file.name, file }
   const bitmap = await createImageBitmap(file)
   try {

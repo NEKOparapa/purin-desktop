@@ -193,6 +193,8 @@ function createDesktopPet(agent, getChatWindow, loadRenderer) {
 
   const actions = {
     state: () => snapshot(agent.state()),
+    transcribe: input => agent.transcribe(input),
+    uploadChatFile: input => agent.uploadChatFile(input),
     setRegion({ bounds, shape, session: requestSession }) {
       if (session !== requestSession || !fits(bounds, workArea()) || !Array.isArray(shape) ||
         !shape.length || shape.length > 3 ||
@@ -221,10 +223,10 @@ function createDesktopPet(agent, getChatWindow, loadRenderer) {
     cursor(requestSession) {
       if (session === requestSession) updateMouseTarget()
     },
-    send({ text, revision }) {
+    send({ text, revision, images, documents, imageNames }) {
       const state = agent.state()
       if (revision !== state.connectionRevision) throw new Error('设备连接已更改')
-      const id = agent.send({ text, revision })
+      const id = agent.send({ text, revision, images, documents, imageNames })
       const previous = state.messages.findLast(m => m.role === 'assistant')
       if (previous) earlierReplies.add(previous.id)
       lastSentId = id
@@ -234,8 +236,11 @@ function createDesktopPet(agent, getChatWindow, loadRenderer) {
   }
   for (const [name, action] of Object.entries(actions)) {
     ipcMain.handle('pet:' + name, (event, arg) => {
-      if (!active || event.sender !== pet?.webContents || event.senderFrame !== event.sender.mainFrame)
+      if (!isActiveContents(event.sender) || event.senderFrame !== event.sender.mainFrame) {
+        // Stopping the recorder can resize the composer just as the pet is hidden.
+        if (name === 'setRegion') return
         throw new Error('无效桌宠窗口')
+      }
       return action(arg)
     })
   }
@@ -247,7 +252,10 @@ function createDesktopPet(agent, getChatWindow, loadRenderer) {
   }
   screen.on('display-metrics-changed', updateDisplay)
   screen.on('display-removed', updateDisplay)
-  return { enter, restore, publish, destroy }
+  function isActiveContents(contents) {
+    return active && pet && !pet.isDestroyed() && contents === pet.webContents
+  }
+  return { enter, restore, publish, destroy, isActiveContents }
 }
 
 module.exports = { createDesktopPet }

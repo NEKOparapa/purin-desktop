@@ -204,13 +204,14 @@ function start() {
   }
   const chatUrl = app.isPackaged || process.argv.includes('--preview')
     ? pathToFileURL(path.join(__dirname, '../dist/index.html')).href : 'http://127.0.0.1:5173/'
-  const isChatFrame = (contents, permission, details) =>
-    permission === 'media' && contents && contents === appWindow?.webContents &&
+  const isVoiceFrame = (contents, permission, details) =>
+    permission === 'media' && contents &&
+    (contents === appWindow?.webContents || desktopPet.isActiveContents(contents)) &&
     details.isMainFrame && details.requestingUrl === chatUrl && contents.getURL() === chatUrl
   session.defaultSession.setPermissionCheckHandler((contents, permission, _origin, details) =>
-    Boolean(isChatFrame(contents, permission, details) && details.mediaType === 'audio'))
+    Boolean(isVoiceFrame(contents, permission, details) && details.mediaType === 'audio'))
   session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) =>
-    callback(Boolean(isChatFrame(contents, permission, details) &&
+    callback(Boolean(isVoiceFrame(contents, permission, details) &&
       details.mediaTypes?.length === 1 && details.mediaTypes[0] === 'audio')))
   Menu.setApplicationMenu(
     process.platform === 'darwin'

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { LoaderCircle, Mic, Square, X } from 'lucide-react'
 import { speechWav } from '@/lib/chat-media'
 
@@ -6,11 +6,15 @@ type Phase = 'idle' | 'requesting' | 'recording' | 'transcribing'
 
 export function VoiceInput({
   revision,
+  transcribe,
+  disabledReason,
   onText,
   onBusy,
   onError,
 }: {
   revision: number
+  transcribe: (audio: ArrayBuffer, revision: number) => Promise<string>
+  disabledReason?: string
   onText: (text: string) => void
   onBusy: (busy: boolean) => void
   onError: (error: string) => void
@@ -19,23 +23,25 @@ export function VoiceInput({
   const generation = useRef(0)
   const dispose = useRef<() => void>(() => {})
   const finish = useRef<() => void>(() => {})
-  useEffect(
-    () => () => {
-      generation.current++
-      dispose.current()
-      onBusy(false)
-    },
-    [onBusy, revision],
-  )
-
-  function cancel() {
+  const cancel = useCallback(() => {
     generation.current++
     dispose.current()
     dispose.current = () => {}
     finish.current = () => {}
     setPhase('idle')
     onBusy(false)
-  }
+  }, [onBusy])
+
+  useEffect(() => {
+    function stopWhenHidden() {
+      if (document.hidden) cancel()
+    }
+    document.addEventListener('visibilitychange', stopWhenHidden)
+    return () => {
+      document.removeEventListener('visibilitychange', stopWhenHidden)
+      cancel()
+    }
+  }, [cancel, revision])
 
   async function record() {
     const version = ++generation.current
@@ -86,7 +92,7 @@ export function VoiceInput({
             new Blob(chunks, { type: recorder.mimeType }),
           )
           if (!active()) return
-          const text = await window.wintermute!.transcribe(wav, revision)
+          const text = await transcribe(wav, revision)
           if (!active()) return
           if (text.trim()) onText(text.trim())
           else onError('没有识别到语音，请再试一次。')
@@ -139,9 +145,9 @@ export function VoiceInput({
       <button
         type="button"
         className="composer-tool"
-        title={label}
+        title={disabledReason ?? label}
         aria-label={label}
-        disabled={phase === 'requesting' || phase === 'transcribing'}
+        disabled={!!disabledReason || phase === 'requesting' || phase === 'transcribing'}
         onClick={() =>
           phase === 'recording' ? finish.current() : void record()
         }

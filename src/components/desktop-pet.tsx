@@ -1,6 +1,10 @@
-import { type Ref, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { type DragEvent, type Ref, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ArrowUp, X } from 'lucide-react'
 import { Mascot } from '@/components/mascot'
+import { VoiceInput } from '@/components/voice-input'
+import { DraftAttachments } from '@/components/draft-attachments'
+import { knownChatFileType } from '@/lib/chat-media'
+import { useChatAttachments } from '@/lib/use-chat-attachments'
 import { useTypingActivity } from '@/lib/use-typing-activity'
 import type { PetBridge, PetSnapshot } from '@/lib/desktop'
 import { layoutPet } from '@/lib/pet-layout'
@@ -98,12 +102,14 @@ function PetChat({ api, state }: { api: PetBridge; state: PetSnapshot }) {
   const secondClick = useRef(false)
   const [carriedSession, setCarriedSession] = useState<number | null>(null)
   const [draft, setDraft] = useState('')
+  const { attachments, readingFiles, uploading, addFiles, prepareMessage, removeAttachment, clearAttachments } = useChatAttachments()
   const activity = useTypingActivity()
   const [editorSession, setEditorSession] = useState<number | null>(null)
   const [error, setError] = useState<{ session: number; text: string } | null>(
     null,
   )
   const [sending, setSending] = useState(false)
+  const [voiceBusy, setVoiceBusy] = useState(false)
   const [composing, setComposing] = useState(false)
   const [dismissed, setDismissed] = useState('')
   const editing = editorSession === state.session
@@ -130,7 +136,9 @@ function PetChat({ api, state }: { api: PetBridge; state: PetSnapshot }) {
     setEditorSession(null)
     setComposing(false)
   }, [])
-  const restartEditorTimer = useAutoHide(editing && !composing && !sending ? editorIdleMs : null, closeEditor)
+  const restartEditorTimer = useAutoHide(
+    editing && !composing && !sending && !readingFiles && !voiceBusy ? editorIdleMs : null, closeEditor,
+  )
 
   function cancelPendingClick() {
     window.clearTimeout(pendingClick.current)
@@ -222,21 +230,46 @@ function PetChat({ api, state }: { api: PetBridge; state: PetSnapshot }) {
     restartEditorTimer()
     input.current?.focus({ preventScroll: true })
   }
+  function dragOver(event: DragEvent) {
+    if (!event.dataTransfer.types.includes('Files')) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = sending || readingFiles ? 'none' : 'copy'
+    if (sending || readingFiles) return
+    if (editing) restartEditorTimer()
+    else if (Array.from(event.dataTransfer.items).some(item => item.kind === 'file' && knownChatFileType(item.type)))
+      openEditor()
+  }
+  async function attachDrop(event: DragEvent) {
+    if (!event.dataTransfer.types.includes('Files')) return
+    event.preventDefault()
+    if (sending || readingFiles) return
+    cancelPendingClick()
+    setError(null)
+    setDismissed('')
+    try {
+      if (await addFiles(event.dataTransfer)) openEditor()
+    } catch (error) {
+      setError({ session: state.session, text: error instanceof Error ? error.message : '附件读取失败，请重试。' })
+    }
+  }
+  const canSend = !!(draft.trim() || attachments.length) && state.configured && !sending && !voiceBusy && !readingFiles
   async function send() {
-    if (!draft.trim() || !state.configured || sending) return
+    if (!canSend) return
     const text = draft
     setSending(true)
     activity.stop()
     setDismissed('')
     setError(null)
     try {
-      await api.send(text, state.connectionRevision)
+      const media = await prepareMessage(api.uploadChatFile, state.connectionRevision)
+      await api.send(text, state.connectionRevision, media)
       setDraft((current) => (current === text ? '' : current))
+      clearAttachments()
       closeEditor()
-    } catch {
+    } catch (error) {
       setError({
         session: state.session,
-        text: '消息未能发送，请检查连接后再试。',
+        text: error instanceof Error ? error.message.replace(/^.*?Error: /, '') : '消息未能发送，请检查连接后再试。',
       })
     } finally {
       setSending(false)
@@ -262,14 +295,14 @@ function PetChat({ api, state }: { api: PetBridge; state: PetSnapshot }) {
         } else void api.restore()
       }}
     >
-      <div className="pet-head">
+      <div className="pet-head" onDragEnter={dragOver} onDragOver={dragOver} onDrop={attachDrop}>
         <button
           ref={avatar}
           className="pet-avatar"
           aria-label="和桌宠聊天"
-          aria-description="拖动调整位置，单击打开输入框，双击返回主窗口"
+          aria-description="拖入文件添加附件，拖动调整位置，单击打开输入框，双击返回主窗口"
           aria-expanded={editing}
-          title="拖动调整位置，单击聊天，双击返回主窗口"
+          title="拖入文件添加附件，拖动调整位置，单击聊天，双击返回主窗口"
           onBlur={cancelPendingClick}
           onPointerDown={(event) => {
             if (!event.isPrimary || event.button !== 0) return
@@ -314,7 +347,7 @@ function PetChat({ api, state }: { api: PetBridge; state: PetSnapshot }) {
         >
           <Mascot
             carried={carriedSession === state.session}
-            listening={editing && activity.typing}
+            listening={editing && (activity.typing || voiceBusy)}
             thinking={sending || state.awaitingReply}
             replyReceivedAt={state.replyReceivedAt}
           />
@@ -332,6 +365,9 @@ function PetChat({ api, state }: { api: PetBridge; state: PetSnapshot }) {
         <form
           ref={composer}
           className="pet-composer"
+          onDragEnter={dragOver}
+          onDragOver={dragOver}
+          onDrop={attachDrop}
           onInput={restartEditorTimer}
           onKeyDown={restartEditorTimer}
           onFocus={restartEditorTimer}
@@ -341,6 +377,7 @@ function PetChat({ api, state }: { api: PetBridge; state: PetSnapshot }) {
             void send()
           }}
         >
+          <DraftAttachments items={attachments} sending={sending} remove={removeAttachment} />
           <textarea
             ref={input}
             aria-label="桌宠消息"
@@ -371,6 +408,20 @@ function PetChat({ api, state }: { api: PetBridge; state: PetSnapshot }) {
               }
             }}
           />
+          <VoiceInput
+            revision={state.connectionRevision}
+            transcribe={api.transcribe}
+            disabledReason={!state.configured ? '连接设备后使用语音输入' : sending ? '正在发送消息' : undefined}
+            onBusy={setVoiceBusy}
+            onError={(text) => {
+              setDismissed('')
+              setError(text ? { session: state.session, text } : null)
+            }}
+            onText={(text) => {
+              setDraft(current => current + (current && !/\s$/.test(current) ? ' ' : '') + text)
+              input.current?.focus(quietFocus)
+            }}
+          />
           <button
             type="button"
             aria-label="收起输入框"
@@ -383,7 +434,7 @@ function PetChat({ api, state }: { api: PetBridge; state: PetSnapshot }) {
             <button
               type="submit"
               className="pet-send"
-              disabled={!draft.trim() || sending}
+              disabled={!canSend}
               aria-label="发送桌宠消息"
               title="发送"
             >
@@ -397,6 +448,9 @@ function PetChat({ api, state }: { api: PetBridge; state: PetSnapshot }) {
             >
               去连接
             </button>
+          )}
+          {(readingFiles || uploading) && (
+            <span className="pet-file-status" role="status">{uploading ? `正在上传并解析 ${uploading}…` : '正在读取附件…'}</span>
           )}
         </form>
       )}

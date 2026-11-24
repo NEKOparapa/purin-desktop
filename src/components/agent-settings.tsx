@@ -393,7 +393,7 @@ export function AgentSettings({
                   {new Date(state.lastSpan.ended_at).toLocaleString('zh-CN')}
                   {' · '}
                   {state.lastSpan.foreground_app} · 约{' '}
-                  {state.lastSpan.duration_seconds} 秒
+                  {Math.trunc(state.lastSpan.duration_seconds)} 秒
                   {state.lastSpan.window_title &&
                     ' · ' + state.lastSpan.window_title}
                   {state.lastSpan.input_segments?.length

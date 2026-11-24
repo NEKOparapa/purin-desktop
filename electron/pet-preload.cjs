@@ -15,9 +15,12 @@ if (process.platform === 'darwin') {
 
 contextBridge.exposeInMainWorld('wintermutePet', {
   state: () => ipcRenderer.invoke('pet:state'),
+  transcribe: (audio, connectionRevision) => ipcRenderer.invoke('pet:transcribe', { audio, connectionRevision }),
   move: (x, y, session) => ipcRenderer.invoke('pet:move', { x, y, session }),
   drop: session => ipcRenderer.invoke('pet:drop', session),
-  send: (text, revision) => ipcRenderer.invoke('pet:send', { text, revision }),
+  uploadChatFile: (name, data, revision) => ipcRenderer.invoke('pet:uploadChatFile', { name, data, revision }),
+  send: (text, revision, { images, documents, imageNames } = {}) =>
+    ipcRenderer.invoke('pet:send', { text, revision, images, documents, imageNames }),
   setRegion: (bounds, nextShape, requestSession) => {
     shape = nextShape
     session = requestSession

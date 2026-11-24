@@ -5,6 +5,26 @@ const os = require('node:os')
 const path = require('node:path')
 const { DesktopAgent } = require('./agent.cjs')
 const { ChatHistory } = require('./chat-history.cjs')
+const { droppedChatFiles } = require('../src/lib/chat-media.ts')
+
+test('pet drops keep supported files after the drag data store closes', async () => {
+  let accessible = true
+  const text = new File(['项目说明'], 'README')
+  const document = new File(['test fixture'], '预算.XLSX')
+  const binary = new File([Uint8Array.of(0, 255)], 'unknown.bin')
+  function item(file, isDirectory = false) {
+    return {
+      kind: 'file',
+      webkitGetAsEntry: () => ({ isDirectory }),
+      getAsFile: () => accessible ? file : null,
+    }
+  }
+  const pending = droppedChatFiles({
+    items: [item(text), item(binary), item(document), item(new File([], '资料.txt'), true), { kind: 'string' }],
+  })
+  accessible = false
+  assert.deepEqual(await pending, [text, document])
+})
 
 test('attachment-only drafts retain their pictures, names and document references across both types of retry', t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wintermute-chat-'))
