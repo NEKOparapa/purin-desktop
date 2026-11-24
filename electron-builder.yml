@@ -1,5 +1,6 @@
 appId: dev.wintermute.desktop
 productName: Wintermute
+icon: public/app-icon.png
 directories:
   output: release
 files:

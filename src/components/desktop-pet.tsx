@@ -408,6 +408,14 @@ function PetChat({ api, state }: { api: PetBridge; state: PetSnapshot }) {
               }
             }}
           />
+          <button
+            type="button"
+            aria-label="收起输入框"
+            title="收起输入框"
+            onClick={closeEditor}
+          >
+            <X size={15} />
+          </button>
           <VoiceInput
             revision={state.connectionRevision}
             transcribe={api.transcribe}
@@ -422,14 +430,6 @@ function PetChat({ api, state }: { api: PetBridge; state: PetSnapshot }) {
               input.current?.focus(quietFocus)
             }}
           />
-          <button
-            type="button"
-            aria-label="收起输入框"
-            title="收起输入框"
-            onClick={closeEditor}
-          >
-            <X size={15} />
-          </button>
           {state.configured ? (
             <button
               type="submit"

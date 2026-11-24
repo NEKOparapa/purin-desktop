@@ -235,6 +235,32 @@ export function AgentSettings({
                 {state.issue}
               </p>
             )}
+            {showConnection && failedMaterial && (
+              <dl className="settings-facts">
+                <div>
+                  <dt>采集记录上传失败</dt>
+                  <dd>
+                    {state.materialIssue}
+                    <div className="setting-actions">
+                      <button
+                        type="button"
+                        disabled={!api || busy}
+                        onClick={() => void change(() => api?.manageFailed(failedMaterial, true))}
+                      >
+                        重试此项
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!api || busy}
+                        onClick={() => void change(() => api?.manageFailed(failedMaterial, false))}
+                      >
+                        丢弃此项
+                      </button>
+                    </div>
+                  </dd>
+                </div>
+              </dl>
+            )}
             {!showConnection && !manual && (
               <form
                 className="connection-form connection-editor"
@@ -442,52 +468,16 @@ export function AgentSettings({
                     void change(() => api?.setScreenshots({ enabled }))
                   }}
                 />
-                自动截图（前台窗口）
+                采集前台窗口截图
               </label>
               <p id="screenshot-description">
                 同一应用连续在前台停留满 10
-                分钟时截一张，切换标签页或窗口标题不会重新计时。离开应用后随停留记录上传，可在后端管理面板的「历史记录 → 感知层 → 原始信息」查看。
+                分钟时截一张，切换标签页或窗口标题不会重新计时。
               </p>
               {state.screenshotIssue && (
                 <p role="status">{state.screenshotIssue}</p>
               )}
             </div>
-            {(state.pendingMaterials > 0 || state.materialIssue) && (
-              <dl className="settings-facts" aria-label="材料传送状态">
-                <div>
-                  <dt>等待上传</dt>
-                  <dd>
-                    {state.pendingMaterials} 项 {state.materialIssue}
-                    {failedMaterial && (
-                      <div className="setting-actions">
-                        <button
-                          type="button"
-                          disabled={!api || busy}
-                          onClick={() =>
-                            void change(() =>
-                              api?.manageFailed(failedMaterial, true),
-                            )
-                          }
-                        >
-                          重试此项
-                        </button>
-                        <button
-                          type="button"
-                          disabled={!api || busy}
-                          onClick={() =>
-                            void change(() =>
-                              api?.manageFailed(failedMaterial, false),
-                            )
-                          }
-                        >
-                          丢弃此项
-                        </button>
-                      </div>
-                    )}
-                  </dd>
-                </div>
-              </dl>
-            )}
           </>
         )}
         {sourceFeedback?.section === tab && (

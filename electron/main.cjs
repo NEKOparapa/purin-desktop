@@ -20,6 +20,7 @@ const {
 } = require('./foreground-capture.cjs')
 const { enableTextInputCapture } = require('./text-input-probe.cjs')
 const { createDesktopPet } = require('./desktop-pet.cjs')
+const appIcon = path.join(__dirname, app.isPackaged ? '../dist/app-icon.png' : '../public/app-icon.png')
 let agent, appWindow, desktopPet
 
 function windowBackground() {
@@ -52,6 +53,7 @@ function createWindow() {
     minWidth: Math.min(380, width),
     minHeight: Math.min(460, height),
     title: 'Wintermute',
+    icon: appIcon,
     titleBarStyle: 'hidden',
     titleBarOverlay: process.platform === 'darwin' ? true : windowControls(),
     backgroundColor: windowBackground(),
@@ -112,6 +114,7 @@ async function chooseAttachmentPath(name) {
 
 function start() {
   if (process.platform === 'win32') app.setAppUserModelId('dev.wintermute.desktop')
+  if (process.platform === 'darwin' && !app.isPackaged) app.dock.setIcon(appIcon)
   agent = new DesktopAgent(
     app.getPath('userData'),
     safeStorage,
