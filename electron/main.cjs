@@ -24,14 +24,14 @@ const appIcon = path.join(__dirname, app.isPackaged ? '../dist/app-icon.png' : '
 let agent, appWindow, desktopPet
 
 function windowBackground() {
-  return nativeTheme.shouldUseDarkColors ? '#211f1e' : '#fbf9f5'
+  return nativeTheme.shouldUseDarkColors ? '#131a24' : '#eef4fb'
 }
 
 function windowControls() {
   return {
     // Let the native buttons share the background of the page or its modal overlay.
     color: '#00000000',
-    symbolColor: nativeTheme.shouldUseDarkColors ? '#f3eee8' : '#362f29',
+    symbolColor: nativeTheme.shouldUseDarkColors ? '#eef3f9' : '#1e2936',
     height: 44,
   }
 }

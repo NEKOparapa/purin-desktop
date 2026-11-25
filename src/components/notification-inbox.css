@@ -82,10 +82,12 @@
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  background: var(--surface);
-  border: 1px solid var(--control-line);
+  background: var(--dialog-surface, var(--surface));
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
   border-radius: 14px;
-  box-shadow: 0 10px 30px var(--popover-shadow);
+  box-shadow: 0 8px 24px var(--popover-shadow);
   padding: 12px 14px;
 }
 

@@ -27,7 +27,7 @@
   --color-muted-foreground: var(--muted);
   --color-accent: var(--active);
   --color-accent-foreground: var(--ink);
-  --color-destructive: #b52e49;
+  --color-destructive: #dc3848;
   --color-border: var(--line);
   --color-input: var(--control-line);
   --color-ring: var(--focus);
@@ -44,27 +44,39 @@
   -webkit-font-smoothing: antialiased;
   color-scheme: light dark;
   --titlebar-height: max(44px, env(titlebar-area-height, 0px));
-  --canvas: light-dark(#fbf9f5, #211f1e);
-  --sidebar: light-dark(#f5f1eb, #272422);
-  --surface: light-dark(#fffefd, #302c29);
-  --grouped: light-dark(#f2eee8, #2c2926);
-  --hover: light-dark(#eee8df, #3b3531);
-  --active: light-dark(#f3e5da, #45382f);
-  --user-bubble: light-dark(#f3e3d5, #4c392d);
-  --ink: light-dark(#362f29, #f3eee8);
-  --muted: light-dark(#625b54, #c4bab0);
-  --quiet: light-dark(#756d63, #aca196);
-  --line: light-dark(#e4ddd3, #453e37);
-  --control-line: light-dark(#c8beb2, #62594f);
-  --primary: light-dark(#975239, #eab092);
-  --primary-hover: light-dark(#84432e, #f4bea4);
-  --on-primary: light-dark(#ffffff, #34261f);
+  --canvas: light-dark(#eef4fb, #131a24);
+  --sky-backdrop: light-dark(
+    radial-gradient(ellipse 70% 42% at 50% -8%, rgba(255, 250, 238, 0.90) 0%, transparent 72%),
+    radial-gradient(ellipse 68% 40% at 50% -10%, rgba(255, 224, 186, 0.08) 0%, transparent 72%)
+  ),
+  light-dark(
+    linear-gradient(180deg, #f8f7f4 0%, #edf4fc 52%, #f7fafe 100%),
+    linear-gradient(180deg, #141a24 0%, #121b28 55%, #152030 100%)
+  );
+  --glass-blur: blur(18px);
+  --glass-border: light-dark(#dee7f2, rgba(200, 222, 248, 0.12));
+  --sidebar: light-dark(rgba(239, 245, 252, 0.82), rgba(19, 27, 38, 0.84));
+  --surface: light-dark(rgba(255, 255, 255, 0.92), rgba(30, 41, 56, 0.90));
+  --dialog-surface: light-dark(rgba(252, 253, 255, 0.95), rgba(22, 31, 44, 0.93));
+  --grouped: light-dark(rgba(255, 255, 255, 0.78), rgba(34, 46, 64, 0.72));
+  --hover: light-dark(rgba(25, 64, 112, 0.05), rgba(200, 222, 248, 0.06));
+  --active: light-dark(#e1effd, rgba(92, 164, 248, 0.18));
+  --active-ink: light-dark(#1c62bd, #e0eeff);
+  --user-bubble: light-dark(#deecfa, #203652);
+  --ink: light-dark(#1e2936, #eef3f9);
+  --muted: light-dark(#58697d, #a0b3c8);
+  --quiet: light-dark(#8495a8, #73879e);
+  --line: light-dark(#e0e8f2, rgba(200, 222, 248, 0.11));
+  --control-line: light-dark(#c7d5e4, rgba(200, 222, 248, 0.20));
+  --primary: light-dark(#3983df, #6bb0ff);
+  --primary-hover: light-dark(#2c74d0, #82bdff);
+  --on-primary: light-dark(#ffffff, #081728);
   --focus: var(--primary);
-  --online: light-dark(#29627b, #92cff2);
-  --error: light-dark(#ab3048, #ffaaa9);
-  --scrim: light-dark(#332b2242, #09080799);
-  --popover-shadow: light-dark(#3824141c, #00000055);
-  --composer-shadow: light-dark(#4b38210a, #0000001f);
+  --online: light-dark(#16855e, #45d4a6);
+  --error: light-dark(#d93848, #ff7078);
+  --scrim: light-dark(rgba(20, 36, 58, 0.20), rgba(5, 10, 18, 0.52));
+  --popover-shadow: light-dark(rgba(24, 52, 88, 0.08), rgba(0, 0, 0, 0.34));
+  --composer-shadow: light-dark(rgba(24, 52, 88, 0.038), rgba(0, 0, 0, 0.20));
   color: var(--ink);
   background: var(--canvas);
 }

@@ -139,6 +139,7 @@
 .calendar-cell[aria-pressed='true'] .calendar-number {
   background: var(--primary);
   color: var(--on-primary);
+  font-weight: 600;
 }
 .calendar-marks {
   height: 7px;

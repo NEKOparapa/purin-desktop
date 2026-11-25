@@ -50,8 +50,8 @@
   color: var(--muted);
 }
 .pet-bubble {
-  --paper: light-dark(#fffaf0, #39302c);
-  --ink-line: light-dark(#705342, #d7b89e);
+  --paper: light-dark(rgba(255, 255, 255, 0.94), rgba(30, 41, 56, 0.92));
+  --ink-line: light-dark(#c7d5e4, rgba(200, 222, 248, 0.24));
   position: absolute;
   isolation: isolate;
   left: var(--bubble-x);
@@ -70,10 +70,12 @@
   z-index: -1;
   pointer-events: none;
   background: var(--paper);
-  border: 2px solid var(--ink-line);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--ink-line);
   border-radius: 19px;
   border-shape: var(--bubble-outline);
-  box-shadow: 2px 3px 0 light-dark(#6f503c45, #0007);
+  box-shadow: 0 4px 14px var(--popover-shadow);
 }
 .pet-bubble p {
   min-height: 0;

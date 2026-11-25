@@ -6,8 +6,10 @@
 .question-card {
   border-radius: 16px;
   background: var(--surface);
-  border: 1px solid var(--control-line);
-  box-shadow: 0 6px 20px var(--popover-shadow);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 4px 14px var(--popover-shadow);
   padding: 14px 16px;
   display: flex;
   flex-direction: column;
@@ -112,9 +114,9 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 7px 12px;
+  padding: 6px 13px;
   border-radius: 10px;
-  border: 1px solid var(--control-line);
+  border: 1px solid var(--line);
   background: var(--grouped);
   color: var(--ink);
   font-size: 13px;
@@ -127,9 +129,10 @@
 }
 
 .question-option[data-selected='true'] {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: var(--on-primary);
+  background: var(--active);
+  border-color: color-mix(in srgb, var(--primary) 40%, transparent);
+  color: var(--active-ink, var(--primary));
+  font-weight: 600;
 }
 
 .question-card-footer {
@@ -166,15 +169,19 @@
   align-items: center;
   gap: 6px;
   height: 36px;
-  padding: 0 14px;
+  padding: 0 16px;
   border-radius: 10px;
   border: none;
   background: var(--primary);
   color: var(--on-primary);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   flex-shrink: 0;
+}
+
+.question-submit-btn:hover:not(:disabled) {
+  background: var(--primary-hover);
 }
 
 .question-submit-btn:disabled {
