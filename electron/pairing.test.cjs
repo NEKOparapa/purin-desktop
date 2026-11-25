@@ -25,7 +25,7 @@ test('retrying an invitation sends the same client identity and credential', asy
     if (sent.length === 1) throw new Error('response lost')
     return Response.json({ device_id: id })
   })
-  const invitation = { value: 'https://unit.test/#wm-pair=12345-67890' }
+  const invitation = { value: 'https://unit.test/#purin-pair=12345-67890' }
   await assert.rejects(
     agent.pair({ value: '12345-67890', serverUrl: 'https://unit.test' }),
     /完整配对链接/,

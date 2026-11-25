@@ -1,10 +1,10 @@
-# Wintermute 图标候选
+# Purin 图标候选
 
 内置 ImageGen 生成。每张图使用同一段通用提示和对应的方案提示。
 
 ## 通用提示
 
-Use case: logo-brand. Make exactly ONE original production-quality square app icon artwork for Wintermute, a thoughtful desktop AI companion. Full-bleed edge-to-edge background all four sides, no drawn app-tile shape or exterior padding, no text/letters except if explicitly requested, no mockup or alternate versions. Optically balanced like the best minimalist boutique software identities, strong enough in a 24px Windows taskbar. Crisp near-vector color edges, simple exact silhouette, deliberate positive and negative space. Avoid stock AI imagery, stars/sparkles, chat UI, decorative detailing, paper texture, stroke outlines and cast shadows. Square 1:1.
+Use case: logo-brand. Make exactly ONE original production-quality square app icon artwork for Purin, a thoughtful desktop AI companion. Full-bleed edge-to-edge background all four sides, no drawn app-tile shape or exterior padding, no text/letters except if explicitly requested, no mockup or alternate versions. Optically balanced like the best minimalist boutique software identities, strong enough in a 24px Windows taskbar. Crisp near-vector color edges, simple exact silhouette, deliberate positive and negative space. Avoid stock AI imagery, stars/sparkles, chat UI, decorative detailing, paper texture, stroke outlines and cast shadows. Square 1:1.
 
 ## A · 橘耳
 

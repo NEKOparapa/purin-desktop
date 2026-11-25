@@ -40,7 +40,7 @@ function QuestionCard({
     setSubmitting(true)
     setError('')
     try {
-      await window.wintermute?.answerQuestion({
+      await window.purin?.answerQuestion({
         id: item.id,
         selectedOptions: selected,
         answerText: customText.trim(),
@@ -57,7 +57,7 @@ function QuestionCard({
     setSubmitting(true)
     setError('')
     try {
-      await window.wintermute?.dismissQuestion(item.id)
+      await window.purin?.dismissQuestion(item.id)
     } catch (err) {
       setError(err instanceof Error ? err.message : '忽略提问失败，请重试')
     } finally {

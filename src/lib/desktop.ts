@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { PetRect } from './pet-layout'
 
 export type Appearance = 'system' | 'light' | 'dark'
-const browserAppearanceKey = 'wintermute.appearance'
+const browserAppearanceKey = 'purin.appearance'
 
 export function readBrowserAppearance(): Appearance {
   try {
@@ -240,8 +240,8 @@ export interface PetBridge {
 }
 declare global {
   interface Window {
-    wintermutePet?: PetBridge
-    wintermute?: {
+    purinPet?: PetBridge
+    purin?: {
       initialAppearance: Appearance
       enterPetMode(): Promise<void>
       onPetSettings(callback: () => void): () => void
@@ -334,7 +334,7 @@ const initial: AgentState = {
 export function useAgent() {
   const [state, setState] = useState(initial)
   useEffect(() => {
-    const api = window.wintermute
+    const api = window.purin
     if (!api) return
     let live = true,
       received = false

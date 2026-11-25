@@ -52,7 +52,7 @@ export function NotificationInbox({
   } | null>(null)
   const reading = useRef(new Set<string>())
   const requested = useRef<NoticeAlert | null>(null)
-  const api = window.wintermute
+  const api = window.purin
   const markRead = useCallback(
     async (n: DeviceNotice) => {
       if (

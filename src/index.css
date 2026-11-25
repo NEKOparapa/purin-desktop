@@ -44,7 +44,7 @@
   -webkit-font-smoothing: antialiased;
   color-scheme: light dark;
   --titlebar-height: max(44px, env(titlebar-area-height, 0px));
-  --canvas: light-dark(#eef4fb, #131a24);
+  --canvas: light-dark(#f5f6f8, #121720);
   --sky-backdrop: light-dark(
     radial-gradient(ellipse 70% 42% at 50% -8%, rgba(255, 250, 238, 0.90) 0%, transparent 72%),
     radial-gradient(ellipse 68% 40% at 50% -10%, rgba(255, 224, 186, 0.08) 0%, transparent 72%)
@@ -55,9 +55,9 @@
   );
   --glass-blur: blur(18px);
   --glass-border: light-dark(#dee7f2, rgba(200, 222, 248, 0.12));
-  --sidebar: light-dark(rgba(239, 245, 252, 0.82), rgba(19, 27, 38, 0.84));
+  --sidebar: light-dark(#f2f4f7, #151c27);
   --surface: light-dark(rgba(255, 255, 255, 0.92), rgba(30, 41, 56, 0.90));
-  --dialog-surface: light-dark(rgba(252, 253, 255, 0.95), rgba(22, 31, 44, 0.93));
+  --dialog-surface: light-dark(#ffffff, #18202c);
   --grouped: light-dark(rgba(255, 255, 255, 0.78), rgba(34, 46, 64, 0.72));
   --hover: light-dark(rgba(25, 64, 112, 0.05), rgba(200, 222, 248, 0.06));
   --active: light-dark(#e1effd, rgba(92, 164, 248, 0.18));

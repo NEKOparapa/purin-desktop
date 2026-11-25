@@ -66,7 +66,7 @@ async function runMacTool(call, signal) {
     if (signal.aborted) return failed('连接器已关闭')
     if (deadline.aborted) return failed('Mac 应用响应超时', 'timed_out')
     if (/-1743|-1744|-10004/.test(error.stderr || ''))
-      return failed('自动化权限未获准，请在 Mac 的「系统设置 → 隐私与安全性 → 自动化」中允许 Wintermute 控制对应应用。')
+      return failed('自动化权限未获准，请在 Mac 的「系统设置 → 隐私与安全性 → 自动化」中允许 Purin 控制对应应用。')
     if (call.tool === 'mac_music_control') return failed('音乐未能完成操作，请在 Mac 的「音乐」中确认播放队列。')
     if (call.tool === 'mac_notes_create') return failed('无法创建备忘录，请检查默认账户和自动化权限。')
     return failed('Mac 应用未能完成操作，请检查本机应用和权限。')

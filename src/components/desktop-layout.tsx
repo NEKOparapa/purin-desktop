@@ -55,7 +55,7 @@ export function DesktopLayout({
       : '打开日程'
     : '返回对话'
   return (
-    <div className="app-shell">
+    <div className="app-shell" data-page={page}>
       <header className="window-titlebar" aria-label="窗口标题栏" />
       <nav className="page-actions" aria-label="页面导航">
         <button

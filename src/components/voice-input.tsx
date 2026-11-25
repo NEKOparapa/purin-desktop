@@ -120,7 +120,7 @@ export function VoiceInput({
       cancel()
       onError(
         error instanceof DOMException && error.name === 'NotAllowedError'
-          ? '无法访问麦克风，请在系统隐私设置中允许 Wintermute 使用麦克风。'
+          ? '无法访问麦克风，请在系统隐私设置中允许 Purin 使用麦克风。'
           : '无法开始录音，请检查麦克风连接。',
       )
     }

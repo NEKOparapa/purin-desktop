@@ -11,7 +11,7 @@ const run = promisify(execFile)
 
 const windowsProbe = `
 [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
-Add-Type -Name Foreground -Namespace Wintermute -MemberDefinition @'
+Add-Type -Name Foreground -Namespace Purin -MemberDefinition @'
 [System.Runtime.InteropServices.DllImport("user32.dll")]
 public static extern System.IntPtr GetForegroundWindow();
 [System.Runtime.InteropServices.DllImport("user32.dll")]
@@ -21,12 +21,12 @@ public static extern int GetWindowTextW(System.IntPtr window, System.Text.String
 '@
 function Read-Foreground {
 [uint32]$foregroundPid = 0
-$window = [Wintermute.Foreground]::GetForegroundWindow()
-[void][Wintermute.Foreground]::GetWindowThreadProcessId($window, [ref]$foregroundPid)
+$window = [Purin.Foreground]::GetForegroundWindow()
+[void][Purin.Foreground]::GetWindowThreadProcessId($window, [ref]$foregroundPid)
 if ($foregroundPid) {
   $result = @{ foreground_app = [Diagnostics.Process]::GetProcessById($foregroundPid).ProcessName; pid = $foregroundPid; handle = $window.ToInt64().ToString() }
   $title = New-Object System.Text.StringBuilder 513
-  if ([Wintermute.Foreground]::GetWindowTextW($window, $title, $title.Capacity) -gt 0) {
+  if ([Purin.Foreground]::GetWindowTextW($window, $title, $title.Capacity) -gt 0) {
     $result.window_title = $title.ToString()
   }
   ConvertTo-Json -InputObject $result -Compress
@@ -121,7 +121,7 @@ async function sampleActivity(options = false) {
     ? isMacAccessibilityGranted()
     : false
   if (withTextInput && process.platform === 'darwin' && !macInputAllowed) {
-    value.input_issue = '请在 macOS 系统设置的“隐私与安全性 → 辅助功能”中允许 Wintermute'
+    value.input_issue = '请在 macOS 系统设置的“隐私与安全性 → 辅助功能”中允许 Purin'
   }
   try {
     const { stdout } = process.platform === 'win32'

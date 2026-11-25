@@ -1,4 +1,4 @@
-// Run against an isolated backend fixture configured through WINTERMUTE_TEST_URL.
+// Run against an isolated backend fixture configured through PURIN_TEST_URL.
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
@@ -11,8 +11,8 @@ const { submitMaterial, framePath } = require('../electron/materials.cjs')
 const { advanceWindowSpan } = require('../electron/window-spans.cjs')
 
 async function main() {
-  const url = process.env.WINTERMUTE_TEST_URL
-  assert.ok(url, 'Set WINTERMUTE_TEST_URL to an isolated backend fixture')
+  const url = process.env.PURIN_TEST_URL
+  assert.ok(url, 'Set PURIN_TEST_URL to an isolated backend fixture')
   const profile = {
     url, deviceId: 'desktop-test', token: 'test-token-desktop-test',
     controller: new AbortController(),
@@ -38,7 +38,7 @@ async function main() {
   })
   assert.ok(schedule.items.some(item => item.title === 'contract schedule'))
 
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'wintermute-contract-'))
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'purin-contract-'))
   profile.mediaDirectory = directory
   try {
     fs.mkdirSync(path.join(directory, 'periodic'))
@@ -52,7 +52,7 @@ async function main() {
       window_title: 'contract.txt', segment: 0,
     }))
     for (const frame of frames)
-      fs.writeFileSync(framePath(profile, frame.id), Buffer.from(process.env.WINTERMUTE_TEST_JPEG, 'base64'))
+      fs.writeFileSync(framePath(profile, frame.id), Buffer.from(process.env.PURIN_TEST_JPEG, 'base64'))
     const material = { kind: 'perception', body: finished, frames }
     const send = (_profile, route, body) => api(route, body, 202)
     const uploaded = await submitMaterial(profile, material, send, profile.controller.signal)

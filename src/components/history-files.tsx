@@ -22,7 +22,7 @@ function VisibleScreenshot({
     async function load() {
       if (!active) return
       try {
-        const bytes = await window.wintermute!.previewHistoryImage({
+        const bytes = await window.purin!.previewHistoryImage({
           id: file.id,
           connectionRevision: revision,
         })
@@ -68,7 +68,7 @@ function Screenshot({ file }: { file: HistoryFile }) {
         <div className="history-image-surface">
           {near &&
           revision !== undefined &&
-          window.wintermute?.previewHistoryImage ? (
+          window.purin?.previewHistoryImage ? (
             <VisibleScreenshot
               key={revision + ':' + attempt}
               file={file}
@@ -98,7 +98,7 @@ function DownloadFile({ file }: { file: HistoryFile }) {
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
   async function download() {
-    const api = window.wintermute
+    const api = window.purin
     if (busy || !api) return
     setBusy(true)
     setSaved(false)

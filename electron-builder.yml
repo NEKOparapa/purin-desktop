@@ -1,5 +1,5 @@
-appId: dev.wintermute.desktop
-productName: Wintermute
+appId: dev.purin.desktop
+productName: Purin
 icon: public/app-icon.png
 directories:
   output: release

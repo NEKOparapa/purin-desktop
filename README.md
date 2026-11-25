@@ -1,10 +1,10 @@
-# Wintermute Desktop
+# Purin Desktop
 
-Wintermute 的 Windows/macOS 桌面设备，使用 Electron、React 和 TypeScript。
+Purin 的 Windows/macOS 桌面设备，使用 Electron、React 和 TypeScript。
 
 ## 连接 Agent
 
-1. 打开 Wintermute 后端的 HTTPS 管理面板，在「设备」点击「添加设备」并复制配对链接。
+1. 打开 Purin 后端的 HTTPS 管理面板，在「设备」点击「添加设备」并复制配对链接。
 2. 在桌面端「设置 → 连接」粘贴完整链接，客户端会以本机名称和平台自动登记。「手动配置」可用于已有设备凭据或本机 HTTP 调试。
 3. 应用直接打开对话。输入时按 Enter 换行，点击发送按钮或按 Ctrl + Enter（macOS 可用 ⌘ + Enter）发送，等待期间可继续补充。同一会话里来自其他设备的发言，以及定时提醒触发的 Agent 回复，也会自动显示。
 
@@ -97,7 +97,7 @@ npm run dist:win   # Windows NSIS 安装包，x64 + arm64
 npm run dist:mac   # macOS DMG，Intel + Apple Silicon；在 macOS 上执行
 ```
 
-Windows 本机预览程序位于 `release/win-unpacked/Wintermute.exe`，请保留整个目录。聊天窗口默认以 560×680 打开，小屏幕会自动缩小。可以拖动窗口顶部的空白处移动窗口，使用系统窗口按钮最小化、最大化或关闭窗口。macOS 保留原生菜单，关闭窗口后应用继续运行。Windows 关闭所有窗口时退出。
+Windows 本机预览程序位于 `release/win-unpacked/Purin.exe`，请保留整个目录。聊天窗口默认以 560×680 打开，小屏幕会自动缩小。可以拖动窗口顶部的空白处移动窗口，使用系统窗口按钮最小化、最大化或关闭窗口。macOS 保留原生菜单，关闭窗口后应用继续运行。Windows 关闭所有窗口时退出。
 
 当前构建使用 Electron 默认应用图标及本地未签名配置。
 

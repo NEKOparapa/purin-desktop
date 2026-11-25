@@ -52,7 +52,7 @@ function createWindow() {
     y: area.y + Math.round((area.height - height) / 2),
     minWidth: Math.min(380, width),
     minHeight: Math.min(460, height),
-    title: 'Wintermute',
+    title: 'Purin',
     icon: appIcon,
     titleBarStyle: 'hidden',
     titleBarOverlay: process.platform === 'darwin' ? true : windowControls(),
@@ -60,7 +60,7 @@ function createWindow() {
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
-      additionalArguments: ['--wintermute-appearance=' + agent.appearance],
+      additionalArguments: ['--purin-appearance=' + agent.appearance],
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
@@ -113,7 +113,7 @@ async function chooseAttachmentPath(name) {
 }
 
 function start() {
-  if (process.platform === 'win32') app.setAppUserModelId('dev.wintermute.desktop')
+  if (process.platform === 'win32') app.setAppUserModelId('dev.purin.desktop')
   if (process.platform === 'darwin' && !app.isPackaged) app.dock.setIcon(appIcon)
   agent = new DesktopAgent(
     app.getPath('userData'),

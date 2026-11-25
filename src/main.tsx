@@ -6,14 +6,14 @@ import { DesktopPet } from './components/desktop-pet'
 import { readBrowserAppearance } from './lib/desktop'
 
 document.documentElement.dataset.appearance =
-  window.wintermute?.initialAppearance ?? readBrowserAppearance()
-if (window.wintermutePet) {
+  window.purin?.initialAppearance ?? readBrowserAppearance()
+if (window.purinPet) {
   document.documentElement.dataset.window = 'pet'
-  document.title = 'Wintermute 桌宠'
+  document.title = 'Purin 桌宠'
 }
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {window.wintermutePet ? <DesktopPet api={window.wintermutePet} /> : <App />}
+    {window.purinPet ? <DesktopPet api={window.purinPet} /> : <App />}
   </StrictMode>,
 )

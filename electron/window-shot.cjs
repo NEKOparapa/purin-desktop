@@ -10,7 +10,7 @@ async function captureWindowsWindow(handle, pid) {
   const script = `
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
-Add-Type -Name Capture -Namespace Wintermute -MemberDefinition @'
+Add-Type -Name Capture -Namespace Purin -MemberDefinition @'
 [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
 public struct Rect { public int Left, Top, Right, Bottom; }
 [System.Runtime.InteropServices.DllImport("user32.dll")]
@@ -27,21 +27,21 @@ public static extern System.IntPtr SetThreadDpiAwarenessContext(System.IntPtr co
 public static extern System.IntPtr GetWindowDpiAwarenessContext(System.IntPtr hwnd);
 '@
 $window = [IntPtr]([Int64]'${handle}')
-[void][Wintermute.Capture]::SetThreadDpiAwarenessContext([Wintermute.Capture]::GetWindowDpiAwarenessContext($window))
+[void][Purin.Capture]::SetThreadDpiAwarenessContext([Purin.Capture]::GetWindowDpiAwarenessContext($window))
 [uint32]$owner = 0
 [uint32]$affinity = 0
-[void][Wintermute.Capture]::GetWindowThreadProcessId($window, [ref]$owner)
+[void][Purin.Capture]::GetWindowThreadProcessId($window, [ref]$owner)
 if ($owner -ne ${pid}) { exit 2 }
-if ([Wintermute.Capture]::GetWindowDisplayAffinity($window,[ref]$affinity) -and $affinity -ne 0) { exit 2 }
-$bounds = New-Object 'Wintermute.Capture+Rect'
-if (-not [Wintermute.Capture]::GetWindowRect($window,[ref]$bounds)) { exit 2 }
+if ([Purin.Capture]::GetWindowDisplayAffinity($window,[ref]$affinity) -and $affinity -ne 0) { exit 2 }
+$bounds = New-Object 'Purin.Capture+Rect'
+if (-not [Purin.Capture]::GetWindowRect($window,[ref]$bounds)) { exit 2 }
 $w = $bounds.Right - $bounds.Left
 $h = $bounds.Bottom - $bounds.Top
 if ($w -lt 1 -or $h -lt 1 -or [long]$w * $h -gt 34000000) { exit 2 }
 $bitmap = [Drawing.Bitmap]::new($w,$h)
 $graphics = [Drawing.Graphics]::FromImage($bitmap)
 $dc = $graphics.GetHdc()
-try { $ok = [Wintermute.Capture]::PrintWindow($window,$dc,2) } finally { $graphics.ReleaseHdc($dc); $graphics.Dispose() }
+try { $ok = [Purin.Capture]::PrintWindow($window,$dc,2) } finally { $graphics.ReleaseHdc($dc); $graphics.Dispose() }
 if (-not $ok) { exit 2 }
 $scale = [Math]::Min(1,1920 / [double]([Math]::Max($w,$h)))
 $scaled = [Drawing.Bitmap]::new($bitmap,[Math]::Max(1,[int]($w*$scale)),[Math]::Max(1,[int]($h*$scale)))

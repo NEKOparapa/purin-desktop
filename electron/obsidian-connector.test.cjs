@@ -7,7 +7,7 @@ const test = require('node:test')
 const { inspectVault, runObsidianTool } = require('./obsidian-connector.cjs')
 
 test('obsidian connector rejects directory links that leave the selected vault', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wintermute-obsidian-links-'))
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'purin-obsidian-links-'))
   const vault = path.join(dir, 'vault')
   const outside = path.join(dir, 'outside')
   const link = path.join(vault, 'linked')
@@ -33,7 +33,7 @@ test('obsidian connector rejects directory links that leave the selected vault',
 })
 
 test('obsidian connector supports vault operations and blocks path traversal', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wintermute-obsidian-'))
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'purin-obsidian-'))
   try {
     fs.mkdirSync(path.join(dir, '.obsidian'))
     fs.writeFileSync(path.join(dir, '.obsidian', 'app.json'), '{}', 'utf8')
@@ -41,15 +41,15 @@ test('obsidian connector supports vault operations and blocks path traversal', (
     // Write & append note
     const writeRes = runObsidianTool(dir, {
       action: 'write_note',
-      path: 'Projects/Wintermute',
-      content: '# Wintermute\nConnector architecture notes.',
+      path: 'Projects/Purin',
+      content: '# Purin\nConnector architecture notes.',
     })
     assert.equal(writeRes.status, 'succeeded')
-    assert.equal(JSON.parse(writeRes.stdout).path, 'Projects/Wintermute.md')
+    assert.equal(JSON.parse(writeRes.stdout).path, 'Projects/Purin.md')
 
     const appendRes = runObsidianTool(dir, {
       action: 'append_note',
-      path: 'Projects/Wintermute.md',
+      path: 'Projects/Purin.md',
       content: '- Obsidian connected',
     })
     assert.equal(appendRes.status, 'succeeded')
@@ -66,15 +66,15 @@ test('obsidian connector supports vault operations and blocks path traversal', (
 
     // List, read, search
     const listRes = runObsidianTool(dir, { action: 'list_notes' })
-    assert.equal(JSON.parse(listRes.stdout).notes[0].path, 'Projects/Wintermute.md')
+    assert.equal(JSON.parse(listRes.stdout).notes[0].path, 'Projects/Purin.md')
 
-    const readRes = runObsidianTool(dir, { action: 'read_note', path: 'Projects/Wintermute' })
+    const readRes = runObsidianTool(dir, { action: 'read_note', path: 'Projects/Purin' })
     assert.match(JSON.parse(readRes.stdout).content, /Obsidian connected/)
 
     const searchRes = runObsidianTool(dir, { action: 'search_notes', query: 'architecture' })
     const matches = JSON.parse(searchRes.stdout).matches
     assert.equal(matches.length, 1)
-    assert.equal(matches[0].path, 'Projects/Wintermute.md')
+    assert.equal(matches[0].path, 'Projects/Purin.md')
 
     // Security: path traversal and .obsidian are rejected
     const traversal = runObsidianTool(dir, { action: 'read_note', path: '../secret.md' })

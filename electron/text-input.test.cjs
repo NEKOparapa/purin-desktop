@@ -245,7 +245,7 @@ test('window-spans clamps input segments and caps count with input_segments_omit
 })
 
 test('DesktopAgent records, redacts, flushes and clears foreground text input segments', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wintermute-text-input-'))
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'purin-text-input-'))
   const samples = [
     {
       activity: 'active',

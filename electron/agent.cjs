@@ -163,7 +163,7 @@ function connection(url, deviceId) {
 function pairingAddress(value) {
   try {
     const link = new URL(value.trim())
-    const match = /^#wm-pair=([0-9]{5}-?[0-9]{5})$/.exec(link.hash)
+    const match = /^#purin-pair=([0-9]{5}-?[0-9]{5})$/.exec(link.hash)
     if (link.protocol === 'https:' && match) {
       link.hash = ''
       return { url: serviceOrigin(link.href), code: match[1].replace('-', '') }

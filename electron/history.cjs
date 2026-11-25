@@ -50,7 +50,7 @@ async function saveHistoryFile({ id, name }, choosePath, getFile) {
   // Stage beside the destination so an interrupted download leaves an existing file intact.
   const staging = path.join(
     path.dirname(destination),
-    '.wintermute-' + randomUUID() + '.part',
+    '.purin-' + randomUUID() + '.part',
   )
   const handle = await open(staging, 'wx', 0o600)
   try {

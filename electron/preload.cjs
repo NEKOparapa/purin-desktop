@@ -1,9 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
-contextBridge.exposeInMainWorld('wintermute', {
+contextBridge.exposeInMainWorld('purin', {
   initialAppearance:
     process.argv
-      .find((arg) => arg.startsWith('--wintermute-appearance='))
+      .find((arg) => arg.startsWith('--purin-appearance='))
       ?.split('=')[1] || 'system',
   state: () => ipcRenderer.invoke('agent:state'),
   enterPetMode: () => ipcRenderer.invoke('agent:enterPetMode'),

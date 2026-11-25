@@ -70,7 +70,7 @@ function useScheduleEntries(
   const [result, setResult] = useState<RangeData | null>(null)
   const [now, setNow] = useState(() => new Date())
   useEffect(() => {
-    const api = window.wintermute
+    const api = window.purin
     let active = true
     let busy = false
     async function load() {

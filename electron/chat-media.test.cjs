@@ -27,7 +27,7 @@ test('pet drops keep supported files after the drag data store closes', async ()
 })
 
 test('attachment-only drafts retain their pictures, names and document references across both types of retry', t => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wintermute-chat-'))
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'purin-chat-'))
   const file = path.join(dir, 'outbox.json')
   t.after(() => {
     if (fs.existsSync(file)) fs.unlinkSync(file)

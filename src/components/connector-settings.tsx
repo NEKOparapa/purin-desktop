@@ -39,7 +39,7 @@ export function ConnectorSettings({
   remoteIssue?: string
   macConnectors?: MacConnectorState[]
 }) {
-  const api = window.wintermute
+  const api = window.purin
   const [attempt, setAttempt] = useState(0)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -93,7 +93,7 @@ export function ConnectorSettings({
   if (!api || !api.connectors || !api.setObsidianConnector) {
     return (
       <p className="settings-note">
-        请打开最新版 Wintermute 桌面应用以管理连接器。
+        请打开最新版 Purin 桌面应用以管理连接器。
       </p>
     )
   }
@@ -301,10 +301,6 @@ export function ConnectorSettings({
 
   return (
     <div className="connector-settings">
-      <p className="settings-note">
-        连接器让 Agent 可以安全访问本机应用与远程 Streamable HTTP MCP 服务。凭据仅保存在安全存储中，不会回显。
-      </p>
-
       {error && (
         <p className="issue" role="alert">
           {error}
@@ -360,11 +356,10 @@ export function ConnectorSettings({
           </div>
 
           {obsidian?.enabled && (
-            <div className="connector-vault-info">
-              <span>
-                当前笔记库：<strong>{obsidian.vaultName}</strong>（约 {obsidian.noteCount} 篇 .md 笔记）
-              </span>
+            <div className="connector-vault-line" title={obsidian.vaultPath}>
+              <span>当前笔记库：</span>
               <code>{obsidian.vaultPath}</code>
+              <span>（{obsidian.noteCount} 篇笔记）</span>
             </div>
           )}
 
@@ -500,7 +495,7 @@ export function ConnectorSettings({
 
         {!configured && (
           <p className="settings-note">
-            请先在「连接」中连接后端服务，再添加或管理 MCP 服务。
+            请先在「设备配对」中连接后端服务，再添加或管理 MCP 服务。
           </p>
         )}
 

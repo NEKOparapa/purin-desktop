@@ -13,7 +13,7 @@ async function captureWindow(id) {
       systemPreferences.getMediaAccessStatus('screen'),
     )
   )
-    throw new Error('请在系统设置中允许 Wintermute 录制屏幕')
+    throw new Error('请在系统设置中允许 Purin 录制屏幕')
   const source = sources.find((item) => item.id === id)
   if (!source || source.thumbnail.isEmpty())
     throw new Error('前台窗口已关闭或无法截图')
@@ -33,7 +33,7 @@ async function enableWindowCapture() {
   }
   if (systemPreferences.getMediaAccessStatus('screen') !== 'granted')
     throw new Error(
-      '请在 macOS 系统设置的“隐私与安全性 → 录屏”中允许 Wintermute，然后重新开启自动截图',
+      '请在 macOS 系统设置的“隐私与安全性 → 录屏”中允许 Purin，然后重新开启自动截图',
     )
 }
 

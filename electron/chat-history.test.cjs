@@ -34,7 +34,7 @@ test('a reply to a new local send can arrive with the initial history', async ()
 })
 
 function openChat(t) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wintermute-chat-history-'))
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'purin-chat-history-'))
   const snapshots = []
   const server = { messages: [], job: 'running', sent: null }
   const agent = Object.assign(Object.create(DesktopAgent.prototype), {
@@ -59,7 +59,7 @@ function openChat(t) {
         assert.fail(`Unexpected request: ${url}`)
     }
   })
-  agent.open({ url: 'http://wintermute.invalid', deviceId: 'desktop' }, 'test-token')
+  agent.open({ url: 'http://purin.invalid', deviceId: 'desktop' }, 'test-token')
   t.after(() => {
     agent.close()
     if (fs.existsSync(agent.profile.file)) fs.unlinkSync(agent.profile.file)

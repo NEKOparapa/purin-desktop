@@ -1,5 +1,5 @@
 {
-  "name": "wintermute-desktop",
+  "name": "purin-desktop",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -41,6 +41,6 @@
     "wait-on": "^9.5.1"
   },
   "main": "electron/main.cjs",
-  "description": "Wintermute desktop Agent terminal",
-  "author": "Wintermute"
+  "description": "Purin desktop Agent terminal",
+  "author": "Purin"
 }

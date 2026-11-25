@@ -26,7 +26,7 @@ import { useChatAttachments } from '@/lib/use-chat-attachments'
 import { useAgent, type AgentState, type ChatMessage } from '@/lib/desktop'
 import './App.css'
 
-const assistantName = 'Wintermute'
+const assistantName = 'Purin'
 const prompts = [
   { label: '聊聊今天', text: '我想跟你聊聊今天发生的事。', icon: Sun },
   { label: '想想晚饭', text: '今晚吃点什么好呢？', icon: CookingPot },
@@ -144,7 +144,7 @@ function Chat({
   }, [])
 
   async function earlier() {
-    if (loadingEarlier || !log.current || !window.wintermute) return
+    if (loadingEarlier || !log.current || !window.purin) return
     olderAnchor.current = {
       height: log.current.scrollHeight,
       position: log.current.scrollTop,
@@ -153,7 +153,7 @@ function Chat({
     setLoadingEarlier(true)
     setIssue('')
     try {
-      await window.wintermute.loadEarlier()
+      await window.purin.loadEarlier()
     } catch {
       setIssue('无法读取更早消息，请重试。')
     } finally {
@@ -168,7 +168,7 @@ function Chat({
       olderAnchor.current = null
     } else if (visible && follow.current && log.current)
       log.current.scrollTop = log.current.scrollHeight
-  }, [agent.messages.length, lastMessageId, visible, loadingEarlier, draft, expanded])
+  }, [agent.messages.length, lastMessageId, agent.awaitingReply, visible, loadingEarlier, draft, expanded])
   function fillPrompt(text: string) {
     setDraft(text)
     activity.noteInput()
@@ -192,7 +192,7 @@ function Chat({
     !sending
   async function send() {
     if (!canSend) return
-    if (!agent.configured || !window.wintermute) {
+    if (!agent.configured || !window.purin) {
       settings()
       return
     }
@@ -202,8 +202,8 @@ function Chat({
     follow.current = true
     const text = draft
     try {
-      const { images, documents, imageNames } = await prepareMessage(window.wintermute.uploadChatFile, agent.connectionRevision)
-      await window.wintermute.send(
+      const { images, documents, imageNames } = await prepareMessage(window.purin.uploadChatFile, agent.connectionRevision)
+      await window.purin.send(
         text,
         images,
         documents,
@@ -224,7 +224,7 @@ function Chat({
     }
   }
   function retry(id: string) {
-    window.wintermute?.retry(id).catch(() => setIssue('重试失败，请检查连接。'))
+    window.purin?.retry(id).catch(() => setIssue('重试失败，请检查连接。'))
   }
   const status =
     issue || (agent.issue && '连接异常，将自动重试 · ' + agent.issue)
@@ -238,10 +238,10 @@ function Chat({
         className="assistant-avatar"
         type="button"
         aria-label="进入桌宠模式"
-        title={window.wintermute ? '收起对话，进入桌宠模式' : '在桌面应用中使用桌宠'}
-        disabled={!window.wintermute}
+        title={window.purin ? '收起对话，进入桌宠模式' : '在桌面应用中使用桌宠'}
+        disabled={!window.purin}
         onClick={() => {
-          void window.wintermute?.enterPetMode().catch(() =>
+          void window.purin?.enterPetMode().catch(() =>
             setIssue('桌宠暂时无法打开，请再试一次。'),
           )
         }}
@@ -301,6 +301,22 @@ function Chat({
                 </div>
               )
             })}
+            {agent.awaitingReply && (
+              <article
+                className="message assistant thinking"
+                role="status"
+                aria-live="polite"
+                aria-label={`${assistantName} 正在思考`}
+              >
+                <div className="message-bubble thinking-bubble">
+                  <span className="thinking-dots" aria-hidden="true">
+                    <span />
+                    <span />
+                    <span />
+                  </span>
+                </div>
+              </article>
+            )}
           </div>
         </div>
       ) : (
@@ -403,12 +419,12 @@ function Chat({
           />
           <div className="composer-actions">
             {visible &&
-            window.wintermute &&
+            window.purin &&
             agent.configured &&
             agent.connectionRevision !== undefined ? (
               <VoiceInput
                 revision={agent.connectionRevision}
-                transcribe={window.wintermute.transcribe}
+                transcribe={window.purin.transcribe}
                 onBusy={setVoiceBusy}
                 onError={setIssue}
                 onText={(text) => {
@@ -477,7 +493,7 @@ function Chat({
 export default function App() {
   const [page, setPage] = useState<Page>('chat')
   const [panelOpen, setPanelOpen] = useState(false)
-  useEffect(() => window.wintermute?.onPetSettings(() => {
+  useEffect(() => window.purin?.onPetSettings(() => {
     setPanelOpen(true)
   }), [])
   const [connectionVersion, setConnectionVersion] = useState(0)
@@ -493,7 +509,7 @@ export default function App() {
   }
   useEffect(()=>{
     let timer:ReturnType<typeof setTimeout>|undefined
-    const stop=window.wintermute?.onNotice?.(alert=>{
+    const stop=window.purin?.onNotice?.(alert=>{
       if (alert.url!==agent.url || alert.deviceId!==agent.deviceId) return
       clearTimeout(timer)
       if (alert.open) openNotice(alert)

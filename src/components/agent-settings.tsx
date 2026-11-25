@@ -1,5 +1,16 @@
 import { useState } from 'react'
-import { Activity, Cable, Palette, Plug } from 'lucide-react'
+import {
+  Activity,
+  Cable,
+  Check,
+  Eye,
+  EyeOff,
+  Monitor,
+  Moon,
+  Palette,
+  Plug,
+  Sun,
+} from 'lucide-react'
 import {
   readBrowserAppearance,
   setBrowserAppearance,
@@ -11,7 +22,7 @@ import { ConnectorSettings } from '@/components/connector-settings'
 import { DialogTitle } from '@/components/ui/dialog'
 
 const sections = [
-  { id: 'connection', label: '连接', icon: Cable },
+  { id: 'connection', label: '设备配对', icon: Cable },
   { id: 'connectors', label: '连接器', icon: Plug },
   { id: 'appearance', label: '外观', icon: Palette },
   { id: 'collection', label: '信息采集', icon: Activity },
@@ -19,6 +30,26 @@ const sections = [
 type Section = (typeof sections)[number]['id']
 
 const devicePlatformLabels = { windows: 'Windows', macos: 'macOS' }
+const appearanceOptions = [
+  {
+    value: 'system',
+    label: '跟随系统',
+    description: '跟随操作系统的明暗外观设置自动切换。',
+    icon: Monitor,
+  },
+  {
+    value: 'light',
+    label: '浅色',
+    description: '始终使用明亮通透的云雾浅色背景与毛玻璃卡片表面。',
+    icon: Sun,
+  },
+  {
+    value: 'dark',
+    label: '深色',
+    description: '始终使用柔和低眩光的夜空深色背景与深色卡片表面。',
+    icon: Moon,
+  },
+] as const
 
 export function AgentSettings({
   state,
@@ -36,14 +67,16 @@ export function AgentSettings({
   const [pairValue, setPairValue] = useState('')
   const [manual, setManual] = useState(false)
   const [editing, setEditing] = useState(false)
+  const [showToken, setShowToken] = useState(false)
   const [feedback, setFeedback] = useState('')
+  const [feedbackError, setFeedbackError] = useState(false)
   const [busy, setBusy] = useState(false)
   const [tab, setTab] = useState<Section>('connection')
   const [sourceFeedback, setSourceFeedback] = useState<{
     section: Section
     message: string
   }>()
-  const api = window.wintermute
+  const api = window.purin
   const connectionState = state.issue ? 'error' : state.configured ? 'connected' : 'disconnected'
   const connectionStatus = { error: '连接异常', connected: '已连接', disconnected: '未连接' }
   const showConnection = state.configured && !editing
@@ -55,9 +88,18 @@ export function AgentSettings({
     setDeviceName(state.deviceName)
     setToken('')
     setPairValue('')
-    setManual(false)
+    setShowToken(false)
+    setManual(state.configured)
     setFeedback('')
+    setFeedbackError(false)
     setEditing(true)
+  }
+  function cancelEdit() {
+    setToken('')
+    setShowToken(false)
+    setFeedback('')
+    setFeedbackError(false)
+    setEditing(false)
   }
   async function change(action: () => Promise<void> | undefined) {
     if (busy) return
@@ -95,15 +137,18 @@ export function AgentSettings({
     if (!api || busy) return
     setBusy(true)
     setFeedback('')
+    setFeedbackError(false)
     try {
       if (manual) await api.configure({ url, deviceId, token, deviceName })
       else await api.pair({ value })
       onConnected()
       setToken('')
+      setShowToken(false)
       setPairValue('')
       setEditing(false)
-      setFeedback('连接已保存')
+      setFeedback('连接已验证并保存')
     } catch (error) {
+      setFeedbackError(true)
       setFeedback(
         '连接失败 · ' +
           (error instanceof Error
@@ -161,229 +206,355 @@ export function AgentSettings({
           />
         )}
         {tab === 'appearance' && (
-          <fieldset className="appearance-settings">
-            <legend>主题</legend>
-            <div>
-              {(
-                [
-                  ['system', '跟随系统'],
-                  ['light', '浅色'],
-                  ['dark', '深色'],
-                ] as const
-              ).map(([value, label]) => (
-                <label key={value}>
-                  <input
-                    type="radio"
-                    name="appearance"
-                    checked={appearance === value}
-                    onChange={() => void chooseAppearance(value)}
-                  />
-                  <span>{label}</span>
-                </label>
-              ))}
-            </div>
+          <section
+            className="connection-card appearance-card"
+            aria-labelledby="appearance-theme-title"
+          >
+            <header className="connection-card-header">
+              <div className="connection-card-heading">
+                <h4 id="appearance-theme-title">界面主题</h4>
+              </div>
+            </header>
+            <fieldset className="appearance-settings" aria-labelledby="appearance-theme-title">
+              <div className="theme-grid">
+                {appearanceOptions.map(({ value, label, icon: Icon }) => {
+                  const selected = appearance === value
+                  return (
+                    <label
+                      key={value}
+                      className="theme-option"
+                      data-selected={selected}
+                    >
+                      <input
+                        type="radio"
+                        name="appearance"
+                        checked={selected}
+                        onChange={() => void chooseAppearance(value)}
+                      />
+                      <span
+                        className="theme-preview"
+                        data-mode={value}
+                        aria-hidden="true"
+                      >
+                        <span
+                          className={`theme-preview-pane ${value === 'dark' ? 'dark' : 'light'}`}
+                        >
+                          <i className="preview-pill" />
+                          <i className="preview-msg assistant" />
+                          <i className="preview-msg user" />
+                          <i className="preview-bar" />
+                        </span>
+                        {value === 'system' && (
+                          <span className="theme-preview-pane dark split">
+                            <i className="preview-pill" />
+                            <i className="preview-msg assistant" />
+                            <i className="preview-msg user" />
+                            <i className="preview-bar" />
+                          </span>
+                        )}
+                      </span>
+                      <span className="theme-option-footer">
+                        <span className="theme-option-label">
+                          <Icon size={15} aria-hidden="true" />
+                          {label}
+                        </span>
+                        <span className="theme-option-check" aria-hidden="true">
+                          {selected && <Check size={11} strokeWidth={2.8} />}
+                        </span>
+                      </span>
+                    </label>
+                  )
+                })}
+              </div>
+            </fieldset>
+            <p className="settings-note">
+              {appearanceOptions.find((item) => item.value === appearance)?.description}
+              外观偏好仅保存在当前设备上，主窗口与桌宠气泡会立即同步。
+            </p>
             {appearanceError && (
               <p className="issue" role="status">
                 {appearanceError}
               </p>
             )}
-          </fieldset>
+          </section>
         )}
         {tab === 'connection' && (
           <section className="connection-card" aria-labelledby="device-connection-title">
             <header className="connection-card-header">
               <div className="connection-card-heading">
-                <h4 id="device-connection-title">设备连接</h4>
-                <span className="connection-status" data-state={connectionState}>
-                  {connectionStatus[connectionState]}
-                </span>
+                <h4 id="device-connection-title">
+                  {showConnection
+                    ? '当前连接'
+                    : editing
+                      ? '编辑连接'
+                      : '连接后端服务'}
+                </h4>
+                {showConnection ? (
+                  <span className="connection-status" data-state={connectionState}>
+                    {connectionStatus[connectionState]}
+                  </span>
+                ) : (
+                  state.devicePlatform && (
+                    <span className="connection-platform-tag">
+                      {devicePlatformLabels[state.devicePlatform]}
+                    </span>
+                  )
+                )}
               </div>
               {showConnection && (
                 <Button type="button" size="sm" variant="outline" onClick={editConnection}>
                   编辑连接
                 </Button>
               )}
+              {!showConnection && editing && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={cancelEdit}
+                >
+                  取消
+                </Button>
+              )}
             </header>
-            <dl className="connection-details">
-              {showConnection && (
-                <div>
-                  <dt>设备名称</dt>
-                  <dd>{state.deviceName}</dd>
-                </div>
-              )}
-              <div>
-                <dt>设备平台</dt>
-                <dd>
-                  {state.devicePlatform ? devicePlatformLabels[state.devicePlatform] : '未知'}
-                </dd>
-              </div>
-              {showConnection && (
-                <>
-                  <div>
+            {showConnection && (
+              <>
+                <dl className="connection-details">
+                  <div className="connection-detail-item">
+                    <dt>设备名称</dt>
+                    <dd>{state.deviceName}</dd>
+                  </div>
+                  <div className="connection-detail-item">
+                    <dt>设备平台</dt>
+                    <dd>
+                      {state.devicePlatform
+                        ? devicePlatformLabels[state.devicePlatform]
+                        : '未知'}
+                    </dd>
+                  </div>
+                  <div className="connection-detail-item">
                     <dt>服务地址</dt>
-                    <dd>{state.url}</dd>
+                    <dd className="mono-value">{state.url}</dd>
                   </div>
-                  <div>
+                  <div className="connection-detail-item">
                     <dt>设备 ID</dt>
-                    <dd>{state.deviceId}</dd>
+                    <dd className="mono-value">{state.deviceId}</dd>
                   </div>
-                </>
-              )}
-            </dl>
-            {state.issue && (
-              <p className="issue" role="status">
-                {state.issue}
-              </p>
-            )}
-            {showConnection && failedMaterial && (
-              <dl className="settings-facts">
-                <div>
-                  <dt>采集记录上传失败</dt>
-                  <dd>
-                    {state.materialIssue}
-                    <div className="setting-actions">
-                      <button
-                        type="button"
-                        disabled={!api || busy}
-                        onClick={() => void change(() => api?.manageFailed(failedMaterial, true))}
-                      >
-                        重试此项
-                      </button>
-                      <button
-                        type="button"
-                        disabled={!api || busy}
-                        onClick={() => void change(() => api?.manageFailed(failedMaterial, false))}
-                      >
-                        丢弃此项
-                      </button>
+                </dl>
+                {state.issue && (
+                  <p className="issue" role="status">
+                    {state.issue}
+                  </p>
+                )}
+                {failedMaterial && (
+                  <dl className="settings-facts">
+                    <div>
+                      <dt>采集记录上传失败</dt>
+                      <dd>
+                        {state.materialIssue}
+                        <div className="setting-actions">
+                          <button
+                            type="button"
+                            disabled={!api || busy}
+                            onClick={() =>
+                              void change(() => api?.manageFailed(failedMaterial, true))
+                            }
+                          >
+                            重试此项
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!api || busy}
+                            onClick={() =>
+                              void change(() => api?.manageFailed(failedMaterial, false))
+                            }
+                          >
+                            丢弃此项
+                          </button>
+                        </div>
+                      </dd>
                     </div>
-                  </dd>
-                </div>
-              </dl>
+                  </dl>
+                )}
+              </>
             )}
-            {!showConnection && !manual && (
-              <form
-                className="connection-form connection-editor"
-                onSubmit={(event) => {
-                  event.preventDefault()
-                  void save()
-                }}
-              >
-                <label className="connection-full-width">
-                  配对链接
-                  <input
-                    value={pairValue}
-                    onChange={(event) => setPairValue(event.target.value)}
+            {!showConnection && (
+              <>
+                <div className="connection-mode-tabs" role="tablist" aria-label="连接方式">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={!manual}
                     disabled={busy}
-                    onPaste={(event) => {
-                      const link = event.clipboardData.getData('text').trim()
-                      if (!/^https:\/\/[^\s/?#@]+\/?#wm-pair=\d{5}-?\d{5}$/.test(link)) return
-                      event.preventDefault()
-                      setPairValue(link)
-                      void save(link)
+                    onClick={() => {
+                      setManual(false)
+                      setFeedback('')
                     }}
-                    placeholder="从后端管理面板复制"
-                    autoComplete="off"
-                    spellCheck={false}
-                    required
-                  />
-                </label>
-                <div className="connection-actions connection-full-width">
-                  <Button type="submit" disabled={!api || busy}>
-                    {busy ? '正在配对…' : '配对并连接'}
-                  </Button>
-                  <Button type="button" variant="ghost" disabled={busy} onClick={() => setManual(true)}>
+                  >
+                    配对链接
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={manual}
+                    disabled={busy}
+                    onClick={() => {
+                      setManual(true)
+                      setFeedback('')
+                    }}
+                  >
                     手动配置
-                  </Button>
-                  {editing && (
-                    <Button type="button" variant="ghost" disabled={busy} onClick={() => setEditing(false)}>
-                      取消
-                    </Button>
-                  )}
+                  </button>
                 </div>
-              </form>
-            )}
-            {!showConnection && manual && (
-              <form
-                className="connection-form connection-editor"
-                onSubmit={(e) => {
-                  e.preventDefault()
-                  void save()
-                }}
-              >
-                <p className="settings-note connection-full-width">
-                  {api
-                    ? '填写已有连接的服务地址、设备 ID 和令牌。'
-                    : '请打开 Wintermute 桌面应用以连接服务。'}
-                </p>
-                <label className="connection-full-width">
-                  服务地址
-                  <input
-                    type="url"
-                    value={url}
-                    onChange={(e) => setUrl(e.target.value)}
-                    required
-                  />
-                </label>
-                <label>
-                  设备名称
-                  <input
-                    value={deviceName}
-                    onChange={(e) => setDeviceName(e.target.value)}
-                    maxLength={80}
-                    required
-                  />
-                </label>
-                <label>
-                  设备 ID
-                  <input
-                    value={deviceId}
-                    onChange={(e) => setDeviceId(e.target.value)}
-                    required
-                  />
-                </label>
-                <label className="connection-full-width">
-                  设备令牌
-                  <input
-                    type="password"
-                    autoComplete="off"
-                    value={token}
-                    onChange={(e) => setToken(e.target.value)}
-                    placeholder={
-                      state.configured &&
-                      state.url === url.trim() &&
-                      state.deviceId === deviceId.trim()
-                        ? '留空以使用当前连接令牌'
-                        : 'Bearer token'
-                    }
-                  />
-                </label>
-                <div className="connection-actions connection-full-width">
-                  <Button type="submit" disabled={!api || busy}>
-                    {busy ? '正在验证…' : '验证并保存'}
-                  </Button>
-                  <Button type="button" variant="ghost" disabled={busy} onClick={() => setManual(false)}>
-                    使用配对链接
-                  </Button>
-                  {editing && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      disabled={busy}
-                      onClick={() => {
-                        setToken('')
-                        setFeedback('')
-                        setEditing(false)
-                      }}
-                    >
-                      取消
-                    </Button>
-                  )}
-                </div>
-              </form>
+                {!manual ? (
+                  <form
+                    className="connection-form"
+                    onSubmit={(event) => {
+                      event.preventDefault()
+                      void save()
+                    }}
+                  >
+                    <p className="settings-note">
+                      在后端管理面板点击「添加设备」，复制一次性配对链接粘贴至下方即可自动完成配置。
+                    </p>
+                    <label>
+                      配对链接
+                      <input
+                        className="mono-input"
+                        value={pairValue}
+                        onChange={(event) => setPairValue(event.target.value)}
+                        disabled={busy}
+                        onPaste={(event) => {
+                          const link = event.clipboardData.getData('text').trim()
+                          if (!/^https:\/\/[^\s/?#@]+\/?#purin-pair=\d{5}-?\d{5}$/.test(link))
+                            return
+                          event.preventDefault()
+                          setPairValue(link)
+                          void save(link)
+                        }}
+                        placeholder="https://purin.example/#purin-pair=12345-67890"
+                        autoComplete="off"
+                        spellCheck={false}
+                        required
+                      />
+                    </label>
+                    <div className="connection-actions">
+                      <Button type="submit" disabled={!api || busy}>
+                        {busy ? '正在配对…' : '配对并连接'}
+                      </Button>
+                      {editing && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={busy}
+                          onClick={cancelEdit}
+                        >
+                          取消
+                        </Button>
+                      )}
+                    </div>
+                  </form>
+                ) : (
+                  <form
+                    className="connection-form connection-editor"
+                    onSubmit={(e) => {
+                      e.preventDefault()
+                      void save()
+                    }}
+                  >
+                    <p className="settings-note connection-full-width">
+                      {api
+                        ? '填写后端服务根地址（不含 /v1）、设备标识与访问令牌。'
+                        : '请打开 Purin 桌面应用以连接服务。'}
+                    </p>
+                    <label className="connection-full-width">
+                      服务地址
+                      <input
+                        className="mono-input"
+                        type="url"
+                        value={url}
+                        disabled={busy}
+                        onChange={(e) => setUrl(e.target.value)}
+                        placeholder="https://purin.example"
+                        required
+                      />
+                    </label>
+                    <label>
+                      设备名称
+                      <input
+                        value={deviceName}
+                        disabled={busy}
+                        onChange={(e) => setDeviceName(e.target.value)}
+                        maxLength={80}
+                        required
+                      />
+                    </label>
+                    <label>
+                      设备 ID
+                      <input
+                        className="mono-input"
+                        value={deviceId}
+                        disabled={busy}
+                        onChange={(e) => setDeviceId(e.target.value)}
+                        required
+                      />
+                    </label>
+                    <label className="connection-full-width">
+                      设备令牌
+                      <div className="token-input-wrap">
+                        <input
+                          className="mono-input"
+                          type={showToken ? 'text' : 'password'}
+                          autoComplete="off"
+                          spellCheck={false}
+                          disabled={busy}
+                          value={token}
+                          onChange={(e) => setToken(e.target.value)}
+                          placeholder={
+                            state.configured &&
+                            state.url === url.trim() &&
+                            state.deviceId === deviceId.trim()
+                              ? '留空以继续使用当前连接令牌'
+                              : 'Bearer token'
+                          }
+                        />
+                        <button
+                          type="button"
+                          className="token-visibility-btn"
+                          aria-label={showToken ? '隐藏令牌' : '显示令牌'}
+                          title={showToken ? '隐藏令牌' : '显示令牌'}
+                          disabled={busy}
+                          onClick={() => setShowToken((v) => !v)}
+                        >
+                          {showToken ? <EyeOff size={15} /> : <Eye size={15} />}
+                        </button>
+                      </div>
+                    </label>
+                    <div className="connection-actions connection-full-width">
+                      <Button type="submit" disabled={!api || busy}>
+                        {busy ? '正在验证…' : '验证并保存'}
+                      </Button>
+                      {editing && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={busy}
+                          onClick={cancelEdit}
+                        >
+                          取消
+                        </Button>
+                      )}
+                    </div>
+                  </form>
+                )}
+              </>
             )}
             {feedback && (
-              <p className="settings-note" role="status">
+              <p
+                className={feedbackError ? 'connection-feedback error' : 'connection-feedback'}
+                role="status"
+              >
                 {feedback}
               </p>
             )}

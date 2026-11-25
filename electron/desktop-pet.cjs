@@ -157,7 +157,7 @@ function createDesktopPet(agent, getChatWindow, loadRenderer) {
     try {
       if (!pet) {
         pet = new BrowserWindow({
-          ...bounds, title: 'Wintermute 桌宠', show: false,
+          ...bounds, title: 'Purin 桌宠', show: false,
           frame: false, transparent: true, backgroundColor: '#00000000',
           alwaysOnTop: true, skipTaskbar: true, hasShadow: false,
           resizable: false, maximizable: false, fullscreenable: false,

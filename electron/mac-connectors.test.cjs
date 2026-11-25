@@ -20,7 +20,7 @@ const signal = new AbortController().signal
 for (const [system, expectedPlatform] of [['win32', 'windows'], ['linux', null], ['darwin', 'macos']]) {
   test(system + ' filters saved preferences, synchronization and active tools', async t => {
     platform(t, system)
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wintermute-connectors-'))
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'purin-connectors-'))
     const sent = []
     const agent = Object.assign(Object.create(DesktopAgent.prototype), {
       dir, configFile: path.join(dir, 'settings.json'), notify() {},

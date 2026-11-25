@@ -13,7 +13,7 @@ using System.Text;
 using System.Threading;
 using System.Windows.Automation;
 
-namespace Wintermute {
+namespace Purin {
   public sealed class InputSnapshot {
     public bool Editable;
     public bool IsPassword;
@@ -182,7 +182,7 @@ while ($null -ne ($req = [Console]::ReadLine())) {
     $selfPid = [int]$parts[1]
     $fgApp = if ($parts.Length -ge 3) { $parts[2] } else { "" }
     $timedOut = $false
-    $snap = [Wintermute.InputProbe]::Read($fgPid, $selfPid, $fgApp, 350, [ref]$timedOut)
+    $snap = [Purin.InputProbe]::Read($fgPid, $selfPid, $fgApp, 350, [ref]$timedOut)
     if ($timedOut) {
       [Console]::WriteLine('{}')
       break
@@ -403,7 +403,7 @@ function enableTextInputCapture() {
   if (!systemPreferences.isTrustedAccessibilityClient(false)) {
     systemPreferences.isTrustedAccessibilityClient(true)
     throw new Error(
-      '请在 macOS 系统设置的“隐私与安全性 → 辅助功能”中允许 Wintermute，然后重新开启前台文本输入采集',
+      '请在 macOS 系统设置的“隐私与安全性 → 辅助功能”中允许 Purin，然后重新开启前台文本输入采集',
     )
   }
 }

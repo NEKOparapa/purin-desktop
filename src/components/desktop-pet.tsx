@@ -27,9 +27,10 @@ function useAutoHide(delay: number | null, dismiss: () => void) {
   return restart
 }
 
-function PetBubble({ ref, message, delay, dismiss }: {
+function PetBubble({ ref, message, thinking, delay, dismiss }: {
   ref: Ref<HTMLDivElement>
   message: string
+  thinking?: boolean
   delay: number | null
   dismiss: () => void
 }) {
@@ -48,7 +49,17 @@ function PetBubble({ ref, message, delay, dismiss }: {
         if (!event.currentTarget.contains(event.relatedTarget)) setKeyboardReading(false)
       }}
     >
-      <p role="status" tabIndex={0}>{message}</p>
+      <p role="status" tabIndex={0} aria-label={thinking ? message : undefined}>
+        {thinking ? (
+          <span className="thinking-dots" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </span>
+        ) : (
+          message
+        )}
+      </p>
       <button aria-label="收起气泡" title="收起气泡" onClick={dismiss}>
         <X size={14} />
       </button>
@@ -114,8 +125,9 @@ function PetChat({ api, state }: { api: PetBridge; state: PetSnapshot }) {
   const [dismissed, setDismissed] = useState('')
   const editing = editorSession === state.session
   const issue = (error?.session === state.session && error.text) || state.issue
+  const thinkingBubble = !issue && !state.reply && state.waiting
   const message =
-    issue || state.reply?.text || (state.waiting ? '等我一下…' : '')
+    issue || state.reply?.text || (state.waiting ? '正在思考…' : '')
   const bubbleId = JSON.stringify([
     state.session,
     issue || state.reply?.id || 'waiting',
@@ -357,6 +369,7 @@ function PetChat({ api, state }: { api: PetBridge; state: PetSnapshot }) {
         <PetBubble
           ref={bubble}
           message={message}
+          thinking={thinkingBubble}
           delay={readingMs}
           dismiss={dismissBubble}
         />
