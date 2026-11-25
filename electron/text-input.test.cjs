@@ -273,7 +273,7 @@ test('DesktopAgent records, redacts, flushes and clears foreground text input se
   const agent = Object.assign(Object.create(DesktopAgent.prototype), {
     dir,
     configFile: path.join(dir, 'agent-settings.json'),
-    appearance: 'system',
+    appearance: 'light',
     notify() {},
     sample: async () => samples[Math.min(idx++, samples.length - 1)],
     sampleInput: async () => null,

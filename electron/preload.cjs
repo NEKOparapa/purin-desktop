@@ -4,7 +4,9 @@ contextBridge.exposeInMainWorld('purin', {
   initialAppearance:
     process.argv
       .find((arg) => arg.startsWith('--purin-appearance='))
-      ?.split('=')[1] || 'system',
+      ?.split('=')[1] === 'dark'
+      ? 'dark'
+      : 'light',
   state: () => ipcRenderer.invoke('agent:state'),
   enterPetMode: () => ipcRenderer.invoke('agent:enterPetMode'),
   onPetSettings(callback) {

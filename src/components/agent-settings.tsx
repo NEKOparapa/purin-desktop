@@ -5,7 +5,6 @@ import {
   Check,
   Eye,
   EyeOff,
-  Monitor,
   Moon,
   Palette,
   Plug,
@@ -31,12 +30,6 @@ type Section = (typeof sections)[number]['id']
 
 const devicePlatformLabels = { windows: 'Windows', macos: 'macOS' }
 const appearanceOptions = [
-  {
-    value: 'system',
-    label: '跟随系统',
-    description: '跟随操作系统的明暗外观设置自动切换。',
-    icon: Monitor,
-  },
   {
     value: 'light',
     label: '浅色',
@@ -244,14 +237,6 @@ export function AgentSettings({
                           <i className="preview-msg user" />
                           <i className="preview-bar" />
                         </span>
-                        {value === 'system' && (
-                          <span className="theme-preview-pane dark split">
-                            <i className="preview-pill" />
-                            <i className="preview-msg assistant" />
-                            <i className="preview-msg user" />
-                            <i className="preview-bar" />
-                          </span>
-                        )}
                       </span>
                       <span className="theme-option-footer">
                         <span className="theme-option-label">

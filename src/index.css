@@ -3,14 +3,6 @@
   &:where([data-appearance='dark'], [data-appearance='dark'] *) {
     @slot;
   }
-  @media (prefers-color-scheme: dark) {
-    &:where(
-      :root:not([data-appearance='light']),
-      :root:not([data-appearance='light']) *
-    ) {
-      @slot;
-    }
-  }
 }
 @theme inline {
   --color-background: var(--canvas);
@@ -42,7 +34,7 @@
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-  color-scheme: light dark;
+  color-scheme: light;
   --titlebar-height: max(44px, env(titlebar-area-height, 0px));
   --canvas: light-dark(#f5f6f8, #121720);
   --sky-backdrop: light-dark(

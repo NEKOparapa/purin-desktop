@@ -250,9 +250,7 @@ class DesktopAgent {
     }
     if (settings.captureVersion !== captureVersion)
       migrateCaptureSettings(dir, this.configFile, settings)
-    this.appearance = ['light', 'dark'].includes(settings.appearance)
-      ? settings.appearance
-      : 'system'
+    this.appearance = settings.appearance === 'dark' ? 'dark' : 'light'
     let token = ''
     try {
       if (settings.secret)
@@ -753,7 +751,7 @@ class DesktopAgent {
   }
 
   setAppearance(appearance) {
-    if (!['system', 'light', 'dark'].includes(appearance))
+    if (!['light', 'dark'].includes(appearance))
       throw new Error('无效的外观选项')
     this.savePreferences({ appearance })
     this.appearance = appearance

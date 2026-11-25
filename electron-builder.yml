@@ -1,6 +1,7 @@
 appId: dev.purin.desktop
 productName: Purin
 icon: public/app-icon.png
+afterPack: packaging/fix-win-icon.cjs
 directories:
   output: release
 files:

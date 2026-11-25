@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { PetRect } from './pet-layout'
 
-export type Appearance = 'system' | 'light' | 'dark'
+export type Appearance = 'light' | 'dark'
 const browserAppearanceKey = 'purin.appearance'
 
 export function readBrowserAppearance(): Appearance {
@@ -11,7 +11,7 @@ export function readBrowserAppearance(): Appearance {
   } catch {
     // The browser might restrict storage in a private or embedded preview.
   }
-  return 'system'
+  return 'light'
 }
 
 export function setBrowserAppearance(mode: Appearance) {
@@ -305,7 +305,7 @@ const initial: AgentState = {
   hasUnreadNotifications: false,
   deviceName: '',
   devicePlatform: null,
-  appearance: 'system',
+  appearance: 'light',
   url: 'http://127.0.0.1:8080',
   deviceId: 'http-desktop',
   configured: false,

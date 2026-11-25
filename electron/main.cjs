@@ -20,7 +20,8 @@ const {
 } = require('./foreground-capture.cjs')
 const { enableTextInputCapture } = require('./text-input-probe.cjs')
 const { createDesktopPet } = require('./desktop-pet.cjs')
-const appIcon = path.join(__dirname, app.isPackaged ? '../dist/app-icon.png' : '../public/app-icon.png')
+const iconName = process.platform === 'win32' ? 'app-icon.ico' : 'app-icon.png'
+const appIcon = path.join(__dirname, app.isPackaged ? '../dist/' + iconName : '../public/' + iconName)
 let agent, appWindow, desktopPet
 
 function windowBackground() {
@@ -91,7 +92,7 @@ function presentNotifications(items, profile) {
   if (win.isFocused() || !Notification.isSupported()) send(false)
   else {
     try {
-      const notice = new Notification({ title, body: detail.slice(0, 200) })
+      const notice = new Notification({ title, body: detail.slice(0, 200), icon: appIcon })
       notice.on('click', () => {
         if (agent.profile !== profile || win.isDestroyed()) return
         desktopPet.restore()
