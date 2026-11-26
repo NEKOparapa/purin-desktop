@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 import type { PetRect } from './pet-layout'
 
 export type Appearance = 'light' | 'dark'
+export type CloseAction = 'tray' | 'quit'
 const browserAppearanceKey = 'purin.appearance'
+const browserCloseActionKey = 'purin.closeAction'
 
 export function readBrowserAppearance(): Appearance {
   try {
@@ -17,6 +19,20 @@ export function readBrowserAppearance(): Appearance {
 export function setBrowserAppearance(mode: Appearance) {
   localStorage.setItem(browserAppearanceKey, mode)
   document.documentElement.dataset.appearance = mode
+}
+
+export function readBrowserCloseAction(): CloseAction {
+  try {
+    const value = localStorage.getItem(browserCloseActionKey)
+    if (value === 'tray' || value === 'quit') return value
+  } catch {
+    // The browser might restrict storage in a private or embedded preview.
+  }
+  return 'tray'
+}
+
+export function setBrowserCloseAction(action: CloseAction) {
+  localStorage.setItem(browserCloseActionKey, action)
 }
 
 export interface DeviceFile { id: string; name: string; size_bytes: number; content_type: string }
@@ -97,6 +113,7 @@ export interface AgentState {
   deviceName: string
   devicePlatform: 'windows' | 'macos' | null
   appearance: Appearance
+  closeAction: CloseAction
   url: string
   deviceId: string
   configured: boolean
@@ -141,6 +158,14 @@ export interface Connection {
   url: string
   deviceId: string
   token: string
+}
+export interface OnlineDevice {
+  device_id: string
+  name: string
+  device_type: 'desktop' | 'mobile' | 'esp32' | null
+  platform: 'windows' | 'macos' | 'android' | 'ios' | 'esp32' | null
+  last_seen_seconds: number | null
+  is_current: boolean
 }
 export interface DetectedObsidianVault {
   id: string
@@ -249,6 +274,7 @@ declare global {
       configure(settings: Connection): Promise<void>
       pair(options: { value: string }): Promise<void>
       connectors(): Promise<ConnectorsSnapshot>
+      onlineDevices?(): Promise<{ items: OnlineDevice[] }>
       setMacConnector?(options: {
         id: string
         enabled: boolean
@@ -297,6 +323,7 @@ declare global {
       }): Promise<void>
       manageFailed(id: string, retry: boolean): Promise<void>
       setAppearance(mode: Appearance): Promise<void>
+      setCloseAction(action: CloseAction): Promise<void>
       subscribe(callback: (state: AgentState) => void): () => void
     }
   }
@@ -306,6 +333,7 @@ const initial: AgentState = {
   deviceName: '',
   devicePlatform: null,
   appearance: 'light',
+  closeAction: 'tray',
   url: 'http://127.0.0.1:8080',
   deviceId: 'http-desktop',
   configured: false,

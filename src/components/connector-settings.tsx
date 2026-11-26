@@ -113,7 +113,7 @@ export function ConnectorSettings({
         connectionRevision: revision,
       })
       setObsidian(next)
-      setFeedback(`已连接 Obsidian Vault「${next.vaultName}」（共 ${next.noteCount} 篇笔记）。`)
+      setFeedback(`已连接 Obsidian 仓库「${next.vaultName}」（共 ${next.noteCount} 篇笔记）。`)
       reload()
     } catch (err) {
       setError(cleanError(err, '连接 Obsidian 失败'))
@@ -324,24 +324,13 @@ export function ConnectorSettings({
                 <Badge variant={obsidian?.enabled ? 'default' : 'secondary'}>
                   {obsidian?.enabled ? '已连接' : '未连接'}
                 </Badge>
-                <Badge variant="outline">device</Badge>
               </div>
               <p className="connector-card-meta">
-                授权 Agent 在指定 Vault 目录内检索、阅读和写入 Markdown 笔记（无需开启终端命令行权限）。
+                授权 Agent 在指定仓库目录内检索、阅读和写入 Markdown 笔记（无需开启终端命令行权限）。
               </p>
             </div>
             <div className="connector-card-actions">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={busy}
-                onClick={() => void pickObsidianFolder()}
-              >
-                <FolderOpen size={14} aria-hidden="true" />
-                {obsidian?.enabled ? '切换 Vault' : '选择 Vault'}
-              </Button>
-              {obsidian?.enabled && (
+              {obsidian?.enabled ? (
                 <Button
                   type="button"
                   variant="ghost"
@@ -351,21 +340,44 @@ export function ConnectorSettings({
                 >
                   断开
                 </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => void pickObsidianFolder()}
+                >
+                  <FolderOpen size={14} aria-hidden="true" />
+                  选择仓库
+                </Button>
               )}
             </div>
           </div>
 
           {obsidian?.enabled && (
-            <div className="connector-vault-line" title={obsidian.vaultPath}>
-              <span>当前笔记库：</span>
-              <code>{obsidian.vaultPath}</code>
-              <span>（{obsidian.noteCount} 篇笔记）</span>
+            <div className="connector-vault-bar">
+              <div className="connector-vault-line" title={obsidian.vaultPath}>
+                <span>当前仓库：</span>
+                <code>{obsidian.vaultPath}</code>
+                <span>（{obsidian.noteCount} 篇笔记）</span>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="xs"
+                disabled={busy}
+                onClick={() => void pickObsidianFolder()}
+              >
+                <FolderOpen size={13} aria-hidden="true" />
+                切换仓库
+              </Button>
             </div>
           )}
 
           {!obsidian?.enabled && obsidian?.detectedVaults?.length ? (
             <div className="connector-vault-info">
-              <span>检测到本机 Obsidian 笔记库（点击一键连接）：</span>
+              <span>检测到本机 Obsidian 仓库（点击一键连接）：</span>
               <div className="connector-detected-list">
                 {obsidian.detectedVaults.map((vault) => (
                   <Button
@@ -400,7 +412,6 @@ export function ConnectorSettings({
                 <Badge variant={remoteCommandsEnabled ? 'default' : 'secondary'}>
                   {remoteCommandsEnabled ? '已连接' : '未连接'}
                 </Badge>
-                <Badge variant="outline">device</Badge>
               </div>
               <p className="connector-card-meta">
                 开启后，主 Agent 可以当前用户权限在本机运行命令（高权限，关闭会立即中止正在运行的命令）。调用记录可在后端管理面板的「历史记录 → 连接器」中查看。

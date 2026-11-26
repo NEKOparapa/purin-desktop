@@ -251,6 +251,7 @@ class DesktopAgent {
     if (settings.captureVersion !== captureVersion)
       migrateCaptureSettings(dir, this.configFile, settings)
     this.appearance = settings.appearance === 'dark' ? 'dark' : 'light'
+    this.closeAction = settings.closeAction === 'quit' ? 'quit' : 'tray'
     let token = ''
     try {
       if (settings.secret)
@@ -390,6 +391,7 @@ class DesktopAgent {
       devicePlatform: devicePlatforms[process.platform] ?? null,
       connectionRevision: p.revision,
       appearance: this.appearance,
+      closeAction: this.closeAction,
       configured: !!p.token,
       hasUnreadNotifications: !!p.hasUnreadNotifications,
       remoteCommandsEnabled: !!p.remote?.enabled,
@@ -547,6 +549,7 @@ class DesktopAgent {
       macConnectorIds: same && old.token === credential ? old.macConnectorIds : [],
       collecting: same && !!old.collecting,
       appearance: this.appearance,
+      closeAction: this.closeAction,
     }
     save(this.configFile, settings)
     if (same && old.token === credential) Object.assign(old, settings)
@@ -742,6 +745,7 @@ class DesktopAgent {
       screenshotsEnabled: !!p.screenshotsEnabled,
       textInputEnabled: !!p.textInputEnabled,
       appearance: this.appearance,
+      closeAction: this.closeAction,
       captureVersion,
     }
   }
@@ -755,6 +759,14 @@ class DesktopAgent {
       throw new Error('无效的外观选项')
     this.savePreferences({ appearance })
     this.appearance = appearance
+    this.publish()
+  }
+
+  setCloseAction(closeAction) {
+    if (!['tray', 'quit'].includes(closeAction))
+      throw new Error('无效的关闭按钮选项')
+    this.savePreferences({ closeAction })
+    this.closeAction = closeAction
     this.publish()
   }
 
@@ -833,6 +845,14 @@ class DesktopAgent {
     const data = await request(p, '/v1/connectors', undefined, p.controller.signal)
     if (p !== this.profile || p.controller.signal.aborted) throw new Error('连接已更改')
     return { items: Array.isArray(data.items) ? data.items : [], obsidian }
+  }
+
+  async onlineDevices() {
+    const p = this.profile
+    if (!p.token) return { items: [] }
+    const data = await request(p, '/v1/devices/online', undefined, p.controller.signal)
+    if (p !== this.profile || p.controller.signal.aborted) throw new Error('连接已更改')
+    return { items: Array.isArray(data.items) ? data.items : [] }
   }
 
   setMacConnector({ id, enabled, connectionRevision } = {}) {

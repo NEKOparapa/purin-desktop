@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('purin', {
   loadEarlier: () => ipcRenderer.invoke('agent:loadEarlier'),
   schedule: (options) => ipcRenderer.invoke('agent:schedule', options),
   connectors: () => ipcRenderer.invoke('agent:connectors'),
+  onlineDevices: () => ipcRenderer.invoke('agent:onlineDevices'),
   chooseObsidianVault: () => ipcRenderer.invoke('agent:chooseObsidianVault'),
   setObsidianConnector: (options) => ipcRenderer.invoke('agent:setObsidianConnector', options),
   ...(process.platform === 'darwin' && {
@@ -50,6 +51,7 @@ contextBridge.exposeInMainWorld('purin', {
   setScreenshots: (options) => ipcRenderer.invoke('agent:screenshots', options),
   setTextInput: (options) => ipcRenderer.invoke('agent:textInput', options),
   setAppearance: (mode) => ipcRenderer.invoke('agent:appearance', mode),
+  setCloseAction: (action) => ipcRenderer.invoke('agent:closeAction', action),
   manageFailed: (id, retry) =>
     ipcRenderer.invoke('agent:manageFailed', { id, retry }),
   subscribe: (callback) => {

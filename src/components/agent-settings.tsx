@@ -1,20 +1,31 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Activity,
   Cable,
   Check,
+  Cpu,
   Eye,
   EyeOff,
+  Minimize2,
+  Monitor,
   Moon,
-  Palette,
   Plug,
+  Power,
+  RefreshCw,
+  Server,
+  Settings,
+  Smartphone,
   Sun,
 } from 'lucide-react'
 import {
   readBrowserAppearance,
+  readBrowserCloseAction,
   setBrowserAppearance,
+  setBrowserCloseAction,
   type AgentState,
   type Appearance,
+  type CloseAction,
+  type OnlineDevice,
 } from '@/lib/desktop'
 import { Button } from '@/components/ui/button'
 import { ConnectorSettings } from '@/components/connector-settings'
@@ -22,13 +33,176 @@ import { DialogTitle } from '@/components/ui/dialog'
 
 const sections = [
   { id: 'connection', label: '设备配对', icon: Cable },
-  { id: 'connectors', label: '连接器', icon: Plug },
-  { id: 'appearance', label: '外观', icon: Palette },
   { id: 'collection', label: '信息采集', icon: Activity },
+  { id: 'connectors', label: '连接器', icon: Plug },
+  { id: 'appearance', label: '应用设置', icon: Settings },
 ] as const
 type Section = (typeof sections)[number]['id']
 
 const devicePlatformLabels = { windows: 'Windows', macos: 'macOS' }
+const onlinePlatformLabels: Record<string, string> = {
+  windows: 'Windows',
+  macos: 'macOS',
+  android: 'Android',
+  ios: 'iOS',
+  esp32: 'ESP32',
+}
+const onlineTypeLabels: Record<string, string> = {
+  desktop: '桌面端',
+  mobile: '手机',
+  esp32: 'ESP32',
+}
+
+function onlineDevicePlatformLabel(item: OnlineDevice) {
+  if (item.platform && onlinePlatformLabels[item.platform]) {
+    return onlinePlatformLabels[item.platform]
+  }
+  if (item.device_type && onlineTypeLabels[item.device_type]) {
+    return onlineTypeLabels[item.device_type]
+  }
+  return 'HTTP 设备'
+}
+
+function OnlineDeviceGlyph({ item }: { item: OnlineDevice }) {
+  if (
+    item.device_type === 'mobile' ||
+    item.platform === 'android' ||
+    item.platform === 'ios'
+  ) {
+    return <Smartphone size={16} aria-hidden="true" />
+  }
+  if (item.device_type === 'esp32' || item.platform === 'esp32') {
+    return <Cpu size={16} aria-hidden="true" />
+  }
+  if (
+    item.device_type === 'desktop' ||
+    item.platform === 'windows' ||
+    item.platform === 'macos'
+  ) {
+    return <Monitor size={16} aria-hidden="true" />
+  }
+  return <Server size={16} aria-hidden="true" />
+}
+
+function OnlineDevicesCard() {
+  const api = window.purin
+  const [attempt, setAttempt] = useState(0)
+  const [loading, setLoading] = useState(() => Boolean(api?.onlineDevices))
+  const [refreshing, setRefreshing] = useState(false)
+  const [items, setItems] = useState<OnlineDevice[]>([])
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!api?.onlineDevices) return
+    let active = true
+    const load = () => {
+      api.onlineDevices?.().then(
+        (snapshot) => {
+          if (!active) return
+          setItems(Array.isArray(snapshot.items) ? snapshot.items : [])
+          setError('')
+          setLoading(false)
+          setRefreshing(false)
+        },
+        (err) => {
+          if (!active) return
+          setError(
+            err instanceof Error && err.message
+              ? err.message.replace(/^.*?Error: /, '')
+              : '读取在线设备信息失败',
+          )
+          setLoading(false)
+          setRefreshing(false)
+        },
+      )
+    }
+    load()
+    const timer = window.setInterval(load, 8000)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+    }
+  }, [api, attempt])
+
+  const reload = () => {
+    if (!api?.onlineDevices || loading || refreshing) return
+    setRefreshing(true)
+    setError('')
+    setAttempt((n) => n + 1)
+  }
+
+  return (
+    <section className="connection-card" aria-labelledby="online-devices-title">
+      <header className="connection-card-header">
+        <div className="connection-card-heading">
+          <h4 id="online-devices-title">在线设备</h4>
+          {!loading && !error && (
+            <span className="connection-platform-tag">{items.length} 台在线</span>
+          )}
+        </div>
+        {api?.onlineDevices && (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={loading || refreshing}
+            onClick={reload}
+          >
+            <RefreshCw
+              size={13.5}
+              aria-hidden="true"
+              className="online-refresh-icon"
+              data-spinning={loading || refreshing}
+            />
+            刷新
+          </Button>
+        )}
+      </header>
+      {!api?.onlineDevices ? (
+        <p className="settings-note">请打开最新版 Purin 桌面应用以查看在线设备信息。</p>
+      ) : loading ? (
+        <p className="settings-note" role="status">
+          正在获取在线设备信息…
+        </p>
+      ) : error ? (
+        <p className="issue" role="status">
+          {error}
+        </p>
+      ) : items.length === 0 ? (
+        <p className="settings-note">当前暂无在线设备。</p>
+      ) : (
+        <ul className="online-device-list" aria-label="在线设备列表">
+          {items.map((item) => (
+            <li key={item.device_id} className="online-device-item">
+              <div className="online-device-main">
+                <span className="online-device-icon">
+                  <OnlineDeviceGlyph item={item} />
+                </span>
+                <div className="online-device-info">
+                  <div className="online-device-title-row">
+                    <span className="online-device-name">{item.name}</span>
+                    {item.is_current && (
+                      <span className="online-device-self-badge">本机</span>
+                    )}
+                  </div>
+                  <span className="online-device-id mono-value">{item.device_id}</span>
+                </div>
+              </div>
+              <div className="online-device-meta">
+                <span className="connection-platform-tag">
+                  {onlineDevicePlatformLabel(item)}
+                </span>
+                <span className="connection-status" data-state="connected">
+                  在线
+                </span>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
 const appearanceOptions = [
   {
     value: 'light',
@@ -43,6 +217,20 @@ const appearanceOptions = [
     icon: Moon,
   },
 ] as const
+const closeActionOptions = [
+  {
+    value: 'tray',
+    label: '最小化到托盘',
+    description: '点击窗口关闭按钮时隐藏主界面并保留系统托盘图标，后台继续接收通知与采集活动。',
+    icon: Minimize2,
+  },
+  {
+    value: 'quit',
+    label: '直接退出应用',
+    description: '点击窗口关闭按钮时直接关闭窗口并退出 Purin 进程。',
+    icon: Power,
+  },
+] as const
 
 export function AgentSettings({
   state,
@@ -53,6 +241,8 @@ export function AgentSettings({
 }) {
   const [browserMode, setBrowserMode] = useState(readBrowserAppearance)
   const [appearanceError, setAppearanceError] = useState('')
+  const [browserCloseAction, setBrowserCloseActionState] = useState(readBrowserCloseAction)
+  const [closeActionError, setCloseActionError] = useState('')
   const [url, setUrl] = useState(state.url)
   const [deviceId, setDeviceId] = useState(state.deviceId)
   const [deviceName, setDeviceName] = useState(state.deviceName)
@@ -123,6 +313,19 @@ export function AgentSettings({
       setAppearanceError('')
     } catch {
       setAppearanceError('外观设置未保存，请重试。')
+    }
+  }
+  const closeAction = api ? state.closeAction : browserCloseAction
+  async function chooseCloseAction(action: CloseAction) {
+    try {
+      if (api) await api.setCloseAction(action)
+      else {
+        setBrowserCloseAction(action)
+        setBrowserCloseActionState(action)
+      }
+      setCloseActionError('')
+    } catch {
+      setCloseActionError('关闭按钮设置未保存，请重试。')
     }
   }
 
@@ -199,72 +402,124 @@ export function AgentSettings({
           />
         )}
         {tab === 'appearance' && (
-          <section
-            className="connection-card appearance-card"
-            aria-labelledby="appearance-theme-title"
-          >
-            <header className="connection-card-header">
-              <div className="connection-card-heading">
-                <h4 id="appearance-theme-title">界面主题</h4>
-              </div>
-            </header>
-            <fieldset className="appearance-settings" aria-labelledby="appearance-theme-title">
-              <div className="theme-grid">
-                {appearanceOptions.map(({ value, label, icon: Icon }) => {
-                  const selected = appearance === value
-                  return (
-                    <label
-                      key={value}
-                      className="theme-option"
-                      data-selected={selected}
-                    >
-                      <input
-                        type="radio"
-                        name="appearance"
-                        checked={selected}
-                        onChange={() => void chooseAppearance(value)}
-                      />
-                      <span
-                        className="theme-preview"
-                        data-mode={value}
-                        aria-hidden="true"
+          <>
+            <section
+              className="connection-card appearance-card"
+              aria-labelledby="appearance-theme-title"
+            >
+              <header className="connection-card-header">
+                <div className="connection-card-heading">
+                  <h4 id="appearance-theme-title">界面主题</h4>
+                </div>
+              </header>
+              <fieldset className="appearance-settings" aria-labelledby="appearance-theme-title">
+                <div className="theme-grid">
+                  {appearanceOptions.map(({ value, label, icon: Icon }) => {
+                    const selected = appearance === value
+                    return (
+                      <label
+                        key={value}
+                        className="theme-option"
+                        data-selected={selected}
                       >
+                        <input
+                          type="radio"
+                          name="appearance"
+                          checked={selected}
+                          onChange={() => void chooseAppearance(value)}
+                        />
                         <span
-                          className={`theme-preview-pane ${value === 'dark' ? 'dark' : 'light'}`}
+                          className="theme-preview"
+                          data-mode={value}
+                          aria-hidden="true"
                         >
-                          <i className="preview-pill" />
-                          <i className="preview-msg assistant" />
-                          <i className="preview-msg user" />
-                          <i className="preview-bar" />
+                          <span
+                            className={`theme-preview-pane ${value === 'dark' ? 'dark' : 'light'}`}
+                          >
+                            <i className="preview-pill" />
+                            <i className="preview-msg assistant" />
+                            <i className="preview-msg user" />
+                            <i className="preview-bar" />
+                          </span>
                         </span>
-                      </span>
-                      <span className="theme-option-footer">
-                        <span className="theme-option-label">
-                          <Icon size={15} aria-hidden="true" />
-                          {label}
+                        <span className="theme-option-footer">
+                          <span className="theme-option-label">
+                            <Icon size={15} aria-hidden="true" />
+                            {label}
+                          </span>
+                          <span className="theme-option-check" aria-hidden="true">
+                            {selected && <Check size={11} strokeWidth={2.8} />}
+                          </span>
                         </span>
-                        <span className="theme-option-check" aria-hidden="true">
-                          {selected && <Check size={11} strokeWidth={2.8} />}
-                        </span>
-                      </span>
-                    </label>
-                  )
-                })}
-              </div>
-            </fieldset>
-            <p className="settings-note">
-              {appearanceOptions.find((item) => item.value === appearance)?.description}
-              外观偏好仅保存在当前设备上，主窗口与桌宠气泡会立即同步。
-            </p>
-            {appearanceError && (
-              <p className="issue" role="status">
-                {appearanceError}
+                      </label>
+                    )
+                  })}
+                </div>
+              </fieldset>
+              <p className="settings-note">
+                {appearanceOptions.find((item) => item.value === appearance)?.description}
+                外观偏好仅保存在当前设备上，主窗口与桌宠气泡会立即同步。
               </p>
-            )}
-          </section>
+              {appearanceError && (
+                <p className="issue" role="status">
+                  {appearanceError}
+                </p>
+              )}
+            </section>
+            <section
+              className="connection-card"
+              aria-labelledby="close-action-title"
+            >
+              <header className="connection-card-header">
+                <div className="connection-card-heading">
+                  <h4 id="close-action-title">窗口关闭按钮</h4>
+                </div>
+              </header>
+              <fieldset className="appearance-settings" aria-labelledby="close-action-title">
+                <div className="theme-grid">
+                  {closeActionOptions.map(({ value, label, icon: Icon }) => {
+                    const selected = closeAction === value
+                    return (
+                      <label
+                        key={value}
+                        className="theme-option close-action-option"
+                        data-selected={selected}
+                      >
+                        <input
+                          type="radio"
+                          name="closeAction"
+                          checked={selected}
+                          onChange={() => void chooseCloseAction(value)}
+                        />
+                        <span className="theme-option-footer">
+                          <span className="theme-option-label">
+                            <Icon size={15} aria-hidden="true" />
+                            {label}
+                          </span>
+                          <span className="theme-option-check" aria-hidden="true">
+                            {selected && <Check size={11} strokeWidth={2.8} />}
+                          </span>
+                        </span>
+                      </label>
+                    )
+                  })}
+                </div>
+              </fieldset>
+              <p className="settings-note">
+                {closeActionOptions.find((item) => item.value === closeAction)?.description}
+                右键系统托盘图标可随时选择「显示界面」或「退出应用」。
+              </p>
+              {closeActionError && (
+                <p className="issue" role="status">
+                  {closeActionError}
+                </p>
+              )}
+            </section>
+          </>
         )}
         {tab === 'connection' && (
-          <section className="connection-card" aria-labelledby="device-connection-title">
+          <>
+            <section className="connection-card" aria-labelledby="device-connection-title">
             <header className="connection-card-header">
               <div className="connection-card-heading">
                 <h4 id="device-connection-title">
@@ -428,16 +683,6 @@ export function AgentSettings({
                       <Button type="submit" disabled={!api || busy}>
                         {busy ? '正在配对…' : '配对并连接'}
                       </Button>
-                      {editing && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          disabled={busy}
-                          onClick={cancelEdit}
-                        >
-                          取消
-                        </Button>
-                      )}
                     </div>
                   </form>
                 ) : (
@@ -520,16 +765,6 @@ export function AgentSettings({
                       <Button type="submit" disabled={!api || busy}>
                         {busy ? '正在验证…' : '验证并保存'}
                       </Button>
-                      {editing && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          disabled={busy}
-                          onClick={cancelEdit}
-                        >
-                          取消
-                        </Button>
-                      )}
                     </div>
                   </form>
                 )}
@@ -543,7 +778,17 @@ export function AgentSettings({
                 {feedback}
               </p>
             )}
-          </section>
+            </section>
+            {showConnection && (
+              <OnlineDevicesCard
+                key={JSON.stringify([
+                  state.url,
+                  state.deviceId,
+                  state.connectionRevision,
+                ])}
+              />
+            )}
+          </>
         )}
         {tab === 'collection' && (
           <>

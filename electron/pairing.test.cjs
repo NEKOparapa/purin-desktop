@@ -35,3 +35,39 @@ test('retrying an invitation sends the same client identity and credential', asy
   await agent.pair(invitation)
   assert.deepEqual(sent[1], sent[0])
 })
+
+test('onlineDevices fetches online device list when configured', async t => {
+  const unconfigured = Object.assign(Object.create(DesktopAgent.prototype), {
+    profile: { token: '', controller: new AbortController() },
+  })
+  assert.deepEqual(await unconfigured.onlineDevices(), { items: [] })
+
+  const controller = new AbortController()
+  const configured = Object.assign(Object.create(DesktopAgent.prototype), {
+    profile: {
+      url: 'https://unit.test',
+      deviceId: 'desktop-test',
+      deviceName: '书房电脑',
+      installation: 'test-installation-1234',
+      token: 'secret-token',
+      controller,
+    },
+  })
+  const expected = [
+    {
+      device_id: 'desktop-test',
+      name: '书房电脑',
+      device_type: 'desktop',
+      platform: 'windows',
+      last_seen_seconds: 0,
+      is_current: true,
+    },
+  ]
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    assert.equal(url, 'https://unit.test/v1/devices/online')
+    assert.equal(options.method, 'GET')
+    assert.equal(options.headers.Authorization, 'Bearer secret-token')
+    return Response.json({ items: expected })
+  })
+  assert.deepEqual(await configured.onlineDevices(), { items: expected })
+})

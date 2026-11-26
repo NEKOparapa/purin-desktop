@@ -3,6 +3,8 @@ const {
   BrowserWindow,
   Notification,
   Menu,
+  Tray,
+  nativeImage,
   session,
   ipcMain,
   safeStorage,
@@ -20,9 +22,10 @@ const {
 } = require('./foreground-capture.cjs')
 const { enableTextInputCapture } = require('./text-input-probe.cjs')
 const { createDesktopPet } = require('./desktop-pet.cjs')
+const { createWindowLifecycle } = require('./tray-lifecycle.cjs')
 const iconName = process.platform === 'win32' ? 'app-icon.ico' : 'app-icon.png'
 const appIcon = path.join(__dirname, app.isPackaged ? '../dist/' + iconName : '../public/' + iconName)
-let agent, appWindow, desktopPet
+let agent, appWindow, desktopPet, tray, lifecycle
 
 function windowBackground() {
   return nativeTheme.shouldUseDarkColors ? '#131a24' : '#eef4fb'
@@ -45,7 +48,7 @@ function loadRenderer(win) {
 
 function createWindow() {
   const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea
-  const width = Math.min(560, Math.floor(area.width * 0.9))
+  const width = Math.min(860, Math.floor(area.width * 0.9))
   const height = Math.min(680, Math.floor(area.height * 0.9))
   const win = new BrowserWindow({
     width, height,
@@ -70,11 +73,27 @@ function createWindow() {
   appWindow = win
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   win.webContents.on('will-navigate', (event) => event.preventDefault())
+  win.on('close', (event) => lifecycle?.handleWindowClose(event, win))
   win.on('closed', () => {
     desktopPet?.destroy()
     appWindow = null
   })
   void loadRenderer(win)
+}
+
+function createTray() {
+  if (tray) return
+  const baseImage = nativeImage.createFromPath(appIcon)
+  const icon =
+    process.platform === 'darwin'
+      ? baseImage.resize({ width: 18, height: 18 })
+      : baseImage
+  tray = new Tray(icon)
+  tray.setToolTip('Purin')
+  tray.setContextMenu(Menu.buildFromTemplate(lifecycle.trayMenuTemplate()))
+  if (process.platform !== 'darwin') {
+    tray.on('click', () => lifecycle.showInterface())
+  }
 }
 
 function presentNotifications(items, profile) {
@@ -95,7 +114,8 @@ function presentNotifications(items, profile) {
       const notice = new Notification({ title, body: detail.slice(0, 200), icon: appIcon })
       notice.on('click', () => {
         if (agent.profile !== profile || win.isDestroyed()) return
-        desktopPet.restore()
+        if (lifecycle) lifecycle.showInterface()
+        else desktopPet.restore()
         send(true)
       })
       notice.on('failed', () => send(false))
@@ -132,6 +152,17 @@ function start() {
   )
   nativeTheme.themeSource = agent.appearance
   desktopPet = createDesktopPet(agent, () => appWindow, loadRenderer)
+  lifecycle = createWindowLifecycle({
+    getCloseAction: () => agent?.closeAction ?? 'tray',
+    getWindow: () => appWindow,
+    createWindow: () => {
+      if (app.isReady()) createWindow()
+    },
+    restorePet: () => desktopPet.restore(),
+    quit: () => app.quit(),
+    platform: process.platform,
+    dock: app.dock,
+  })
   nativeTheme.on('updated', () => {
     if (!appWindow || appWindow.isDestroyed()) return
     appWindow.setBackgroundColor(windowBackground())
@@ -144,7 +175,7 @@ function start() {
     downloadNotificationFile: file => agent.downloadNotificationFile(file, chooseAttachmentPath),
     async chooseObsidianVault() {
       const result = await dialog.showOpenDialog(appWindow, {
-        title: '选择 Obsidian Vault 文件夹',
+        title: '选择 Obsidian 仓库文件夹',
         properties: ['openDirectory'],
       })
       return result.canceled || !result.filePaths.length ? null : result.filePaths[0]
@@ -171,6 +202,7 @@ function start() {
     loadEarlier: 'loadEarlier',
     schedule: 'schedule',
     connectors: 'connectors',
+    onlineDevices: 'onlineDevices',
     setObsidianConnector: 'setObsidianConnector',
     ...(process.platform === 'darwin' && { setMacConnector: 'setMacConnector' }),
     addMcpConnector: 'addMcpConnector',
@@ -191,6 +223,7 @@ function start() {
     collection: 'setCollection',
     remoteCommands: 'setRemoteCommands',
     appearance: 'setAppearance',
+    closeAction: 'setCloseAction',
     manageFailed: 'manageFailed',
     ...Object.fromEntries(Object.keys(actions).map((key) => [key, key])),
   })) {
@@ -227,27 +260,27 @@ function start() {
         ])
       : null,
   )
+  createTray()
   createWindow()
-  app.on('activate', () => {
-    if (!appWindow) createWindow()
-    else desktopPet.restore()
-  })
+  app.on('activate', () => lifecycle.showInterface())
 }
 
 if (app.requestSingleInstanceLock()) {
   app.on('second-instance', () => {
-    if (appWindow && !appWindow.isDestroyed()) {
-      desktopPet.restore()
-    } else if (app.isReady()) createWindow()
+    if (lifecycle) lifecycle.showInterface()
+    else if (app.isReady()) createWindow()
   })
   app.whenReady().then(start)
 } else {
   app.quit()
 }
 app.on('before-quit', () => {
+  lifecycle?.markQuitting()
+  tray?.destroy()
+  tray = null
   desktopPet?.destroy()
   agent?.close()
 })
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit()
+  if (process.platform !== 'darwin' || lifecycle?.isQuitting()) app.quit()
 })
