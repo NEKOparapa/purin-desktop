@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n'
 import { useEffect, useState, type ReactNode } from 'react'
 import { ChevronLeft, Settings2 } from 'lucide-react'
 import { DialogContent, DialogTrigger } from './ui/dialog'
@@ -51,13 +52,13 @@ export function DesktopLayout({
   const chat = page === 'chat'
   const label = chat
     ? unread
-      ? '打开日程，有未读通知'
-      : '打开日程'
-    : '返回对话'
+      ? t('打开日程，有未读通知')
+      : t('打开日程')
+    : t('返回对话')
   return (
     <div className="app-shell" data-page={page}>
-      <header className="window-titlebar" aria-label="窗口标题栏" />
-      <nav className="page-actions" aria-label="页面导航">
+      <header className="window-titlebar" aria-label={t('窗口标题栏')} />
+      <nav className="page-actions" aria-label={t('页面导航')}>
         <button
           type="button"
           className="page-switch"
@@ -70,7 +71,7 @@ export function DesktopLayout({
           ) : (
             <ChevronLeft size={20} aria-hidden="true" />
           )}
-          {chat ? '日程' : '对话'}
+          {chat ? t('日程') : t('对话')}
           {chat && unread && (
             <span className="calendar-unread" aria-hidden="true" />
           )}
@@ -79,8 +80,8 @@ export function DesktopLayout({
           <button
             type="button"
             className="page-settings"
-            aria-label="设置"
-            title="设置"
+            aria-label={t('设置')}
+            title={t('设置')}
           >
             <Settings2 size={18} aria-hidden="true" />
           </button>

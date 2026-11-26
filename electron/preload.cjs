@@ -1,6 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('purin', {
+  initialLanguage: process.argv.includes('--purin-language=en') ? 'en' : 'zh-CN',
+  setLanguage: (language) => ipcRenderer.invoke('agent:language', language),
   initialAppearance:
     process.argv
       .find((arg) => arg.startsWith('--purin-appearance='))

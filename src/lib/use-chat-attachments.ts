@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n'
 import { useRef, useState } from 'react'
 import { droppedChatFiles, maxAttachments, prepareAttachment, type DraftAttachment } from './chat-media'
 import type { ChatAttachments, UploadChatFile } from './desktop'
@@ -16,7 +17,7 @@ export function useChatAttachments() {
       const files = Array.isArray(selection) ? selection : await droppedChatFiles(selection)
       if (!files.length) return false
       if (files.length + attachments.length > maxAttachments)
-        throw new Error(`每条消息最多可添加 ${maxAttachments} 个附件。`)
+        throw new Error(t('每条消息最多可添加 {0} 个附件。', maxAttachments))
       const added: DraftAttachment[] = []
       for (const file of files) added.push(await prepareAttachment(file))
       setAttachments(current => [...current, ...added])
@@ -35,7 +36,7 @@ export function useChatAttachments() {
         if (item.kind !== 'file') continue
         let ref = item.uploaded
         if (!ref) {
-          if (revision === undefined) throw new Error('设备连接已更改')
+          if (revision === undefined) throw new Error(t('设备连接已更改'))
           setUploading(item.name)
           const uploaded = await upload(item.name, await item.file.arrayBuffer(), revision)
           setAttachments(current => current.map(a => a.id === item.id ? { ...item, uploaded } : a))

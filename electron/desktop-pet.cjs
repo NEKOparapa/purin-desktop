@@ -103,7 +103,7 @@ function createDesktopPet(agent, getChatWindow, loadRenderer) {
       preferredSide = screen.getCursorScreenPoint().x > area.x + anchor.x ? 'left' : 'right'
     }
     return {
-      session, appearance: state.appearance, configured: state.configured,
+      session, appearance: state.appearance, language: state.language, configured: state.configured,
       workArea: area, anchor, preferredSide,
       connectionRevision: state.connectionRevision,
       awaitingReply: state.awaitingReply,
@@ -157,12 +157,13 @@ function createDesktopPet(agent, getChatWindow, loadRenderer) {
     try {
       if (!pet) {
         pet = new BrowserWindow({
-          ...bounds, title: 'Purin 桌宠', show: false,
+          ...bounds, title: agent.language === 'en' ? 'Purin Desktop Pet' : 'Purin 桌宠', show: false,
           frame: false, transparent: true, backgroundColor: '#00000000',
           alwaysOnTop: true, skipTaskbar: true, hasShadow: false,
           resizable: false, maximizable: false, fullscreenable: false,
           webPreferences: {
             preload: path.join(__dirname, 'pet-preload.cjs'),
+            additionalArguments: ['--purin-language=' + agent.language],
             contextIsolation: true, sandbox: true, nodeIntegration: false,
           },
         })

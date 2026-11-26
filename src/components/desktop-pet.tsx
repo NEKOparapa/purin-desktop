@@ -1,3 +1,4 @@
+import { translateKnown, applyLanguage, t } from '@/lib/i18n'
 import { type DragEvent, type Ref, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ArrowUp, X } from 'lucide-react'
 import { Mascot } from '@/components/mascot'
@@ -60,7 +61,7 @@ function PetBubble({ ref, message, thinking, delay, dismiss }: {
           message
         )}
       </p>
-      <button aria-label="收起气泡" title="收起气泡" onClick={dismiss}>
+      <button aria-label={t('收起气泡')} title={t('收起气泡')} onClick={dismiss}>
         <X size={14} />
       </button>
     </div>
@@ -74,6 +75,8 @@ export function DesktopPet({ api }: { api: PetBridge }) {
       received = false
     function update(next: PetSnapshot) {
       document.documentElement.dataset.appearance = next.appearance
+      applyLanguage(next.language)
+      document.title = t('Purin 桌宠')
       setState(next)
     }
     const stop = api.subscribe((next) => {
@@ -127,7 +130,7 @@ function PetChat({ api, state }: { api: PetBridge; state: PetSnapshot }) {
   const issue = (error?.session === state.session && error.text) || state.issue
   const thinkingBubble = !issue && !state.reply && state.waiting
   const message =
-    issue || state.reply?.text || (state.waiting ? '正在思考…' : '')
+    translateKnown(issue || '') || state.reply?.text || (state.waiting ? t('正在思考…') : '')
   const bubbleId = JSON.stringify([
     state.session,
     issue || state.reply?.id || 'waiting',
@@ -175,7 +178,7 @@ function PetChat({ api, state }: { api: PetBridge; state: PetSnapshot }) {
       setCarriedSession(null)
       skipClick.current = true
       void api.drop(state.session).catch(() => {
-        setError({ session: state.session, text: '桌宠位置暂时无法保存。' })
+        setError({ session: state.session, text: t('桌宠位置暂时无法保存。') })
       })
     }
   }
@@ -261,7 +264,7 @@ function PetChat({ api, state }: { api: PetBridge; state: PetSnapshot }) {
     try {
       if (await addFiles(event.dataTransfer)) openEditor()
     } catch (error) {
-      setError({ session: state.session, text: error instanceof Error ? error.message : '附件读取失败，请重试。' })
+      setError({ session: state.session, text: error instanceof Error ? translateKnown(error.message) : t('附件读取失败，请重试。') })
     }
   }
   const canSend = !!(draft.trim() || attachments.length) && state.configured && !sending && !voiceBusy && !readingFiles
@@ -281,7 +284,7 @@ function PetChat({ api, state }: { api: PetBridge; state: PetSnapshot }) {
     } catch (error) {
       setError({
         session: state.session,
-        text: error instanceof Error ? error.message.replace(/^.*?Error: /, '') : '消息未能发送，请检查连接后再试。',
+        text: error instanceof Error ? translateKnown(error.message.replace(/^.*?Error: /, '')) : t('消息未能发送，请检查连接后再试。'),
       })
     } finally {
       setSending(false)
@@ -291,7 +294,7 @@ function PetChat({ api, state }: { api: PetBridge; state: PetSnapshot }) {
     <main
       ref={shell}
       className="pet-shell"
-      aria-label="桌宠"
+      aria-label={t('桌宠')}
       onKeyDown={(event) => {
         if (
           event.key !== 'Escape' ||
@@ -311,10 +314,10 @@ function PetChat({ api, state }: { api: PetBridge; state: PetSnapshot }) {
         <button
           ref={avatar}
           className="pet-avatar"
-          aria-label="和桌宠聊天"
-          aria-description="拖入文件添加附件，拖动调整位置，单击打开输入框，双击返回主窗口"
+          aria-label={t('和桌宠聊天')}
+          aria-description={t('拖入文件添加附件，拖动调整位置，单击打开输入框，双击返回主窗口')}
           aria-expanded={editing}
-          title="拖入文件添加附件，拖动调整位置，单击聊天，双击返回主窗口"
+          title={t('拖入文件添加附件，拖动调整位置，单击聊天，双击返回主窗口')}
           onBlur={cancelPendingClick}
           onPointerDown={(event) => {
             if (!event.isPrimary || event.button !== 0) return
@@ -393,9 +396,9 @@ function PetChat({ api, state }: { api: PetBridge; state: PetSnapshot }) {
           <DraftAttachments items={attachments} sending={sending} remove={removeAttachment} />
           <textarea
             ref={input}
-            aria-label="桌宠消息"
+            aria-label={t('桌宠消息')}
             rows={1}
-            placeholder="想说点什么？"
+            placeholder={t('想说点什么？')}
             value={draft}
             disabled={sending}
             onChange={(event) => {
@@ -423,8 +426,8 @@ function PetChat({ api, state }: { api: PetBridge; state: PetSnapshot }) {
           />
           <button
             type="button"
-            aria-label="收起输入框"
-            title="收起输入框"
+            aria-label={t('收起输入框')}
+            title={t('收起输入框')}
             onClick={closeEditor}
           >
             <X size={15} />
@@ -432,7 +435,7 @@ function PetChat({ api, state }: { api: PetBridge; state: PetSnapshot }) {
           <VoiceInput
             revision={state.connectionRevision}
             transcribe={api.transcribe}
-            disabledReason={!state.configured ? '连接设备后使用语音输入' : sending ? '正在发送消息' : undefined}
+            disabledReason={!state.configured ? t('连接设备后使用语音输入') : sending ? t('正在发送消息') : undefined}
             onBusy={setVoiceBusy}
             onError={(text) => {
               setDismissed('')
@@ -448,8 +451,8 @@ function PetChat({ api, state }: { api: PetBridge; state: PetSnapshot }) {
               type="submit"
               className="pet-send"
               disabled={!canSend}
-              aria-label="发送桌宠消息"
-              title="发送"
+              aria-label={t('发送桌宠消息')}
+              title={t('发送')}
             >
               <ArrowUp size={16} />
             </button>
@@ -459,11 +462,11 @@ function PetChat({ api, state }: { api: PetBridge; state: PetSnapshot }) {
               className="pet-connect"
               onClick={() => void api.restore(true)}
             >
-              去连接
+              {t('去连接')}
             </button>
           )}
           {(readingFiles || uploading) && (
-            <span className="pet-file-status" role="status">{uploading ? `正在上传并解析 ${uploading}…` : '正在读取附件…'}</span>
+            <span className="pet-file-status" role="status">{uploading ? t('正在上传并解析 {0}…', uploading) : t('正在读取附件…')}</span>
           )}
         </form>
       )}

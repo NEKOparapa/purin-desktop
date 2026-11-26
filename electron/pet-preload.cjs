@@ -14,6 +14,7 @@ if (process.platform === 'darwin') {
 }
 
 contextBridge.exposeInMainWorld('purinPet', {
+  initialLanguage: process.argv.includes('--purin-language=en') ? 'en' : 'zh-CN',
   state: () => ipcRenderer.invoke('pet:state'),
   transcribe: (audio, connectionRevision) => ipcRenderer.invoke('pet:transcribe', { audio, connectionRevision }),
   move: (x, y, session) => ipcRenderer.invoke('pet:move', { x, y, session }),

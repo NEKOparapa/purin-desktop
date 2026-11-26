@@ -43,10 +43,10 @@ function createWindowLifecycle({
     return quitting
   }
 
-  function trayMenuTemplate() {
+  function trayMenuTemplate(language = 'zh-CN') {
     return [
-      { label: '显示界面', click: () => showInterface() },
-      { label: '退出应用', click: () => exitApplication() },
+      { label: language === 'en' ? 'Show Purin' : '显示界面', click: () => showInterface() },
+      { label: language === 'en' ? 'Quit Purin' : '退出应用', click: () => exitApplication() },
     ]
   }
 

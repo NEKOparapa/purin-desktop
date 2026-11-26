@@ -64,7 +64,7 @@ function createWindow() {
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
-      additionalArguments: ['--purin-appearance=' + agent.appearance],
+      additionalArguments: ['--purin-appearance=' + agent.appearance, '--purin-language=' + agent.language],
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
@@ -81,6 +81,13 @@ function createWindow() {
   void loadRenderer(win)
 }
 
+let trayLanguage
+function updateTrayLanguage(language) {
+  if (!tray || trayLanguage === language) return
+  tray.setContextMenu(Menu.buildFromTemplate(lifecycle.trayMenuTemplate(language)))
+  trayLanguage = language
+}
+
 function createTray() {
   if (tray) return
   const baseImage = nativeImage.createFromPath(appIcon)
@@ -90,7 +97,7 @@ function createTray() {
       : baseImage
   tray = new Tray(icon)
   tray.setToolTip('Purin')
-  tray.setContextMenu(Menu.buildFromTemplate(lifecycle.trayMenuTemplate()))
+  updateTrayLanguage(agent.language)
   if (process.platform !== 'darwin') {
     tray.on('click', () => lifecycle.showInterface())
   }
@@ -100,7 +107,7 @@ function presentNotifications(items, profile) {
   const win = appWindow
   if (!win || win.isDestroyed() || win.webContents.isLoadingMainFrame()) return false
   const latest = items[0]
-  const title = items.length === 1 ? latest.title : items.length + ' 条新通知'
+  const title = items.length === 1 ? latest.title : (agent.language === 'en' ? items.length + ' new notifications' : items.length + ' 条新通知')
   const detail = items.length === 1 ? latest.body : latest.title
   const alert = { id: latest.id, title, body: detail, deviceId: profile.deviceId, url: profile.url,
     notifyAt: latest.notify_at ?? latest.created_at }
@@ -127,7 +134,7 @@ function presentNotifications(items, profile) {
 
 async function chooseAttachmentPath(name) {
   const result = await dialog.showSaveDialog(appWindow, {
-    title: '保存附件',
+    title: agent.language === 'en' ? 'Save attachment' : '保存附件',
     defaultPath: path.join(app.getPath('downloads'), name),
   })
   return result.canceled ? null : result.filePath
@@ -145,6 +152,7 @@ function start() {
         nativeTheme.themeSource = state.appearance
       if (appWindow && !appWindow.isDestroyed())
         appWindow.webContents.send('agent:changed', state)
+      updateTrayLanguage(state.language)
       desktopPet?.publish(state)
     },
     captureForegroundWindow,
@@ -175,7 +183,7 @@ function start() {
     downloadNotificationFile: file => agent.downloadNotificationFile(file, chooseAttachmentPath),
     async chooseObsidianVault() {
       const result = await dialog.showOpenDialog(appWindow, {
-        title: '选择 Obsidian 仓库文件夹',
+        title: agent.language === 'en' ? 'Choose an Obsidian vault folder' : '选择 Obsidian 仓库文件夹',
         properties: ['openDirectory'],
       })
       return result.canceled || !result.filePaths.length ? null : result.filePaths[0]
@@ -222,6 +230,7 @@ function start() {
     retry: 'retry',
     collection: 'setCollection',
     remoteCommands: 'setRemoteCommands',
+    language: 'setLanguage',
     appearance: 'setAppearance',
     closeAction: 'setCloseAction',
     manageFailed: 'manageFailed',

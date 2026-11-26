@@ -1,3 +1,4 @@
+import { translateKnown, language, languageOptions, saveLanguage, t, type Language } from '@/lib/i18n'
 import { useEffect, useState } from 'react'
 import {
   Activity,
@@ -58,9 +59,9 @@ function onlineDevicePlatformLabel(item: OnlineDevice) {
     return onlinePlatformLabels[item.platform]
   }
   if (item.device_type && onlineTypeLabels[item.device_type]) {
-    return onlineTypeLabels[item.device_type]
+    return translateKnown(onlineTypeLabels[item.device_type])
   }
-  return 'HTTP 设备'
+  return t('HTTP 设备')
 }
 
 function OnlineDeviceGlyph({ item }: { item: OnlineDevice }) {
@@ -108,8 +109,8 @@ function OnlineDevicesCard() {
           if (!active) return
           setError(
             err instanceof Error && err.message
-              ? err.message.replace(/^.*?Error: /, '')
-              : '读取在线设备信息失败',
+              ? translateKnown(err.message.replace(/^.*?Error: /, ''))
+              : t('读取在线设备信息失败'),
           )
           setLoading(false)
           setRefreshing(false)
@@ -135,9 +136,9 @@ function OnlineDevicesCard() {
     <section className="connection-card" aria-labelledby="online-devices-title">
       <header className="connection-card-header">
         <div className="connection-card-heading">
-          <h4 id="online-devices-title">在线设备</h4>
+          <h4 id="online-devices-title">{t('在线设备')}</h4>
           {!loading && !error && (
-            <span className="connection-platform-tag">{items.length} 台在线</span>
+            <span className="connection-platform-tag">{items.length}{t(' 台在线')}</span>
           )}
         </div>
         {api?.onlineDevices && (
@@ -154,24 +155,24 @@ function OnlineDevicesCard() {
               className="online-refresh-icon"
               data-spinning={loading || refreshing}
             />
-            刷新
+            {t('刷新')}
           </Button>
         )}
       </header>
       {!api?.onlineDevices ? (
-        <p className="settings-note">请打开最新版 Purin 桌面应用以查看在线设备信息。</p>
+        <p className="settings-note">{t('请打开最新版 Purin 桌面应用以查看在线设备信息。')}</p>
       ) : loading ? (
         <p className="settings-note" role="status">
-          正在获取在线设备信息…
+          {t('正在获取在线设备信息…')}
         </p>
       ) : error ? (
         <p className="issue" role="status">
           {error}
         </p>
       ) : items.length === 0 ? (
-        <p className="settings-note">当前暂无在线设备。</p>
+        <p className="settings-note">{t('当前暂无在线设备。')}</p>
       ) : (
-        <ul className="online-device-list" aria-label="在线设备列表">
+        <ul className="online-device-list" aria-label={t('在线设备列表')}>
           {items.map((item) => (
             <li key={item.device_id} className="online-device-item">
               <div className="online-device-main">
@@ -182,7 +183,7 @@ function OnlineDevicesCard() {
                   <div className="online-device-title-row">
                     <span className="online-device-name">{item.name}</span>
                     {item.is_current && (
-                      <span className="online-device-self-badge">本机</span>
+                      <span className="online-device-self-badge">{t('本机')}</span>
                     )}
                   </div>
                   <span className="online-device-id mono-value">{item.device_id}</span>
@@ -193,7 +194,7 @@ function OnlineDevicesCard() {
                   {onlineDevicePlatformLabel(item)}
                 </span>
                 <span className="connection-status" data-state="connected">
-                  在线
+                  {t('在线')}
                 </span>
               </div>
             </li>
@@ -240,6 +241,7 @@ export function AgentSettings({
   onConnected: () => void
 }) {
   const [browserMode, setBrowserMode] = useState(readBrowserAppearance)
+  const [languageError, setLanguageError] = useState(false)
   const [appearanceError, setAppearanceError] = useState('')
   const [browserCloseAction, setBrowserCloseActionState] = useState(readBrowserCloseAction)
   const [closeActionError, setCloseActionError] = useState('')
@@ -261,7 +263,7 @@ export function AgentSettings({
   }>()
   const api = window.purin
   const connectionState = state.issue ? 'error' : state.configured ? 'connected' : 'disconnected'
-  const connectionStatus = { error: '连接异常', connected: '已连接', disconnected: '未连接' }
+  const connectionStatus = { error: t('连接异常'), connected: t('已连接'), disconnected: t('未连接') }
   const showConnection = state.configured && !editing
   const failedMaterial = state.failedMaterial
 
@@ -295,13 +297,22 @@ export function AgentSettings({
         section: tab,
         message:
           error instanceof Error
-            ? error.message.replace(/^.*?Error: /, '')
-            : '操作未完成，请重试',
+            ? translateKnown(error.message.replace(/^.*?Error: /, ''))
+            : t('操作未完成，请重试'),
       })
     } finally {
       setBusy(false)
     }
   }
+  async function chooseLanguage(value: Language) {
+    try {
+      await saveLanguage(value)
+      setLanguageError(false)
+    } catch {
+      setLanguageError(true)
+    }
+  }
+
   const appearance = api ? state.appearance : browserMode
   async function chooseAppearance(mode: Appearance) {
     try {
@@ -312,7 +323,7 @@ export function AgentSettings({
       }
       setAppearanceError('')
     } catch {
-      setAppearanceError('外观设置未保存，请重试。')
+      setAppearanceError(t('外观设置未保存，请重试。'))
     }
   }
   const closeAction = api ? state.closeAction : browserCloseAction
@@ -325,7 +336,7 @@ export function AgentSettings({
       }
       setCloseActionError('')
     } catch {
-      setCloseActionError('关闭按钮设置未保存，请重试。')
+      setCloseActionError(t('关闭按钮设置未保存，请重试。'))
     }
   }
 
@@ -342,14 +353,14 @@ export function AgentSettings({
       setShowToken(false)
       setPairValue('')
       setEditing(false)
-      setFeedback('连接已验证并保存')
+      setFeedback(t('连接已验证并保存'))
     } catch (error) {
       setFeedbackError(true)
       setFeedback(
-        '连接失败 · ' +
+        t('连接失败 · ') +
           (error instanceof Error
-            ? error.message.replace(/^.*?Error: /, '')
-            : '请检查服务地址和连接凭据'),
+            ? translateKnown(error.message.replace(/^.*?Error: /, ''))
+            : t('请检查服务地址和连接凭据')),
       )
     } finally {
       setBusy(false)
@@ -359,20 +370,20 @@ export function AgentSettings({
   return (
     <>
       <div className="settings-sidebar">
-        <DialogTitle>设备设置</DialogTitle>
-        <nav className="nav-list" aria-label="设置分类">
+        <DialogTitle>{t('设备设置')}</DialogTitle>
+        <nav className="nav-list" aria-label={t('设置分类')}>
           {sections.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               className="nav-item"
               type="button"
               aria-current={tab === id ? 'page' : undefined}
-              aria-label={label}
-              title={label}
+              aria-label={t(label)}
+              title={t(label)}
               onClick={() => setTab(id)}
             >
               <Icon size={17} aria-hidden="true" />
-              <span>{label}</span>
+              <span>{t(label)}</span>
             </button>
           ))}
         </nav>
@@ -383,7 +394,7 @@ export function AgentSettings({
         aria-labelledby="settings-section-title"
       >
         <h3 id="settings-section-title">
-          {sections.find(({ id }) => id === tab)?.label}
+          {t(sections.find(({ id }) => id === tab)!.label)}
         </h3>
         {tab === 'connectors' && (
           <ConnectorSettings
@@ -403,13 +414,45 @@ export function AgentSettings({
         )}
         {tab === 'appearance' && (
           <>
+            <section className="connection-card" aria-labelledby="language-title">
+              <header className="connection-card-header">
+                <h4 id="language-title">{t('界面语言')}</h4>
+              </header>
+              <fieldset className="appearance-settings" aria-labelledby="language-title">
+                <div className="theme-grid">
+                  {languageOptions.map(({ value, label }) => (
+                    <label
+                      key={value}
+                      className="theme-option close-action-option"
+                      data-selected={language() === value}
+                    >
+                      <input
+                        type="radio"
+                        name="language"
+                        checked={language() === value}
+                        onChange={() => void chooseLanguage(value)}
+                      />
+                      <span className="theme-option-footer">
+                        <span lang={value}>{label}</span>
+                        <span className="theme-option-check" aria-hidden="true">
+                          {language() === value && <Check size={11} strokeWidth={2.8} />}
+                        </span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+              {languageError && (
+                <p className="issue" role="status">{t('语言设置未保存，请重试。')}</p>
+              )}
+            </section>
             <section
               className="connection-card appearance-card"
               aria-labelledby="appearance-theme-title"
             >
               <header className="connection-card-header">
                 <div className="connection-card-heading">
-                  <h4 id="appearance-theme-title">界面主题</h4>
+                  <h4 id="appearance-theme-title">{t('界面主题')}</h4>
                 </div>
               </header>
               <fieldset className="appearance-settings" aria-labelledby="appearance-theme-title">
@@ -445,7 +488,7 @@ export function AgentSettings({
                         <span className="theme-option-footer">
                           <span className="theme-option-label">
                             <Icon size={15} aria-hidden="true" />
-                            {label}
+                            {t(label)}
                           </span>
                           <span className="theme-option-check" aria-hidden="true">
                             {selected && <Check size={11} strokeWidth={2.8} />}
@@ -457,8 +500,8 @@ export function AgentSettings({
                 </div>
               </fieldset>
               <p className="settings-note">
-                {appearanceOptions.find((item) => item.value === appearance)?.description}
-                外观偏好仅保存在当前设备上，主窗口与桌宠气泡会立即同步。
+                {t(appearanceOptions.find((item) => item.value === appearance)!.description)}
+                {t('外观偏好仅保存在当前设备上，主窗口与桌宠气泡会立即同步。')}
               </p>
               {appearanceError && (
                 <p className="issue" role="status">
@@ -472,7 +515,7 @@ export function AgentSettings({
             >
               <header className="connection-card-header">
                 <div className="connection-card-heading">
-                  <h4 id="close-action-title">窗口关闭按钮</h4>
+                  <h4 id="close-action-title">{t('窗口关闭按钮')}</h4>
                 </div>
               </header>
               <fieldset className="appearance-settings" aria-labelledby="close-action-title">
@@ -494,7 +537,7 @@ export function AgentSettings({
                         <span className="theme-option-footer">
                           <span className="theme-option-label">
                             <Icon size={15} aria-hidden="true" />
-                            {label}
+                            {t(label)}
                           </span>
                           <span className="theme-option-check" aria-hidden="true">
                             {selected && <Check size={11} strokeWidth={2.8} />}
@@ -506,8 +549,8 @@ export function AgentSettings({
                 </div>
               </fieldset>
               <p className="settings-note">
-                {closeActionOptions.find((item) => item.value === closeAction)?.description}
-                右键系统托盘图标可随时选择「显示界面」或「退出应用」。
+                {t(closeActionOptions.find((item) => item.value === closeAction)!.description)}
+                {t('右键系统托盘图标可随时选择「显示界面」或「退出应用」。')}
               </p>
               {closeActionError && (
                 <p className="issue" role="status">
@@ -524,10 +567,10 @@ export function AgentSettings({
               <div className="connection-card-heading">
                 <h4 id="device-connection-title">
                   {showConnection
-                    ? '当前连接'
+                    ? t('当前连接')
                     : editing
-                      ? '编辑连接'
-                      : '连接后端服务'}
+                      ? t('编辑连接')
+                      : t('连接后端服务')}
                 </h4>
                 {showConnection ? (
                   <span className="connection-status" data-state={connectionState}>
@@ -543,7 +586,7 @@ export function AgentSettings({
               </div>
               {showConnection && (
                 <Button type="button" size="sm" variant="outline" onClick={editConnection}>
-                  编辑连接
+                  {t('编辑连接')}
                 </Button>
               )}
               {!showConnection && editing && (
@@ -554,7 +597,7 @@ export function AgentSettings({
                   disabled={busy}
                   onClick={cancelEdit}
                 >
-                  取消
+                  {t('取消')}
                 </Button>
               )}
             </header>
@@ -562,37 +605,43 @@ export function AgentSettings({
               <>
                 <dl className="connection-details">
                   <div className="connection-detail-item">
-                    <dt>设备名称</dt>
+                    <dt>
+                      {t('设备名称')}
+                      </dt>
                     <dd>{state.deviceName}</dd>
                   </div>
                   <div className="connection-detail-item">
-                    <dt>设备平台</dt>
+                    <dt>{t('设备平台')}</dt>
                     <dd>
                       {state.devicePlatform
                         ? devicePlatformLabels[state.devicePlatform]
-                        : '未知'}
+                        : t('未知')}
                     </dd>
                   </div>
                   <div className="connection-detail-item">
-                    <dt>服务地址</dt>
+                    <dt>
+                      {t('服务地址')}
+                      </dt>
                     <dd className="mono-value">{state.url}</dd>
                   </div>
                   <div className="connection-detail-item">
-                    <dt>设备 ID</dt>
+                    <dt>
+                      {t('设备 ID')}
+                      </dt>
                     <dd className="mono-value">{state.deviceId}</dd>
                   </div>
                 </dl>
                 {state.issue && (
                   <p className="issue" role="status">
-                    {state.issue}
+                    {translateKnown(state.issue)}
                   </p>
                 )}
                 {failedMaterial && (
                   <dl className="settings-facts">
                     <div>
-                      <dt>采集记录上传失败</dt>
+                      <dt>{t('采集记录上传失败')}</dt>
                       <dd>
-                        {state.materialIssue}
+                        {translateKnown(state.materialIssue)}
                         <div className="setting-actions">
                           <button
                             type="button"
@@ -601,7 +650,7 @@ export function AgentSettings({
                               void change(() => api?.manageFailed(failedMaterial, true))
                             }
                           >
-                            重试此项
+                            {t('重试此项')}
                           </button>
                           <button
                             type="button"
@@ -610,7 +659,7 @@ export function AgentSettings({
                               void change(() => api?.manageFailed(failedMaterial, false))
                             }
                           >
-                            丢弃此项
+                            {t('丢弃此项')}
                           </button>
                         </div>
                       </dd>
@@ -621,7 +670,7 @@ export function AgentSettings({
             )}
             {!showConnection && (
               <>
-                <div className="connection-mode-tabs" role="tablist" aria-label="连接方式">
+                <div className="connection-mode-tabs" role="tablist" aria-label={t('连接方式')}>
                   <button
                     type="button"
                     role="tab"
@@ -632,8 +681,8 @@ export function AgentSettings({
                       setFeedback('')
                     }}
                   >
-                    配对链接
-                  </button>
+                      {t('配对链接')}
+                      </button>
                   <button
                     type="button"
                     role="tab"
@@ -644,7 +693,7 @@ export function AgentSettings({
                       setFeedback('')
                     }}
                   >
-                    手动配置
+                    {t('手动配置')}
                   </button>
                 </div>
                 {!manual ? (
@@ -656,10 +705,10 @@ export function AgentSettings({
                     }}
                   >
                     <p className="settings-note">
-                      在后端管理面板点击「添加设备」，复制一次性配对链接粘贴至下方即可自动完成配置。
+                      {t('在后端管理面板点击「添加设备」，复制一次性配对链接粘贴至下方即可自动完成配置。')}
                     </p>
                     <label>
-                      配对链接
+                      {t('配对链接')}
                       <input
                         className="mono-input"
                         value={pairValue}
@@ -681,7 +730,7 @@ export function AgentSettings({
                     </label>
                     <div className="connection-actions">
                       <Button type="submit" disabled={!api || busy}>
-                        {busy ? '正在配对…' : '配对并连接'}
+                        {busy ? t('正在配对…') : t('配对并连接')}
                       </Button>
                     </div>
                   </form>
@@ -695,11 +744,11 @@ export function AgentSettings({
                   >
                     <p className="settings-note connection-full-width">
                       {api
-                        ? '填写后端服务根地址（不含 /v1）、设备标识与访问令牌。'
-                        : '请打开 Purin 桌面应用以连接服务。'}
+                        ? t('填写后端服务根地址（不含 /v1）、设备标识与访问令牌。')
+                        : t('请打开 Purin 桌面应用以连接服务。')}
                     </p>
                     <label className="connection-full-width">
-                      服务地址
+                      {t('服务地址')}
                       <input
                         className="mono-input"
                         type="url"
@@ -711,7 +760,7 @@ export function AgentSettings({
                       />
                     </label>
                     <label>
-                      设备名称
+                      {t('设备名称')}
                       <input
                         value={deviceName}
                         disabled={busy}
@@ -721,7 +770,7 @@ export function AgentSettings({
                       />
                     </label>
                     <label>
-                      设备 ID
+                      {t('设备 ID')}
                       <input
                         className="mono-input"
                         value={deviceId}
@@ -731,7 +780,7 @@ export function AgentSettings({
                       />
                     </label>
                     <label className="connection-full-width">
-                      设备令牌
+                      {t('设备令牌')}
                       <div className="token-input-wrap">
                         <input
                           className="mono-input"
@@ -745,15 +794,15 @@ export function AgentSettings({
                             state.configured &&
                             state.url === url.trim() &&
                             state.deviceId === deviceId.trim()
-                              ? '留空以继续使用当前连接令牌'
+                              ? t('留空以继续使用当前连接令牌')
                               : 'Bearer token'
                           }
                         />
                         <button
                           type="button"
                           className="token-visibility-btn"
-                          aria-label={showToken ? '隐藏令牌' : '显示令牌'}
-                          title={showToken ? '隐藏令牌' : '显示令牌'}
+                          aria-label={showToken ? t('隐藏令牌') : t('显示令牌')}
+                          title={showToken ? t('隐藏令牌') : t('显示令牌')}
                           disabled={busy}
                           onClick={() => setShowToken((v) => !v)}
                         >
@@ -763,7 +812,7 @@ export function AgentSettings({
                     </label>
                     <div className="connection-actions connection-full-width">
                       <Button type="submit" disabled={!api || busy}>
-                        {busy ? '正在验证…' : '验证并保存'}
+                        {busy ? t('正在验证…') : t('验证并保存')}
                       </Button>
                     </div>
                   </form>
@@ -804,32 +853,30 @@ export function AgentSettings({
                     void change(() => api?.setCollection(enabled))
                   }}
                 />{' '}
-                采集桌面活动
+                {t('采集桌面活动')}
               </label>
               <p id="desktop-activity-description">
-                约每秒采样一次，未操作键鼠也会累计前台停留。切走或锁屏后上传本次停留及窗口标题变化，包括短停留。在后端管理面板的「历史记录 → 感知层」可查看原始记录和后端的过滤原因。
+                {t('约每秒采样一次，未操作键鼠也会累计前台停留。切走或锁屏后上传本次停留及窗口标题变化，包括短停留。在后端管理面板的「历史记录 → 感知层」可查看原始记录和后端的过滤原因。')}
               </p>
               {state.collecting && navigator.platform.startsWith('Mac') && (
                 <p>
-                  macOS 读取窗口标题可能需要在系统设置中允许辅助功能和自动化。
+                  {t('macOS 读取窗口标题可能需要在系统设置中允许辅助功能和自动化。')}
                 </p>
               )}
               {state.lastSpan && (
                 <p>
-                  最近一次停留 ·{' '}
-                  {new Date(state.lastSpan.ended_at).toLocaleString('zh-CN')}
+                  {t('最近一次停留 ·')}{' '}
+                  {new Date(state.lastSpan.ended_at).toLocaleString(language())}
                   {' · '}
-                  {state.lastSpan.foreground_app} · 约{' '}
-                  {Math.trunc(state.lastSpan.duration_seconds)} 秒
-                  {state.lastSpan.window_title &&
+                  {state.lastSpan.foreground_app}{t(' · 约 {0} 秒', Math.trunc(state.lastSpan.duration_seconds))}{state.lastSpan.window_title &&
                     ' · ' + state.lastSpan.window_title}
                   {state.lastSpan.input_segments?.length
-                    ? ` · ${state.lastSpan.input_segments.length} 段输入`
+                    ? t(' · {0} 段输入', state.lastSpan.input_segments.length)
                     : ''}
                 </p>
               )}
               {state.sampleIssue && (
-                <p role="status">桌面采样待重试 · {state.sampleIssue}</p>
+                <p role="status">{t('桌面采样待重试 · ')}{translateKnown(state.sampleIssue)}</p>
               )}
             </div>
             <div className="activity-settings">
@@ -846,13 +893,13 @@ export function AgentSettings({
                     void change(() => api?.setTextInput({ enabled }))
                   }}
                 />
-                采集前台文本输入
+                {t('采集前台文本输入')}
               </label>
               <p id="text-input-description">
-                通过系统辅助功能接口读取前台输入框的文本变化，跳过密码框，入队前遮盖疑似凭据、银行卡号和验证码。后端过滤空文本和超过 500 字的输入，并将保留的文本归到对应的窗口停留。
+                {t('通过系统辅助功能接口读取前台输入框的文本变化，跳过密码框，入队前遮盖疑似凭据、银行卡号和验证码。后端过滤空文本和超过 500 字的输入，并将保留的文本归到对应的窗口停留。')}
               </p>
               {state.textInputIssue && (
-                <p role="status">{state.textInputIssue}</p>
+                <p role="status">{translateKnown(state.textInputIssue)}</p>
               )}
             </div>
             <div className="activity-settings">
@@ -869,14 +916,13 @@ export function AgentSettings({
                     void change(() => api?.setScreenshots({ enabled }))
                   }}
                 />
-                采集前台窗口截图
+                {t('采集前台窗口截图')}
               </label>
               <p id="screenshot-description">
-                同一应用连续在前台停留满 10
-                分钟时截一张，切换标签页或窗口标题不会重新计时。
+                {t('同一应用连续在前台停留满 10 分钟时截一张，切换标签页或窗口标题不会重新计时。')}
               </p>
               {state.screenshotIssue && (
-                <p role="status">{state.screenshotIssue}</p>
+                <p role="status">{translateKnown(state.screenshotIssue)}</p>
               )}
             </div>
           </>

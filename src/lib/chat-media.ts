@@ -1,3 +1,4 @@
+import { t } from './i18n.ts'
 import type { ChatFileRef } from './desktop'
 
 export const maxAttachments = 4
@@ -65,7 +66,7 @@ export type DraftAttachment =
 
 export async function prepareAttachment(file: File): Promise<DraftAttachment> {
   if (file.size > 32 * 1024 * 1024)
-    throw new Error(file.name + ' 超过单个附件 32 MiB 的限制')
+    throw new Error(file.name + t(' 超过单个附件 32 MiB 的限制'))
   const untyped = !file.type || file.type === 'application/octet-stream'
   if (!imageTypes.includes(file.type) && !(untyped && imageName.test(file.name)))
     return { kind: 'file', id: crypto.randomUUID(), name: file.name, file }
@@ -73,7 +74,7 @@ export async function prepareAttachment(file: File): Promise<DraftAttachment> {
   try {
     const canvas = document.createElement('canvas')
     const ctx = canvas.getContext('2d', { alpha: false })
-    if (!ctx) throw new Error('无法处理这张图片')
+    if (!ctx) throw new Error(t('无法处理这张图片'))
     let scale = Math.min(1, 1920 / Math.max(bitmap.width, bitmap.height))
     for (;;) {
       canvas.width = Math.max(1, Math.round(bitmap.width * scale))
@@ -83,7 +84,7 @@ export async function prepareAttachment(file: File): Promise<DraftAttachment> {
       ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
       const url = canvas.toDataURL('image/jpeg', 0.88)
       if (!url.startsWith('data:image/jpeg;base64,'))
-        throw new Error('图片转换失败')
+        throw new Error(t('图片转换失败'))
       if (url.length <= 699071)
         return { kind: 'image', id: crypto.randomUUID(), name: file.name, url }
       scale *= 0.8
@@ -100,7 +101,7 @@ export async function speechWav(recording: Blob): Promise<ArrayBuffer> {
   )
   const samples = audio.getChannelData(0)
   if (!samples.length || samples.length > 120 * 16000)
-    throw new Error('录音为空或超过两分钟')
+    throw new Error(t('录音为空或超过两分钟'))
   const buffer = new ArrayBuffer(44 + samples.length * 2)
   const view = new DataView(buffer)
   const tag = (offset: number, value: string) =>

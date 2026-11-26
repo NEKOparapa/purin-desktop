@@ -1,3 +1,4 @@
+import { language, translateKnown, t } from '@/lib/i18n'
 import { useEffect, useState } from 'react'
 import { FolderOpen, Plus, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -11,17 +12,17 @@ import './connector-settings.css'
 
 function cleanError(error: unknown, fallback: string) {
   if (error instanceof Error && error.message) {
-    return error.message.replace(/^.*?Error: /, '')
+    return translateKnown(error.message.replace(/^.*?Error: /, ''))
   }
   return fallback
 }
 
 function statusLabel(item: ConnectorItem) {
-  if (item.connected) return '已连接'
-  if (item.status === 'pending_auth') return '待授权'
-  if (item.status === 'offline') return '离线'
-  if (item.status === 'unverified') return '未验证'
-  return '未连接'
+  if (item.connected) return t('已连接')
+  if (item.status === 'pending_auth') return t('待授权')
+  if (item.status === 'offline') return t('离线')
+  if (item.status === 'unverified') return t('未验证')
+  return t('未连接')
 }
 
 export function ConnectorSettings({
@@ -81,7 +82,7 @@ export function ConnectorSettings({
       },
       (err) => {
         if (!active) return
-        setError(cleanError(err, '读取连接器列表失败'))
+        setError(cleanError(err, t('读取连接器列表失败')))
         setLoading(false)
       },
     )
@@ -93,7 +94,7 @@ export function ConnectorSettings({
   if (!api || !api.connectors || !api.setObsidianConnector) {
     return (
       <p className="settings-note">
-        请打开最新版 Purin 桌面应用以管理连接器。
+        {t('请打开最新版 Purin 桌面应用以管理连接器。')}
       </p>
     )
   }
@@ -113,10 +114,10 @@ export function ConnectorSettings({
         connectionRevision: revision,
       })
       setObsidian(next)
-      setFeedback(`已连接 Obsidian 仓库「${next.vaultName}」（共 ${next.noteCount} 篇笔记）。`)
+      setFeedback(t('已连接 Obsidian 仓库「{0}」（共 {1} 篇笔记）。', next.vaultName, next.noteCount))
       reload()
     } catch (err) {
-      setError(cleanError(err, '连接 Obsidian 失败'))
+      setError(cleanError(err, t('连接 Obsidian 失败')))
     } finally {
       setBusy(false)
     }
@@ -140,10 +141,10 @@ export function ConnectorSettings({
         enabled,
         connectionRevision: revision,
       })
-      setFeedback(enabled ? '已连接本机命令行连接器。' : '已断开本机命令行连接器。')
+      setFeedback(enabled ? t('已连接本机命令行连接器。') : t('已断开本机命令行连接器。'))
       reload()
     } catch (err) {
-      setError(cleanError(err, '切换本机命令行连接器失败'))
+      setError(cleanError(err, t('切换本机命令行连接器失败')))
     } finally {
       setBusy(false)
     }
@@ -157,7 +158,7 @@ export function ConnectorSettings({
     try {
       await api.setMacConnector({ id: app.id, enabled: !app.enabled, connectionRevision: revision })
     } catch (err) {
-      setError(cleanError(err, '更新 Mac 连接器失败'))
+      setError(cleanError(err, t('更新 Mac 连接器失败')))
     } finally {
       setBusy(false)
     }
@@ -174,10 +175,10 @@ export function ConnectorSettings({
         connectionRevision: revision,
       })
       setObsidian(next)
-      setFeedback('已断开 Obsidian 连接器。')
+      setFeedback(t('已断开 Obsidian 连接器。'))
       reload()
     } catch (err) {
-      setError(cleanError(err, '断开 Obsidian 失败'))
+      setError(cleanError(err, t('断开 Obsidian 失败')))
     } finally {
       setBusy(false)
     }
@@ -213,17 +214,17 @@ export function ConnectorSettings({
       setMcpPublisher('')
       setMcpAuthValue('')
       if (res.verify_error) {
-        setFeedback(`已添加「${res.item.name}」，但验证未通过：${res.verify_error}`)
+        setFeedback(t('已添加「{0}」，但验证未通过：{1}', res.item.name, res.verify_error))
       } else if (res.item.connected) {
         setFeedback(
-          `已连接「${res.item.name}」${res.tool_count !== null ? `（发现 ${res.tool_count} 个工具）` : ''}。`,
+          t('已连接「{0}」{1}。', res.item.name, res.tool_count !== null ? t('（发现 {0} 个工具）', res.tool_count) : ''),
         )
       } else {
-        setFeedback(`已登记「${res.item.name}」（待授权），请配置凭据后使用。`)
+        setFeedback(t('已登记「{0}」（待授权），请配置凭据后使用。', res.item.name))
       }
       reload()
     } catch (err) {
-      setError(cleanError(err, '添加 MCP 服务失败'))
+      setError(cleanError(err, t('添加 MCP 服务失败')))
     } finally {
       setBusy(false)
     }
@@ -247,15 +248,15 @@ export function ConnectorSettings({
       setCredTarget(null)
       setCredValue('')
       if (res.verify_error) {
-        setError(`凭据已保存，但验证失败：${res.verify_error}`)
+        setError(t('凭据已保存，但验证失败：{0}', res.verify_error))
       } else {
         setFeedback(
-          `「${item.name}」凭据已验证通过${res.tool_count !== null ? `（发现 ${res.tool_count} 个工具）` : ''}。`,
+          t('「{0}」凭据已验证通过{1}。', item.name, res.tool_count !== null ? t('（发现 {0} 个工具）', res.tool_count) : ''),
         )
       }
       reload()
     } catch (err) {
-      setError(cleanError(err, '保存凭据失败'))
+      setError(cleanError(err, t('保存凭据失败')))
     } finally {
       setBusy(false)
     }
@@ -269,15 +270,15 @@ export function ConnectorSettings({
     try {
       const res = await api.testConnector(item.id)
       if (res.verify_error) {
-        setError(`「${item.name}」连接测试失败：${res.verify_error}`)
+        setError(t('「{0}」连接测试失败：{1}', item.name, res.verify_error))
       } else {
         setFeedback(
-          `「${item.name}」连接正常${res.tool_count !== null ? `（发现 ${res.tool_count} 个工具）` : ''}。`,
+          t('「{0}」连接正常{1}。', item.name, res.tool_count !== null ? t('（发现 {0} 个工具）', res.tool_count) : ''),
         )
       }
       reload()
     } catch (err) {
-      setError(cleanError(err, '测试连接器失败'))
+      setError(cleanError(err, t('测试连接器失败')))
     } finally {
       setBusy(false)
     }
@@ -290,10 +291,10 @@ export function ConnectorSettings({
     setFeedback('')
     try {
       await api.deleteConnector(item.id)
-      setFeedback(`已移除连接器「${item.name}」。`)
+      setFeedback(t('已移除连接器「{0}」。', item.name))
       reload()
     } catch (err) {
-      setError(cleanError(err, '移除连接器失败'))
+      setError(cleanError(err, t('移除连接器失败')))
     } finally {
       setBusy(false)
     }
@@ -312,7 +313,7 @@ export function ConnectorSettings({
         </p>
       )}
 
-      <section className="connector-group" aria-label="Windows 连接器">
+      <section className="connector-group" aria-label={t('Windows 连接器')}>
         <div className="connector-group-header">
           <h4>Windows</h4>
         </div>
@@ -322,11 +323,11 @@ export function ConnectorSettings({
               <div className="connector-card-title">
                 <h5>Obsidian</h5>
                 <Badge variant={obsidian?.enabled ? 'default' : 'secondary'}>
-                  {obsidian?.enabled ? '已连接' : '未连接'}
+                  {obsidian?.enabled ? t('已连接') : t('未连接')}
                 </Badge>
               </div>
               <p className="connector-card-meta">
-                授权 Agent 在指定仓库目录内检索、阅读和写入 Markdown 笔记（无需开启终端命令行权限）。
+                {t('授权 Agent 在指定仓库目录内检索、阅读和写入 Markdown 笔记（无需开启终端命令行权限）。')}
               </p>
             </div>
             <div className="connector-card-actions">
@@ -338,7 +339,7 @@ export function ConnectorSettings({
                   disabled={busy}
                   onClick={() => void disconnectObsidian()}
                 >
-                  断开
+                  {t('断开')}
                 </Button>
               ) : (
                 <Button
@@ -349,7 +350,7 @@ export function ConnectorSettings({
                   onClick={() => void pickObsidianFolder()}
                 >
                   <FolderOpen size={14} aria-hidden="true" />
-                  选择仓库
+                  {t('选择仓库')}
                 </Button>
               )}
             </div>
@@ -358,9 +359,9 @@ export function ConnectorSettings({
           {obsidian?.enabled && (
             <div className="connector-vault-bar">
               <div className="connector-vault-line" title={obsidian.vaultPath}>
-                <span>当前仓库：</span>
+                <span>{t('当前仓库：')}</span>
                 <code>{obsidian.vaultPath}</code>
-                <span>（{obsidian.noteCount} 篇笔记）</span>
+                <span>{t('（{0} 篇笔记）', obsidian.noteCount)}</span>
               </div>
               <Button
                 type="button"
@@ -370,14 +371,14 @@ export function ConnectorSettings({
                 onClick={() => void pickObsidianFolder()}
               >
                 <FolderOpen size={13} aria-hidden="true" />
-                切换仓库
+                {t('切换仓库')}
               </Button>
             </div>
           )}
 
           {!obsidian?.enabled && obsidian?.detectedVaults?.length ? (
             <div className="connector-vault-info">
-              <span>检测到本机 Obsidian 仓库（点击一键连接）：</span>
+              <span>{t('检测到本机 Obsidian 仓库（点击一键连接）：')}</span>
               <div className="connector-detected-list">
                 {obsidian.detectedVaults.map((vault) => (
                   <Button
@@ -390,7 +391,7 @@ export function ConnectorSettings({
                     onClick={() => void connectObsidianPath(vault.path)}
                   >
                     {vault.name}
-                    {vault.open ? '（当前打开）' : ''}
+                    {vault.open ? t('（当前打开）') : ''}
                   </Button>
                 ))}
               </div>
@@ -399,7 +400,7 @@ export function ConnectorSettings({
 
           {!configured && (
             <p className="connector-card-meta">
-              提示：连接后端服务后，Obsidian 连接器会自动同步给主 Agent 使用。
+              {t('提示：连接后端服务后，Obsidian 连接器会自动同步给主 Agent 使用。')}
             </p>
           )}
         </article>
@@ -408,13 +409,13 @@ export function ConnectorSettings({
           <div className="connector-card-head">
             <div>
               <div className="connector-card-title">
-                <h5>本机命令行</h5>
+                <h5>{t('本机命令行')}</h5>
                 <Badge variant={remoteCommandsEnabled ? 'default' : 'secondary'}>
-                  {remoteCommandsEnabled ? '已连接' : '未连接'}
+                  {remoteCommandsEnabled ? t('已连接') : t('未连接')}
                 </Badge>
               </div>
               <p className="connector-card-meta">
-                开启后，主 Agent 可以当前用户权限在本机运行命令（高权限，关闭会立即中止正在运行的命令）。调用记录可在后端管理面板的「历史记录 → 连接器」中查看。
+                {t('开启后，主 Agent 可以当前用户权限在本机运行命令（高权限，关闭会立即中止正在运行的命令）。调用记录可在后端管理面板的「历史记录 → 连接器」中查看。')}
               </p>
             </div>
             <div className="connector-card-actions">
@@ -429,52 +430,52 @@ export function ConnectorSettings({
                 }
                 onClick={() => void toggleTerminalConnector(!remoteCommandsEnabled)}
               >
-                {remoteCommandsEnabled ? '断开' : '连接'}
+                {remoteCommandsEnabled ? t('断开') : t('连接')}
               </Button>
             </div>
           </div>
           <div className="connector-vault-info">
             <span>
               {!configured
-                ? '连接设备后可启用本机命令行。'
+                ? t('连接设备后可启用本机命令行。')
                 : remoteTools?.length
-                  ? `可用工具：${remoteTools.join('、')}`
-                  : '暂无可用命令行工具（请确认使用 HTTPS 或本机地址连接）。'}
+                  ? t('可用工具：{0}', remoteTools.join(language() === 'en' ? ', ' : '、'))
+                  : t('暂无可用命令行工具（请确认使用 HTTPS 或本机地址连接）。')}
             </span>
-            {remoteIssue && <span role="status">{remoteIssue}</span>}
+            {remoteIssue && <span role="status">{translateKnown(remoteIssue)}</span>}
           </div>
         </article>
       </section>
 
       {macConnectors.length > 0 && (
-        <section className="connector-group" aria-label="Mac 应用连接器">
+        <section className="connector-group" aria-label={t('Mac 应用连接器')}>
           <div className="connector-group-header">
-            <h4>Mac 应用</h4>
+            <h4>{t('Mac 应用')}</h4>
           </div>
           {!canSetMacConnector && (
-            <p className="settings-note">这些连接器仅可在 macOS 上启用。</p>
+            <p className="settings-note">{t('这些连接器仅可在 macOS 上启用。')}</p>
           )}
           {macConnectors.map((app) => (
             <article className="connector-card" key={app.id}>
               <div className="connector-card-head">
                 <div>
                   <div className="connector-card-title">
-                    <h5>{app.name}</h5>
+                    <h5>{translateKnown(app.name)}</h5>
                     <Badge variant={app.enabled ? 'default' : 'secondary'}>
-                      {app.enabled ? '已启用' : '未启用'}
+                      {app.enabled ? t('已启用') : t('未启用')}
                     </Badge>
                   </div>
-                  <p className="connector-card-meta">{app.description}</p>
+                  <p className="connector-card-meta">{translateKnown(app.description)}</p>
                 </div>
                 <Button
                   type="button"
                   size="sm"
                   variant={app.enabled ? 'ghost' : 'outline'}
-                  aria-label={`${app.enabled ? '关闭' : '启用'}${app.name}`}
+                  aria-label={t(app.enabled ? '关闭 {0}' : '启用 {0}', translateKnown(app.name))}
                   disabled={!canSetMacConnector || busy || !configured || revision === undefined}
                   onClick={() => void toggleMacConnector(app)}
                 >
-                  {app.enabled ? '关闭' : '启用'}
+                  {app.enabled ? t('关闭') : t('启用')}
                 </Button>
               </div>
             </article>
@@ -482,16 +483,16 @@ export function ConnectorSettings({
           {canSetMacConnector && (
             <p className="settings-note">
               {configured
-                ? '首次调用访达、备忘录或音乐时，macOS 可能会请求自动化权限。'
-                : '连接设备后可启用 Mac 应用。'}
+                ? t('首次调用访达、备忘录或音乐时，macOS 可能会请求自动化权限。')
+                : t('连接设备后可启用 Mac 应用。')}
             </p>
           )}
         </section>
       )}
 
-      <section className="connector-group" aria-label="MCP 服务">
+      <section className="connector-group" aria-label={t('MCP 服务')}>
         <div className="connector-group-header">
-          <h4>MCP 服务</h4>
+          <h4>{t('MCP 服务')}</h4>
           <Button
             type="button"
             variant="outline"
@@ -500,13 +501,13 @@ export function ConnectorSettings({
             onClick={() => setAddingMcp((prev) => !prev)}
           >
             <Plus size={14} aria-hidden="true" />
-            添加 MCP
+            {t('添加 MCP')}
           </Button>
         </div>
 
         {!configured && (
           <p className="settings-note">
-            请先在「设备配对」中连接后端服务，再添加或管理 MCP 服务。
+            {t('请先在「设备配对」中连接后端服务，再添加或管理 MCP 服务。')}
           </p>
         )}
 
@@ -517,28 +518,28 @@ export function ConnectorSettings({
           >
             <div className="connector-form-grid">
               <label>
-                显示名
+                {t('显示名')}
                 <input
                   value={mcpName}
                   onChange={(e) => setMcpName(e.target.value)}
-                  placeholder="例如：GitHub / Notion"
+                  placeholder={t('例如：GitHub / Notion')}
                   required
                 />
               </label>
               <label>
-                来源类型
+                {t('来源类型')}
                 <select
                   value={mcpSourceKind}
                   onChange={(e) =>
                     setMcpSourceKind(e.target.value as 'official' | 'third_party')
                   }
                 >
-                  <option value="official">官方 (official)</option>
-                  <option value="third_party">第三方 (third_party)</option>
+                  <option value="official">{t('官方 (official)')}</option>
+                  <option value="third_party">{t('第三方 (third_party)')}</option>
                 </select>
               </label>
               <label className="connector-span-2">
-                Streamable HTTP 地址（仅支持 https://）
+                {t('Streamable HTTP 地址（仅支持 https://）')}
                 <input
                   type="url"
                   value={mcpEndpoint}
@@ -548,7 +549,7 @@ export function ConnectorSettings({
                 />
               </label>
               <label>
-                官方文档地址
+                {t('官方文档地址')}
                 <input
                   type="url"
                   value={mcpFoundAt}
@@ -557,15 +558,15 @@ export function ConnectorSettings({
                 />
               </label>
               <label>
-                运营方
+                {t('运营方')}
                 <input
                   value={mcpPublisher}
                   onChange={(e) => setMcpPublisher(e.target.value)}
-                  placeholder="例如：GitHub Inc."
+                  placeholder={t('例如：GitHub Inc.')}
                 />
               </label>
               <label>
-                鉴权方式
+                {t('鉴权方式')}
                 <select
                   value={mcpAuthType}
                   onChange={(e) => {
@@ -575,38 +576,38 @@ export function ConnectorSettings({
                     if (next === 'query' && mcpAuthKey === 'Authorization') setMcpAuthKey('api_key')
                   }}
                 >
-                  <option value="none">无需凭据</option>
-                  <option value="header">请求头 (Header)</option>
-                  <option value="query">URL 参数 (Query)</option>
+                  <option value="none">{t('无需凭据')}</option>
+                  <option value="header">{t('请求头 (Header)')}</option>
+                  <option value="query">{t('URL 参数 (Query)')}</option>
                 </select>
               </label>
               {mcpAuthType !== 'none' && (
                 <label>
-                  {mcpAuthType === 'header' ? '请求头名称' : 'Query 参数名'}
+                  {mcpAuthType === 'header' ? t('请求头名称') : t('Query 参数名')}
                   <input
                     value={mcpAuthKey}
                     onChange={(e) => setMcpAuthKey(e.target.value)}
-                    placeholder={mcpAuthType === 'header' ? 'X-Api-Key 或 Authorization' : 'api_key'}
+                    placeholder={mcpAuthType === 'header' ? t('X-Api-Key 或 Authorization') : 'api_key'}
                     required
                   />
                 </label>
               )}
               {mcpAuthType !== 'none' && (
                 <label className="connector-span-2">
-                  凭据值（可选，留空则保存为待授权）
+                  {t('凭据值（可选，留空则保存为待授权）')}
                   <input
                     type="password"
                     autoComplete="off"
                     value={mcpAuthValue}
                     onChange={(e) => setMcpAuthValue(e.target.value)}
-                    placeholder="API Key 或 Token"
+                    placeholder={t('API Key 或 Token')}
                   />
                 </label>
               )}
             </div>
             <div className="connection-actions">
               <Button type="submit" size="sm" disabled={busy}>
-                {busy ? '保存并验证中…' : '保存并验证'}
+                {busy ? t('保存并验证中…') : t('保存并验证')}
               </Button>
               <Button
                 type="button"
@@ -615,15 +616,15 @@ export function ConnectorSettings({
                 disabled={busy}
                 onClick={() => setAddingMcp(false)}
               >
-                取消
-              </Button>
+                    {t('取消')}
+                  </Button>
             </div>
           </form>
         )}
 
         {configured && !loading && !error && mcpItems.length === 0 && !addingMcp && (
           <p className="settings-note">
-            暂未添加 MCP 服务。点击右上角「添加 MCP」，或直接在对话中让 Agent 使用 ConnectorSetup 登记。
+            {t('暂未添加 MCP 服务。点击右上角「添加 MCP」，或直接在对话中让 Agent 使用 ConnectorSetup 登记。')}
           </p>
         )}
 
@@ -639,7 +640,7 @@ export function ConnectorSettings({
                   <Badge variant="outline">mcp</Badge>
                   {item.source && (
                     <Badge variant="outline">
-                      {item.source.kind === 'official' ? '官方' : '第三方'}
+                      {item.source.kind === 'official' ? t('官方') : t('第三方')}
                     </Badge>
                   )}
                 </div>
@@ -660,7 +661,7 @@ export function ConnectorSettings({
                     setCredValue('')
                   }}
                 >
-                  {item.has_credentials ? '更新凭据' : '配置凭据'}
+                  {item.has_credentials ? t('更新凭据') : t('配置凭据')}
                 </Button>
                 <Button
                   type="button"
@@ -669,13 +670,13 @@ export function ConnectorSettings({
                   disabled={busy}
                   onClick={() => void testMcp(item)}
                 >
-                  测试
+                  {t('测试')}
                 </Button>
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon-sm"
-                  aria-label={`删除 ${item.name}`}
+                  aria-label={t('删除 {0}', item.name)}
                   disabled={busy}
                   onClick={() => void removeConnector(item)}
                 >
@@ -703,13 +704,13 @@ export function ConnectorSettings({
                     autoComplete="off"
                     value={credValue}
                     onChange={(e) => setCredValue(e.target.value)}
-                    placeholder="输入凭据（保存后立即验证，不回显）"
+                    placeholder={t('输入凭据（保存后立即验证，不回显）')}
                     required
                   />
                 </label>
                 <div className="connection-actions">
                   <Button type="submit" size="sm" disabled={busy || !credValue.trim()}>
-                    保存并验证
+                    {t('保存并验证')}
                   </Button>
                   <Button
                     type="button"
@@ -721,7 +722,7 @@ export function ConnectorSettings({
                       setCredValue('')
                     }}
                   >
-                    取消
+                    {t('取消')}
                   </Button>
                 </div>
               </form>

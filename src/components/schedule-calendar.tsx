@@ -1,3 +1,4 @@
+import { translateKnown, dateFormatter, t } from '@/lib/i18n'
 import {
   useEffect,
   useLayoutEffect,
@@ -11,32 +12,33 @@ import type { NoticeAlert, ScheduleEntry } from '@/lib/desktop'
 import { NotificationInbox } from './notification-inbox'
 import './schedule-calendar.css'
 
-const monthLabel = new Intl.DateTimeFormat('zh-CN', {
+const monthLabel = dateFormatter({
   year: 'numeric',
   month: 'long',
 })
-const shortDayLabel = new Intl.DateTimeFormat('zh-CN', {
+const shortDayLabel = dateFormatter({
   month: 'numeric',
   day: 'numeric',
 })
-const weekdayLabel = new Intl.DateTimeFormat('zh-CN', { weekday: 'long' })
-const fullDate = new Intl.DateTimeFormat('zh-CN', {
+const weekdayLabel = dateFormatter({ weekday: 'long' })
+const fullDate = dateFormatter({
   year: 'numeric',
   month: 'long',
   day: 'numeric',
 })
-const time = new Intl.DateTimeFormat('zh-CN', {
+const time = dateFormatter({
   hour: '2-digit',
   minute: '2-digit',
   hourCycle: 'h23',
 })
-const exactTime = new Intl.DateTimeFormat('zh-CN', {
+const exactTime = dateFormatter({
   hour: '2-digit',
   minute: '2-digit',
   second: '2-digit',
   hourCycle: 'h23',
 })
-const weekdays = ['一', '二', '三', '四', '五', '六', '日']
+const weekdays = Array.from({ length: 7 }, (_, i) => new Date(2024, 0, i + 1))
+const weekdayShort = dateFormatter({ weekday: 'short' })
 
 function dayKey(date: Date) {
   return [date.getFullYear(), date.getMonth() + 1, date.getDate()].join('-')
@@ -88,7 +90,7 @@ function useScheduleEntries(
         error: '',
       }))
       try {
-        if (!api?.schedule) throw new Error('请更新桌面端后查看日历。')
+        if (!api?.schedule) throw new Error(t('请更新桌面端后查看日历。'))
         const entries = new Map<string, ScheduleEntry>()
         const cursors = new Set<string>()
         let cursor: string | undefined
@@ -98,7 +100,7 @@ function useScheduleEntries(
           for (const item of page.items) entries.set(item.id, item)
           if (page.next_cursor === null) break
           if (!page.next_cursor || cursors.has(page.next_cursor))
-            throw new Error('日历分页读取失败，稍后会自动重试。')
+            throw new Error(t('日历分页读取失败，稍后会自动重试。'))
           cursor = page.next_cursor
           cursors.add(cursor)
         } while (active)
@@ -111,8 +113,8 @@ function useScheduleEntries(
       } catch (e) {
         const error =
           e instanceof Error
-            ? e.message.replace(/^.*?Error: /, '')
-            : '日历读取失败'
+            ? translateKnown(e.message.replace(/^.*?Error: /, ''))
+            : t('日历读取失败')
         if (active)
           setResult((previous) => ({
             start,
@@ -184,7 +186,7 @@ export function ScheduleCalendar({
   const weekStart = shiftDay(selected, -((selected.getDay() + 6) % 7))
   const start = expanded ? first : weekStart
   const end = expanded ? new Date(year, month + 1, 1) : shiftDay(start, 7)
-  const heading = monthLabel.formatRange(start, shiftDay(end, -1))
+  const heading = monthLabel().formatRange(start, shiftDay(end, -1))
   const offset = expanded ? (first.getDay() + 6) % 7 : 0
   const trailing = expanded ? (7 - ((offset + days) % 7)) % 7 : 0
   const totalCells = expanded ? offset + days + trailing : 7
@@ -268,34 +270,34 @@ export function ScheduleCalendar({
 
   return (
     <div className="schedule-layout">
-      <section className="schedule-dates" aria-label="日历">
+      <section className="schedule-dates" aria-label={t('日历')}>
         <div className="calendar-toolbar">
           <h2
             className="calendar-dateline"
-            aria-label={fullDate.format(selected)}
+            aria-label={fullDate().format(selected)}
           >
             <strong>{String(selected.getDate()).padStart(2, '0')}</strong>
             <span>
-              <small>{monthLabel.format(selected)}</small>
-              <b>{weekdayLabel.format(selected)}</b>
+              <small>{monthLabel().format(selected)}</small>
+              <b>{weekdayLabel().format(selected)}</b>
             </span>
           </h2>
           <div className="month-switch">
             <button
-              aria-label={expanded ? '上个月' : '上一周'}
+              aria-label={expanded ? t('上个月') : t('上一周')}
               onClick={() => changePeriod(-1)}
             >
               <ChevronLeft size={16} />
             </button>
             <button
               className="calendar-today"
-              title="回到今天"
+              title={t('回到今天')}
               onClick={() => select(new Date())}
             >
-              今天
+              {t('今天')}
             </button>
             <button
-              aria-label={expanded ? '下个月' : '下一周'}
+              aria-label={expanded ? t('下个月') : t('下一周')}
               onClick={() => changePeriod(1)}
             >
               <ChevronRight size={16} />
@@ -309,8 +311,8 @@ export function ScheduleCalendar({
           aria-label={heading}
         >
           {weekdays.map((day) => (
-            <span className="weekday" key={day} aria-label={'星期' + day}>
-              {day}
+            <span className="weekday" key={day.getDay()} aria-label={weekdayLabel().format(day)}>
+              {weekdayShort().format(day)}
             </span>
           ))}
           {Array.from({ length: totalCells }, (_, i) => {
@@ -325,13 +327,13 @@ export function ScheduleCalendar({
             const agendaCount = events.length - noticeCount
             const counts =
               !outside && items
-                ? `，${agendaCount}项安排，${noticeCount}条通知`
+                ? t('，{0}项安排，{1}条通知', agendaCount, noticeCount)
                 : ''
             const preview = events
               .slice(0, 3)
               .map(
                 (e) =>
-                  time.format(new Date(e.trigger_at)) +
+                  time().format(new Date(e.trigger_at)) +
                   ' ' +
                   (e.notification?.title ?? e.title),
               )
@@ -341,11 +343,11 @@ export function ScheduleCalendar({
                 className="calendar-cell"
                 data-outside={outside}
                 aria-label={
-                  fullDate.format(date) +
-                  (key === today ? '，今天' : '') +
+                  fullDate().format(date) +
+                  (key === today ? t('，今天') : '') +
                   counts
                 }
-                title={[fullDate.format(date), ...preview].join('\n')}
+                title={[fullDate().format(date), ...preview].join('\n')}
                 aria-pressed={chosen}
                 aria-current={key === today ? 'date' : undefined}
                 tabIndex={chosen ? 0 : -1}
@@ -365,9 +367,9 @@ export function ScheduleCalendar({
         <footer className="calendar-foot">
           <span className="calendar-legend">
             <i className="agenda-mark" />
-            安排
+            {t('安排')}
             <i className="notice-mark" />
-            通知
+            {t('通知')}
           </span>
           <button
             className="calendar-mode"
@@ -375,7 +377,7 @@ export function ScheduleCalendar({
             aria-expanded={expanded}
             onClick={() => setExpanded(!expanded)}
           >
-            {expanded ? '收起月历' : '展开月历'}
+            {expanded ? t('收起月历') : t('展开月历')}
             <ChevronDown size={13} />
           </button>
         </footer>
@@ -384,31 +386,31 @@ export function ScheduleCalendar({
         {error && (
           <p className="calendar-error" role="alert">
             {error}
-            {items && ' 当前显示上次读取的安排。'}
+            {items && t(' 当前显示上次读取的安排。')}
           </p>
         )}
         {!connected ? (
           <div className="calendar-connect">
-            <p>连接主 Agent 后可查看安排和通知。</p>
-            <button onClick={settings}>打开连接设置</button>
+            <p>{t('连接主 Agent 后可查看安排和通知。')}</p>
+            <button onClick={settings}>{t('打开连接设置')}</button>
           </div>
         ) : (
           <>
-            <section className="calendar-agenda" aria-label="当日安排">
+            <section className="calendar-agenda" aria-label={t('当日安排')}>
               <header className="agenda-heading">
-                <h2>当日安排{items && <small>{agenda.length}</small>}</h2>
+                <h2>{t('当日安排')}{items && <small>{agenda.length}</small>}</h2>
                 {mixedStates && (
                   <label className="agenda-filter">
                     <select
-                      aria-label="筛选当日安排"
+                      aria-label={t('筛选当日安排')}
                       value={filter}
                       onChange={(e) =>
                         setAgendaFilter(e.target.value as AgendaFilter)
                       }
                     >
-                      <option value="all">全部状态</option>
-                      <option value="pending">待触发</option>
-                      <option value="triggered">已触发</option>
+                      <option value="all">{t('全部状态')}</option>
+                      <option value="pending">{t('待触发')}</option>
+                      <option value="triggered">{t('已触发')}</option>
                     </select>
                     <ChevronDown size={13} aria-hidden="true" />
                   </label>
@@ -417,17 +419,15 @@ export function ScheduleCalendar({
               {items === null || !agenda.length ? (
                 <p className="agenda-empty" role="status">
                   {items
-                    ? '当天没有安排'
+                    ? t('当天没有安排')
                     : error
-                      ? '尚未获取当天安排'
-                      : '正在读取安排…'}
+                      ? t('尚未获取当天安排')
+                      : t('正在读取安排…')}
                   {nearest && (
                     <button
                       className="calendar-nearest"
                       onClick={() => select(new Date(nearest.trigger_at))}
-                    >
-                      查看 {shortDayLabel.format(new Date(nearest.trigger_at))}{' '}
-                      日程 <ChevronRight size={13} />
+                    >{t('查看 {0} 日程', shortDayLabel().format(new Date(nearest.trigger_at)))} <ChevronRight size={13} />
                     </button>
                   )}
                 </p>
@@ -437,8 +437,8 @@ export function ScheduleCalendar({
                     <li key={item.id}>
                       <time dateTime={item.trigger_at}>
                         {(new Date(item.trigger_at).getSeconds()
-                          ? exactTime
-                          : time
+                          ? exactTime()
+                          : time()
                         ).format(new Date(item.trigger_at))}
                       </time>
                       <div className="agenda-entry">
@@ -446,16 +446,16 @@ export function ScheduleCalendar({
                         {item.content && <p>{item.content}</p>}
                         <div className="agenda-meta">
                           <span>
-                            {item.status === 'triggered' ? '已触发' : '待触发'}
+                            {item.status === 'triggered' ? t('已触发') : t('待触发')}
                           </span>
                           <span>
                             {{
-                              notify_agent: '通知主 Agent',
-                              notify_device: '发送设备通知',
+                              notify_agent: t('通知主 Agent'),
+                              notify_device: t('发送设备通知'),
                             }[item.action] ?? item.action}
                           </span>
                           {next?.id === item.id && (
-                            <span className="agenda-next">下一项</span>
+                            <span className="agenda-next">{t('下一项')}</span>
                           )}
                         </div>
                       </div>

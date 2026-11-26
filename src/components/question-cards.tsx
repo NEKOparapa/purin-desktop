@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n'
 import { useState } from 'react'
 import { Check, ChevronLeft, ChevronRight, HelpCircle, Send, X } from 'lucide-react'
 import type { PendingQuestion } from '../lib/desktop'
@@ -46,7 +47,7 @@ function QuestionCard({
         answerText: customText.trim(),
       })
     } catch (err) {
-      setError(err instanceof Error ? err.message : '提交回答失败，请重试')
+      setError(err instanceof Error ? err.message : t('提交回答失败，请重试'))
     } finally {
       setSubmitting(false)
     }
@@ -59,27 +60,27 @@ function QuestionCard({
     try {
       await window.purin?.dismissQuestion(item.id)
     } catch (err) {
-      setError(err instanceof Error ? err.message : '忽略提问失败，请重试')
+      setError(err instanceof Error ? err.message : t('忽略提问失败，请重试'))
     } finally {
       setSubmitting(false)
     }
   }
 
   return (
-    <article className="question-card" aria-label={`待回答提问：${item.title}`}>
+    <article className="question-card" aria-label={t('待回答提问：{0}', item.title)}>
       <header className="question-card-header">
         <div className="question-card-badge">
           <HelpCircle size={15} aria-hidden="true" />
-          <span>待回答提问</span>
-          {item.multi_select && <span className="question-card-mode">多选</span>}
+          <span>{t('待回答提问')}</span>
+          {item.multi_select && <span className="question-card-mode">{t('多选')}</span>}
         </div>
         <div className="question-card-controls">
           {total > 1 && (
-            <div className="question-card-pager" aria-label="切换待回答提问">
+            <div className="question-card-pager" aria-label={t('切换待回答提问')}>
               <button
                 type="button"
                 className="question-icon-btn"
-                aria-label="上一条提问"
+                aria-label={t('上一条提问')}
                 onClick={onPrev}
               >
                 <ChevronLeft size={15} />
@@ -90,7 +91,7 @@ function QuestionCard({
               <button
                 type="button"
                 className="question-icon-btn"
-                aria-label="下一条提问"
+                aria-label={t('下一条提问')}
                 onClick={onNext}
               >
                 <ChevronRight size={15} />
@@ -100,8 +101,8 @@ function QuestionCard({
           <button
             type="button"
             className="question-icon-btn"
-            aria-label="忽略此提问"
-            title="忽略此提问"
+            aria-label={t('忽略此提问')}
+            title={t('忽略此提问')}
             disabled={submitting}
             onClick={() => void dismiss()}
           >
@@ -119,7 +120,7 @@ function QuestionCard({
         <div
           className="question-options"
           role={item.multi_select ? 'group' : 'radiogroup'}
-          aria-label="可选回答"
+          aria-label={t('可选回答')}
         >
           {item.options.map((option) => {
             const active = selected.includes(option)
@@ -146,7 +147,7 @@ function QuestionCard({
           <input
             type="text"
             className="question-custom-input"
-            placeholder={item.options.length > 0 ? '补充说明或输入自定义回答（可选）' : '输入你的回答...'}
+            placeholder={item.options.length > 0 ? t('补充说明或输入自定义回答（可选）') : t('输入你的回答...')}
             value={customText}
             disabled={submitting}
             onChange={(e) => {
@@ -161,7 +162,7 @@ function QuestionCard({
             }}
           />
         ) : (
-          <span className="question-card-hint">请选择上方选项后提交</span>
+          <span className="question-card-hint">{t('请选择上方选项后提交')}</span>
         )}
         <button
           type="button"
@@ -170,7 +171,7 @@ function QuestionCard({
           onClick={() => void submit()}
         >
           <Send size={14} aria-hidden="true" />
-          <span>{submitting ? '提交中...' : '提交回答'}</span>
+          <span>{submitting ? t('提交中...') : t('提交回答')}</span>
         </button>
       </div>
 
@@ -189,7 +190,7 @@ export function QuestionCards({ questions }: { questions: PendingQuestion[] }) {
   const safeIndex = cursor >= questions.length ? 0 : cursor
   const current = questions[safeIndex]
   return (
-    <section className="question-deck" aria-label="待回答提问卡片">
+    <section className="question-deck" aria-label={t('待回答提问卡片')}>
       <QuestionCard
         key={current.id}
         item={current}

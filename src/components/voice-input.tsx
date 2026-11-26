@@ -1,3 +1,4 @@
+import { translateKnown, t } from '@/lib/i18n'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { LoaderCircle, Mic, Square, X } from 'lucide-react'
 import { speechWav } from '@/lib/chat-media'
@@ -79,7 +80,7 @@ export function VoiceInput({
       recorder.onerror = () => {
         if (active()) {
           cancel()
-          onError('录音中断，请检查麦克风后重试。')
+          onError(t('录音中断，请检查麦克风后重试。'))
         }
       }
       recorder.onstop = async () => {
@@ -95,13 +96,13 @@ export function VoiceInput({
           const text = await transcribe(wav, revision)
           if (!active()) return
           if (text.trim()) onText(text.trim())
-          else onError('没有识别到语音，请再试一次。')
+          else onError(t('没有识别到语音，请再试一次。'))
         } catch (error) {
           if (active())
             onError(
               error instanceof Error
-                ? '语音转写失败：' + error.message.replace(/^.*?Error: /, '')
-                : '语音转写失败',
+                ? t('语音转写失败：') + translateKnown(error.message.replace(/^.*?Error: /, ''))
+                : t('语音转写失败'),
             )
         } finally {
           if (active()) {
@@ -120,24 +121,24 @@ export function VoiceInput({
       cancel()
       onError(
         error instanceof DOMException && error.name === 'NotAllowedError'
-          ? '无法访问麦克风，请在系统隐私设置中允许 Purin 使用麦克风。'
-          : '无法开始录音，请检查麦克风连接。',
+          ? t('无法访问麦克风，请在系统隐私设置中允许 Purin 使用麦克风。')
+          : t('无法开始录音，请检查麦克风连接。'),
       )
     }
   }
 
   const label = {
-    idle: '语音输入',
-    requesting: '等待麦克风权限',
-    recording: '结束录音并转写',
-    transcribing: '正在转写',
+    idle: t('语音输入'),
+    requesting: t('等待麦克风权限'),
+    recording: t('结束录音并转写'),
+    transcribing: t('正在转写'),
   }[phase]
   return (
     <>
       {phase !== 'idle' && (
         <span className="voice-state" role="status">
-          {phase === 'recording' ? '正在录音' : label}
-          <button type="button" aria-label="取消语音输入" onClick={cancel}>
+          {phase === 'recording' ? t('正在录音') : label}
+          <button type="button" aria-label={t('取消语音输入')} onClick={cancel}>
             <X size={14} />
           </button>
         </span>

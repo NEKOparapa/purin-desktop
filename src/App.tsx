@@ -1,3 +1,4 @@
+import { translateKnown, dateFormatter, t, useLanguage } from '@/lib/i18n'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   ArrowDown,
@@ -30,8 +31,8 @@ const assistantName = 'Purin'
 const prompts = [
   { label: '聊聊今天', text: '我想跟你聊聊今天发生的事。', icon: Sun },
   { label: '想想晚饭', text: '今晚吃点什么好呢？', icon: CookingPot },
-]
-const timestamp = new Intl.DateTimeFormat('zh-CN', {
+] as const
+const timestamp = dateFormatter({
   month: 'long',
   day: 'numeric',
   hour: '2-digit',
@@ -61,11 +62,11 @@ function Message({
   return (
     <article
       className={'message ' + message.role}
-      aria-label={user ? '你' : assistantName}
+      aria-label={user ? t('你') : assistantName}
     >
       <div
         className="message-bubble"
-        title={Number.isFinite(at) ? timestamp.format(at) : undefined}
+        title={Number.isFinite(at) ? timestamp().format(at) : undefined}
       >
         {message.files && <Files files={message.files} />}
         {!message.files &&
@@ -80,19 +81,19 @@ function Message({
             className="sent-image"
             key={index}
             src={url}
-            alt={`聊天图片 ${index + 1}`}
+            alt={t('聊天图片 {0}', index + 1)}
           />
         ))}
         <p>{message.text}</p>
       </div>
       {message.status && statuses[message.status] && (
         <footer>
-          {statuses[message.status]} {message.error}
+          {translateKnown(statuses[message.status])} {message.error && translateKnown(message.error)}
           {['unsent', 'failed', 'interrupted', 'missing'].includes(
             message.status,
           ) && (
             <button onClick={() => retry(message.id)}>
-              {message.status === 'unsent' ? '重试发送' : '重新提问'}
+              {message.status === 'unsent' ? t('重试发送') : t('重新提问')}
             </button>
           )}
         </footer>
@@ -155,7 +156,7 @@ function Chat({
     try {
       await window.purin.loadEarlier()
     } catch {
-      setIssue('无法读取更早消息，请重试。')
+      setIssue(t('无法读取更早消息，请重试。'))
     } finally {
       setLoadingEarlier(false)
     }
@@ -181,7 +182,7 @@ function Chat({
       await addFiles(files)
     } catch (error) {
       setIssue(
-        error instanceof Error ? error.message : '附件读取失败，请重新选择。',
+        error instanceof Error ? translateKnown(error.message) : t('附件读取失败，请重新选择。'),
       )
     }
   }
@@ -215,8 +216,8 @@ function Chat({
     } catch (error) {
       setIssue(
         error instanceof Error
-          ? error.message.replace(/^.*?Error: /, '')
-          : '发送失败，请重试。',
+          ? translateKnown(error.message.replace(/^.*?Error: /, ''))
+          : t('发送失败，请重试。'),
       )
     } finally {
       setSending(false)
@@ -224,25 +225,25 @@ function Chat({
     }
   }
   function retry(id: string) {
-    window.purin?.retry(id).catch(() => setIssue('重试失败，请检查连接。'))
+    window.purin?.retry(id).catch(() => setIssue(t('重试失败，请检查连接。')))
   }
   const status =
-    issue || (agent.issue && '连接异常，将自动重试 · ' + agent.issue)
+    issue || (agent.issue && t('连接异常，将自动重试 · ') + translateKnown(agent.issue))
   return (
     <section
       className="chat"
       data-empty={!hasMessages}
-      aria-label={`与 ${assistantName} 对话`}
+      aria-label={t('与 {0} 对话', assistantName)}
     >
       <button
         className="assistant-avatar"
         type="button"
-        aria-label="进入桌宠模式"
-        title={window.purin ? '收起对话，进入桌宠模式' : '在桌面应用中使用桌宠'}
+        aria-label={t('进入桌宠模式')}
+        title={window.purin ? t('收起对话，进入桌宠模式') : t('在桌面应用中使用桌宠')}
         disabled={!window.purin}
         onClick={() => {
           void window.purin?.enterPetMode().catch(() =>
-            setIssue('桌宠暂时无法打开，请再试一次。'),
+            setIssue(t('桌宠暂时无法打开，请再试一次。')),
           )
         }}
       >
@@ -258,7 +259,7 @@ function Chat({
           className="message-scroller"
           ref={log}
           role="log"
-          aria-label="消息记录"
+          aria-label={t('消息记录')}
           onScroll={(event) => {
             const el = event.currentTarget
             const isBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 64
@@ -273,7 +274,7 @@ function Chat({
                 disabled={loadingEarlier}
                 onClick={earlier}
               >
-                {loadingEarlier ? '正在读取…' : '加载更早消息'}
+                {loadingEarlier ? t('正在读取…') : t('加载更早消息')}
               </button>
             )}
             {agent.messages.map((message, i) => {
@@ -292,7 +293,7 @@ function Chat({
                       className="chat-timestamp"
                       dateTime={message.at ?? undefined}
                     >
-                      {timestamp.format(at)}
+                      {timestamp().format(at)}
                     </time>
                   )}
                   <HistoryConnection.Provider value={agent.connectionRevision}>
@@ -306,7 +307,7 @@ function Chat({
                 className="message assistant thinking"
                 role="status"
                 aria-live="polite"
-                aria-label={`${assistantName} 正在思考`}
+                aria-label={t('{0} 正在思考', assistantName)}
               >
                 <div className="message-bubble thinking-bubble">
                   <span className="thinking-dots" aria-hidden="true">
@@ -320,7 +321,7 @@ function Chat({
           </div>
         </div>
       ) : (
-        <h1 className="welcome">今天过得怎么样？</h1>
+        <h1 className="welcome">{t('今天过得怎么样？')}</h1>
       )}
       <div className="write-area">
         <QuestionCards questions={agent.questions} />
@@ -328,8 +329,8 @@ function Chat({
           <button
             type="button"
             className="jump-to-end"
-            aria-label="最新消息"
-            title="最新消息"
+            aria-label={t('最新消息')}
+            title={t('最新消息')}
             onClick={() => {
               if (log.current) log.current.scrollTop = log.current.scrollHeight
             }}
@@ -378,8 +379,8 @@ function Chat({
           <button
             className="composer-tool"
             type="button"
-            aria-label="添加附件"
-            title="添加文件或图片，也可拖入输入框"
+            aria-label={t('添加附件')}
+            title={t('添加文件或图片，也可拖入输入框')}
             disabled={
               readingFiles || sending || attachments.length >= maxAttachments
             }
@@ -391,9 +392,9 @@ function Chat({
             {hasLineBreak ? '' : draft}
           </span>
           <textarea
-            aria-label="对话消息"
-            aria-description="回车换行，Ctrl + Enter 或 ⌘ + Enter 发送"
-            placeholder={dragging ? '松开以添加附件' : '想说点什么？'}
+            aria-label={t('对话消息')}
+            aria-description={t('回车换行，Ctrl + Enter 或 ⌘ + Enter 发送')}
+            placeholder={dragging ? t('松开以添加附件') : t('想说点什么？')}
             rows={1}
             ref={input}
             value={draft}
@@ -441,8 +442,8 @@ function Chat({
               <button
                 type="button"
                 className="composer-tool"
-                title="连接设备后使用语音输入"
-                aria-label="语音输入"
+                title={t('连接设备后使用语音输入')}
+                aria-label={t('语音输入')}
                 onClick={settings}
               >
                 <Mic size={19} />
@@ -451,9 +452,9 @@ function Chat({
             <button
               className="send-button"
               type="submit"
-              aria-label="发送对话消息"
+              aria-label={t('发送对话消息')}
               aria-keyshortcuts="Control+Enter Meta+Enter"
-              title="发送消息（Ctrl + Enter 或 ⌘ + Enter）"
+              title={t('发送消息（Ctrl + Enter 或 ⌘ + Enter）')}
               disabled={!canSend}
             >
               <ArrowUp size={19} strokeWidth={2} />
@@ -462,12 +463,12 @@ function Chat({
         </form>
         {uploading && (
           <p className="upload-status" role="status">
-            正在上传并解析 {uploading}…
+            {t('正在上传并解析 ')}{uploading}…
           </p>
         )}
         {agent.materialIssue && (
           <p className="issue" role="status">
-            材料待传 · {agent.materialIssue}
+            {t('材料待传 · ')}{translateKnown(agent.materialIssue)}
           </p>
         )}
         {status && (
@@ -477,11 +478,11 @@ function Chat({
         )}
       </div>
       {!hasMessages && (
-        <div className="prompt-list" aria-label="聊天话题" role="group">
+        <div className="prompt-list" aria-label={t('聊天话题')} role="group">
           {prompts.map(({ label, text, icon: Icon }) => (
-            <button type="button" key={label} onClick={() => fillPrompt(text)}>
+            <button type="button" key={label} onClick={() => fillPrompt(t(text))}>
               <Icon size={15} aria-hidden="true" />
-              {label}
+              {t(label)}
             </button>
           ))}
         </div>
@@ -491,6 +492,7 @@ function Chat({
 }
 
 export default function App() {
+  useLanguage()
   const [page, setPage] = useState<Page>('chat')
   const [panelOpen, setPanelOpen] = useState(false)
   useEffect(() => window.purin?.onPetSettings(() => {
@@ -565,7 +567,7 @@ export default function App() {
             >
               <div className="schedule-inner">
                 <header className="sr-only">
-                  <h1 id="schedule-heading">日程</h1>
+                  <h1 id="schedule-heading">{t('日程')}</h1>
                 </header>
                 <ScheduleCalendar
                   connected={agent.configured}
@@ -582,12 +584,12 @@ export default function App() {
           )}
         </main>
         {notice && (
-          <aside className="notice-banner" aria-label="新通知" role="status">
+          <aside className="notice-banner" aria-label={t('新通知')} role="status">
             <button onClick={() => openNotice(notice)}>
               <strong>{notice.title}</strong>
               <span>{notice.body}</span>
             </button>
-            <button aria-label="关闭提醒" onClick={() => setNotice(null)}>
+            <button aria-label={t('关闭提醒')} onClick={() => setNotice(null)}>
               <X size={15} />
             </button>
           </aside>

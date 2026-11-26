@@ -1,3 +1,4 @@
+import { applyLanguage, t, type Language } from '@/lib/i18n'
 import { useEffect, useState } from 'react'
 import type { PetRect } from './pet-layout'
 
@@ -112,6 +113,7 @@ export interface AgentState {
   hasUnreadNotifications: boolean
   deviceName: string
   devicePlatform: 'windows' | 'macos' | null
+  language: Language
   appearance: Appearance
   closeAction: CloseAction
   url: string
@@ -240,6 +242,7 @@ export interface PetSnapshot {
   workArea: PetRect
   anchor: { x: number; y: number }
   preferredSide: 'left' | 'right'
+  language: Language
   appearance: Appearance
   configured: boolean
   connectionRevision: number
@@ -250,6 +253,7 @@ export interface PetSnapshot {
   issue: string
 }
 export interface PetBridge {
+  initialLanguage: Language
   state(): Promise<PetSnapshot>
   transcribe(audio: ArrayBuffer, connectionRevision: number): Promise<string>
   uploadChatFile: UploadChatFile
@@ -267,6 +271,8 @@ declare global {
   interface Window {
     purinPet?: PetBridge
     purin?: {
+      initialLanguage: Language
+      setLanguage(language: Language): Promise<void>
       initialAppearance: Appearance
       enterPetMode(): Promise<void>
       onPetSettings(callback: () => void): () => void
@@ -332,6 +338,7 @@ const initial: AgentState = {
   hasUnreadNotifications: false,
   deviceName: '',
   devicePlatform: null,
+  language: 'zh-CN',
   appearance: 'light',
   closeAction: 'tray',
   url: 'http://127.0.0.1:8080',
@@ -368,6 +375,7 @@ export function useAgent() {
       received = false
     function applyState(next: AgentState) {
       document.documentElement.dataset.appearance = next.appearance
+      applyLanguage(next.language)
       setState(next)
     }
     const unsubscribe = api.subscribe((next) => {
@@ -380,7 +388,7 @@ export function useAgent() {
         if (live && !received) applyState(next)
       })
       .catch(() => {
-        if (live) setState((s) => ({ ...s, issue: '无法读取桌面端连接状态' }))
+        if (live) setState((s) => ({ ...s, issue: t('无法读取桌面端连接状态') }))
       })
     return () => {
       live = false

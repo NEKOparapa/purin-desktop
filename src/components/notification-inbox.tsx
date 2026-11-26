@@ -1,9 +1,10 @@
+import { translateKnown, dateFormatter, language, t } from '@/lib/i18n'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChevronDown, Download, Paperclip } from 'lucide-react'
 import type { DeviceFile, DeviceNotice, NoticeAlert } from '@/lib/desktop'
 import './notification-inbox.css'
 
-const stamp = new Intl.DateTimeFormat('zh-CN', {
+const stamp = dateFormatter({
   hour: '2-digit',
   minute: '2-digit',
   hourCycle: 'h23',
@@ -16,8 +17,8 @@ function size(bytes: number) {
 }
 function message(e: unknown) {
   return e instanceof Error
-    ? e.message.replace(/^.*?Error: /, '')
-    : '读取失败，请重试。'
+    ? translateKnown(e.message.replace(/^.*?Error: /, ''))
+    : t('读取失败，请重试。')
 }
 
 export function NotificationInbox({
@@ -91,7 +92,7 @@ export function NotificationInbox({
     setFileStatus(null)
     try {
       const r = await api.downloadNotificationFile({ notificationId: id, file })
-      if (r.saved) setFileStatus({ noticeId: id, text: '已保存 ' + file.name })
+      if (r.saved) setFileStatus({ noticeId: id, text: t('已保存 ') + file.name })
     } catch (e) {
       setFileStatus({ noticeId: id, text: message(e) })
     } finally {
@@ -106,7 +107,7 @@ export function NotificationInbox({
     <section className="notice-page" aria-labelledby="notices-heading">
       <header className="notice-toolbar">
         <h2 id="notices-heading">
-          当日通知{!loading && !loadError && <small>{items.length}</small>}
+          {t('当日通知')}{!loading && !loadError && <small>{items.length}</small>}
         </h2>
         {items.length > previewCount ? (
           <button
@@ -119,11 +120,11 @@ export function NotificationInbox({
               if (showAll) setSelection({ id: null, request: focusNotice })
             }}
           >
-            {showAll ? '收起' : `显示全部 ${items.length} 条`}
+            {showAll ? t('收起') : t('显示全部 {0} 条', items.length)}
           </button>
         ) : (
           unreadCount > 0 && (
-            <span className="notice-unread-count">{unreadCount} 条未读</span>
+            <span className="notice-unread-count">{unreadCount}{t(' 条未读')}</span>
           )
         )}
       </header>
@@ -133,11 +134,11 @@ export function NotificationInbox({
         </p>
       )}
       {loading ? (
-        <p className="notice-empty-strip">正在读取通知…</p>
+        <p className="notice-empty-strip">{t('正在读取通知…')}</p>
       ) : (
         !items.length && (
           <p className="notice-empty-strip">
-            {loadError ? '尚未获取当日通知' : '当日没有通知'}
+            {loadError ? t('尚未获取当日通知') : t('当日没有通知')}
           </p>
         )
       )}
@@ -148,10 +149,10 @@ export function NotificationInbox({
             const unread =
               n.in_inbox && !n.read_at && !readIds.has(n.id) && !n.expired
             const state = {
-              scheduled: '待发送',
-              sent: '已发送',
-              partial: '部分发送',
-              failed: '发送失败',
+              scheduled: t('待发送'),
+              sent: t('已发送'),
+              partial: t('部分发送'),
+              failed: t('发送失败'),
             }[n.status]
             return (
               <article
@@ -177,17 +178,17 @@ export function NotificationInbox({
                 >
                   <time
                     dateTime={n.notify_at}
-                    title={new Date(n.notify_at).toLocaleString('zh-CN')}
+                    title={new Date(n.notify_at).toLocaleString(language())}
                   >
-                    <span className="sr-only">通知时间 </span>
-                    {stamp.format(new Date(n.notify_at))}
+                    <span className="sr-only">{t('通知时间 ')}</span>
+                    {stamp().format(new Date(n.notify_at))}
                   </time>
                   <span className="notice-heading">
                     <strong>
                       {n.title}
                       {unread && (
                         <i className="notice-unread">
-                          <span className="sr-only">未读</span>
+                          <span className="sr-only">{t('未读')}</span>
                         </i>
                       )}
                     </strong>
@@ -195,17 +196,16 @@ export function NotificationInbox({
                       <span className="notice-preview">{n.body}</span>
                     )}
                     <span className="notice-delivery">
-                      <small>{n.expired ? '已过期' : state}</small>
+                      <small>{n.expired ? t('已过期') : state}</small>
                       {n.target_names.length > 0 && (
-                        <small>目标设备 · {n.target_names.join('、')}</small>
+                        <small>{t('目标设备 · ')}{n.target_names.join(language() === 'en' ? ', ' : '、')}</small>
                       )}
                       {n.attachments.length > 0 && (
                         <small>
                           <Paperclip size={12} />
-                          {n.attachments.length} 个附件
-                        </small>
+                          {t('{0} 个附件', n.attachments.length)}</small>
                       )}
-                      {nextId === n.id && <small>下一项</small>}
+                      {nextId === n.id && <small>{t('下一项')}</small>}
                     </span>
                   </span>
                   <ChevronDown
@@ -218,7 +218,7 @@ export function NotificationInbox({
                   <div className="notice-details">
                     {n.body && <p>{n.body}</p>}
                     {n.attachments.length > 0 && (
-                      <ul aria-label="附件">
+                      <ul aria-label={t('附件')}>
                         {n.attachments.map((f) => (
                           <li key={f.id}>
                             <button
@@ -230,7 +230,7 @@ export function NotificationInbox({
                               <span className="notice-file-name">{f.name}</span>
                               <small>
                                 {working === f.id
-                                  ? '保存中…'
+                                  ? t('保存中…')
                                   : size(f.size_bytes)}
                               </small>
                             </button>

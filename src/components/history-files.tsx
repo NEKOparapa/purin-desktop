@@ -1,3 +1,4 @@
+import { translateKnown, t } from '@/lib/i18n'
 import { useContext, useEffect, useState } from 'react'
 import './history-files.css'
 import { FileDown } from 'lucide-react'
@@ -32,7 +33,7 @@ function VisibleScreenshot({
         )
         setUrl(objectUrl)
       } catch {
-        if (active) setError('截图读取失败')
+        if (active) setError(t('截图读取失败'))
       }
     }
     queueMicrotask(() => void load())
@@ -47,14 +48,14 @@ function VisibleScreenshot({
       <div className="history-image-state" role="status">
         {error}
         <button className="history-inline" onClick={retry}>
-          重新加载截图
+          {t('重新加载截图')}
         </button>
       </div>
     )
   return url ? (
-    <img src={url} alt={file.name} onError={() => setError('截图无法显示')} />
+    <img src={url} alt={file.name} onError={() => setError(t('截图无法显示'))} />
   ) : (
-    <span className="history-image-state">正在读取截图…</span>
+    <span className="history-image-state">{t('正在读取截图…')}</span>
   )
 }
 
@@ -77,7 +78,7 @@ function Screenshot({ file }: { file: HistoryFile }) {
             />
           ) : (
             <span className="history-image-state">
-              {near ? '请更新桌面客户端以预览截图' : '截图预览'}
+              {near ? t('请更新桌面客户端以预览截图') : t('截图预览')}
             </span>
           )}
         </div>
@@ -89,7 +90,7 @@ function Screenshot({ file }: { file: HistoryFile }) {
 
 function message(error: unknown, fallback: string) {
   return error instanceof Error && error.message
-    ? error.message.replace(/^.*?Error: /, '')
+    ? translateKnown(error.message.replace(/^.*?Error: /, ''))
     : fallback
 }
 
@@ -110,7 +111,7 @@ function DownloadFile({ file }: { file: HistoryFile }) {
       })
       setSaved(result.saved)
     } catch (e) {
-      setError(message(e, '下载失败，请重试。'))
+      setError(message(e, t('下载失败，请重试。')))
     } finally {
       setBusy(false)
     }
@@ -121,13 +122,13 @@ function DownloadFile({ file }: { file: HistoryFile }) {
         className="history-file"
         disabled={busy}
         onClick={download}
-        title={'下载 ' + file.name}
+        title={t('下载 ') + file.name}
       >
         <FileDown size={14} aria-hidden="true" />
         {file.name}
       </button>
       {(busy || saved) && (
-        <small role="status">{busy ? '正在保存…' : '已保存'}</small>
+        <small role="status">{busy ? t('正在保存…') : t('已保存')}</small>
       )}
       {error && (
         <small className="history-error" role="alert">
@@ -141,7 +142,7 @@ function DownloadFile({ file }: { file: HistoryFile }) {
 export function Files({ files }: { files: HistoryFile[] }) {
   if (!files.length) return null
   return (
-    <ul className="history-files" aria-label="附件">
+    <ul className="history-files" aria-label={t('附件')}>
       {files.map((file, index) =>
         file.content_type === 'image/jpeg' ||
         (!file.content_type && /\.jpe?g$/i.test(file.name)) ? (

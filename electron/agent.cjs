@@ -250,6 +250,7 @@ class DesktopAgent {
     }
     if (settings.captureVersion !== captureVersion)
       migrateCaptureSettings(dir, this.configFile, settings)
+    this.language = settings.language === 'en' ? 'en' : 'zh-CN'
     this.appearance = settings.appearance === 'dark' ? 'dark' : 'light'
     this.closeAction = settings.closeAction === 'quit' ? 'quit' : 'tray'
     let token = ''
@@ -391,6 +392,7 @@ class DesktopAgent {
       devicePlatform: devicePlatforms[process.platform] ?? null,
       connectionRevision: p.revision,
       appearance: this.appearance,
+      language: this.language,
       closeAction: this.closeAction,
       configured: !!p.token,
       hasUnreadNotifications: !!p.hasUnreadNotifications,
@@ -549,6 +551,7 @@ class DesktopAgent {
       macConnectorIds: same && old.token === credential ? old.macConnectorIds : [],
       collecting: same && !!old.collecting,
       appearance: this.appearance,
+      language: this.language,
       closeAction: this.closeAction,
     }
     save(this.configFile, settings)
@@ -745,6 +748,7 @@ class DesktopAgent {
       screenshotsEnabled: !!p.screenshotsEnabled,
       textInputEnabled: !!p.textInputEnabled,
       appearance: this.appearance,
+      language: this.language,
       closeAction: this.closeAction,
       captureVersion,
     }
@@ -752,6 +756,14 @@ class DesktopAgent {
 
   savePreferences(changes) {
     save(this.configFile, { ...this.settings(), ...changes })
+  }
+
+  setLanguage(language) {
+    if (language !== 'zh-CN' && language !== 'en')
+      throw new RangeError('Unsupported language')
+    this.savePreferences({ language })
+    this.language = language
+    this.publish()
   }
 
   setAppearance(appearance) {

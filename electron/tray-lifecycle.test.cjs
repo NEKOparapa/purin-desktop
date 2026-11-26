@@ -39,6 +39,8 @@ test('tray menu exposes 显示界面 and 退出应用, and window close honors c
     ['显示界面', '退出应用'],
   )
 
+  assert.deepEqual(lifecycle.trayMenuTemplate('en').map(item => item.label), ['Show Purin', 'Quit Purin'])
+
   let prevented = false
   lifecycle.handleWindowClose({
     preventDefault() {
@@ -138,4 +140,26 @@ test('DesktopAgent persists closeAction preference and defaults to tray', () => 
     agent?.close()
     fs.rmSync(dir, { recursive: true, force: true })
   }
+})
+
+test('language is published, validated and restored independently of appearance', (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'purin-language-'))
+  const updates = []
+  const open = () => new DesktopAgent(dir, {}, async () => null, state => updates.push(state))
+  let agent = open()
+  t.after(() => {
+    agent.close()
+    fs.rmSync(dir, { recursive: true, force: true })
+  })
+  assert.equal(agent.state().language, 'zh-CN')
+  agent.setLanguage('en')
+  assert.equal(updates.at(-1).language, 'en')
+  agent.setAppearance('dark')
+  assert.throws(() => agent.setLanguage('fr'), RangeError)
+  agent.close()
+  agent = open()
+  assert.equal(agent.state().language, 'en')
+  assert.equal(agent.state().appearance, 'dark')
+  agent.setLanguage('zh-CN')
+  assert.equal(updates.at(-1).language, 'zh-CN')
 })
